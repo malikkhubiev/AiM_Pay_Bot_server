@@ -211,22 +211,49 @@ async def check_user(data: dict, db: Session = Depends(get_db)):
 @app.post("/create_payment")
 async def create_payment(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
-    user_id = data.get("user_id")
+    telegram_id = data.get("telegram_id")
     amount = data.get("amount")
     
     # Проверка, не существует ли уже незавершенный платеж
-    existing_payout = db.query(Payout).filter_by(user_id=user_id, notified=False).first()
+    existing_payout = db.query(Payout).filter_by(telegram_id=telegram_id, notified=False).first()
     if existing_payout:
         return {"error": "Пользователь уже имеет незавершенный платеж."}
+    
+    payment_data = {
+        "amount": {
+            "value": f"{amount:.2f}",
+            "currency": "RUB"
+        },
+        "confirmation": {
+            "type": "redirect",
+            "return_url": f"{SERVER_URL}/success"
+        },
+        "capture": True,
+        "description": "Оплата курса",
+        "metadata": {
+            "telegram_id": telegram_id
+        }
+    }
+    
+    try:
+        logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
+        payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
+        confirmation_url = payment.confirmation.confirmation_url
+        if confirmation_url:
+            logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
+            return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
+        else:
+            logger.error("Ошибка: Confirmation URL не найден в ответе от YooKassa.")
+            raise HTTPException(status_code=400, detail="No confirmation URL found")
+    except Exception as e:
+        logger.error("Ошибка при создании платежа: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
 
     # Создаем запись в таблице Payout
-    payout = Payout(user_id=user_id, amount=amount, created_at=datetime.utcnow(), notified=False)
-    db.add(payout)
-    db.commit()
-    
-    # Возвращаем URL для оплаты
-    confirmation_url = "https://payment-provider.com/confirmation"  # замените на настоящий URL
-    return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
+    # Непонятно куда добавлять при подтверждении или кайдады
+    # payout = Payout(user_id=user_id, amount=amount, created_at=datetime.utcnow(), notified=False)
+    # db.add(payout)
+    # db.commit()
 
 @app.post("/generate_report")
 async def generate_report(request: Request, db: Session = Depends(get_db)):

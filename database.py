@@ -55,7 +55,7 @@ class Payout(Base):
     __tablename__ = 'payouts'
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
+    telegram_id = Column(Integer, ForeignKey('users.telegram_id'))
     amount = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
     notified = Column(Boolean, default=False)
