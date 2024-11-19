@@ -225,7 +225,7 @@ async def create_payment(data: dict, db: Session = Depends(get_db)):
     
     # Возвращаем URL для оплаты
     confirmation_url = "https://payment-provider.com/confirmation"  # замените на настоящий URL
-    return {"confirmation": {"confirmation_url": confirmation_url}}
+    return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
 
 @app.post("/generate_report")
 async def generate_report(data: dict, db: Session = Depends(get_db)):
@@ -249,7 +249,7 @@ async def generate_report(data: dict, db: Session = Depends(get_db)):
         "total_payout": total_payout
     }
     
-    return report
+    return JSONResponse(report)
 
 @app.post("/get_referral_link")
 async def get_referral_link(data: dict, db: Session = Depends(get_db)):
