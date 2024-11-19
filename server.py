@@ -179,7 +179,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
         response_message = f"Добро пожаловать, {username}! Ты успешно зарегистрирован."
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
 
-    return {"message": response_message}
+    return JSONResponse({"message": response_message})
 
 @app.post("/check_referrals")
 async def check_referrals(request: Request, db: Session = Depends(get_db)):
