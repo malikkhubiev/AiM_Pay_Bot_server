@@ -209,7 +209,8 @@ async def check_user(data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
 @app.post("/create_payment")
-async def create_payment(data: dict, db: Session = Depends(get_db)):
+async def create_payment(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
     user_id = data.get("user_id")
     amount = data.get("amount")
     
@@ -228,7 +229,8 @@ async def create_payment(data: dict, db: Session = Depends(get_db)):
     return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
 
 @app.post("/generate_report")
-async def generate_report(data: dict, db: Session = Depends(get_db)):
+async def generate_report(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
     telegram_id = data.get("telegram_id")
     
     # Находим пользователя
@@ -252,7 +254,8 @@ async def generate_report(data: dict, db: Session = Depends(get_db)):
     return JSONResponse(report)
 
 @app.post("/get_referral_link")
-async def get_referral_link(data: dict, db: Session = Depends(get_db)):
+async def get_referral_link(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
     telegram_id = data.get("telegram_id")
     
     # Проверяем наличие пользователя
