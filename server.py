@@ -208,6 +208,10 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
             "value": f"{amount:.2f}",
             "currency": "RUB"
         },
+        "confirmation": {
+            "type": "redirect",
+            "return_url": f"{SERVER_URL}/success"
+        },
         "capture": True,
         "description": "Оплата курса",
         "metadata": {
@@ -278,7 +282,7 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/success")
 async def success_payment(request: Request):
-    return HTMLResponse("<h1 style='text-align: center'>Платёж прошёл успешно</h1>")
+    return HTMLResponse("<h1 style='text-align: center'>Платёж прошёл успешно. Вы можете возвращаться в бота</h1>")
 
 # Database session dependency
 @app.middleware("http")
