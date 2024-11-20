@@ -64,42 +64,6 @@ async def pay(request: PaymentRequest, db: Session = Depends(get_db)):
     except HTTPException as e:
         logger.error("Ошибка при создании платежа для пользователя с Telegram ID %s: %s", request.telegram_id, e.detail)
         raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-async def create_payment(amount: float, description: str, telegram_id: str):
-    """Создание платежа в YooKassa с использованием yookassa SDK."""
-    payment_data = {
-        "amount": {
-            "value": f"{amount:.2f}",
-            "currency": "RUB"
-        },
-        "confirmation": {
-            "type": "redirect",
-            "return_url": f"{SERVER_URL}/success"
-        },
-        "capture": True,
-        "description": description,
-        "metadata": {
-            "telegram_id": telegram_id
-        }
-    }
-    
-    try:
-        logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
-        payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
-        confirmation_url = payment.confirmation.confirmation_url
-        if confirmation_url:
-            logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
-            return {
-                'confirmation': {
-                    'confirmation_url': confirmation_url  # Возвращаем ссылку на страницу подтверждения
-                }
-            }
-        else:
-            logger.error("Ошибка: Confirmation URL не найден в ответе от YooKassa.")
-            raise HTTPException(status_code=400, detail="No confirmation URL found")
-    except Exception as e:
-        logger.error("Ошибка при создании платежа: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
     
 @app.post("/payment_notification")
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
@@ -144,18 +108,6 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                 raise HTTPException(status_code=500, detail="Failed to notify user through bot")
 
     raise HTTPException(status_code=400, detail="Payment not processed")
-
-@app.get("/success", response_class=HTMLResponse)
-async def success():
-    """Возвращает страницу с сообщением об успешном выполнении"""
-    return """
-        <html>
-            <head><title>Success</title></head>
-            <body>
-                <h1>Все прошло успешно!</h1>
-            </body>
-        </html>
-    """
 
 @app.post("/greet")
 async def greet(request: Request, db: Session = Depends(get_db)):
@@ -295,6 +247,10 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
     referral_link = f"https://t.me/{bot_username}?start={telegram_id}"
     
     return {"referral_link": referral_link}
+
+@app.get("/success")
+async def success_payment(request: Request):
+    return HTMLResponse("<h1 style='text-align: center'>Платёж прошёл успешно</h1>")
 
 # Database session dependency
 @app.middleware("http")
