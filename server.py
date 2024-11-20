@@ -68,47 +68,72 @@ async def pay(request: PaymentRequest, db: Session = Depends(get_db)):
 @app.post("/payment_notification")
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
     """Обработка уведомления о платеже от YooKassa."""
-    logging.info("Received request: %s", await request.body())
-    data = await request.json()
-    payment_id = data.get("id")
-    status = data.get("status")
-    user_telegram_id = data.get("metadata", {}).get("telegram_id")
+    try:
+        # Логирование заголовков запроса
+        logging.info("Request headers: %s", request.headers)
 
-    if status == "succeeded" and user_telegram_id:
-        user = get_user(db, user_telegram_id)
-        if user:
-            # Обновление статуса оплаты пользователя
-            user.payment_status = "paid"
-            db.commit()
+        # Логирование тела запроса
+        body = await request.body()
+        logging.info("Raw request body: %s", body.decode("utf-8"))
 
-            # Выплата рефералу, если он существует
-            if user.referrer_id:
-                referrer = get_user(db, user.referrer_id)
-                if referrer:
-                    create_payout(db, referrer.id, REFERRAL_AMOUNT)  # Выплата за реферала
+        # Попытка преобразования тела запроса в JSON
+        try:
+            data = await request.json()
+            logging.info("Parsed JSON: %s", data)
+        except Exception as e:
+            logging.error("Failed to parse JSON: %s", e)
+            raise HTTPException(status_code=400, detail="Invalid JSON format")
 
-            # Создание записи в таблице Referral
-            create_referral(db, user.referrer_id, user.id)
+        # Извлечение данных из JSON
+        payment_id = data.get("id")
+        status = data.get("status")
+        user_telegram_id = data.get("metadata", {}).get("telegram_id")
+        logging.info("Parsed data - ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
 
-            # Обновление статуса выплаты
-            mark_payout_as_notified(db, payment_id)
+        # Основная логика обработки успешного платежа
+        if status == "succeeded" and user_telegram_id:
+            user = get_user(db, user_telegram_id)
+            if user:
+                # Обновление статуса оплаты пользователя
+                user.payment_status = "paid"
+                db.commit()
 
-            # Отправка уведомления в mahin.py для оповещения пользователя
-            notify_url = f"{MAHIN_URL}/notify_user"
-            notification_data = {
-                "telegram_id": user_telegram_id,
-                "message": "Поздравляем! Ваш платёж прошёл успешно, вы оплатили курс! 🎉"
-            }
-            response = requests.post(notify_url, json=notification_data)
+                # Выплата рефералу, если он существует
+                if user.referrer_id:
+                    referrer = get_user(db, user.referrer_id)
+                    if referrer:
+                        create_payout(db, referrer.id, REFERRAL_AMOUNT)  # Выплата за реферала
 
-            if response.status_code == 200:
-                logger.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
-                return {"message": "Payment processed and user notified successfully"}
-            else:
-                logger.error("Ошибка при отправке уведомления пользователю через бота.")
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+                # Создание записи в таблице Referral
+                create_referral(db, user.referrer_id, user.id)
 
-    raise HTTPException(status_code=400, detail="Payment not processed")
+                # Обновление статуса выплаты
+                mark_payout_as_notified(db, payment_id)
+
+                # Отправка уведомления пользователю через mahin.py
+                notify_url = f"{MAHIN_URL}/notify_user"
+                notification_data = {
+                    "telegram_id": user_telegram_id,
+                    "message": "Поздравляем! Ваш платёж прошёл успешно, вы оплатили курс! 🎉"
+                }
+                try:
+                    response = requests.post(notify_url, json=notification_data)
+                    response.raise_for_status()
+                    logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
+                    return {"message": "Payment processed and user notified successfully"}
+                except requests.RequestException as e:
+                    logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+
+        raise HTTPException(status_code=400, detail="Payment not processed")
+    except HTTPException as he:
+        # Логирование HTTP-исключений
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        # Логирование неожиданных ошибок
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/greet")
 async def greet(request: Request, db: Session = Depends(get_db)):
