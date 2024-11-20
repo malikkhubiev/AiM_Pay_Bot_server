@@ -69,14 +69,13 @@ async def pay(request: PaymentRequest, db: Session = Depends(get_db)):
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
     """Обработка уведомления о платеже от YooKassa."""
     try:
-        # Логирование заголовков запроса
-        logging.info("Request headers: %s", request.headers)
-
-        # Логирование тела запроса
+        # Логирование заголовков и тела запроса
+        headers = request.headers
         body = await request.body()
+        logging.info("Request headers: %s", headers)
         logging.info("Raw request body: %s", body.decode("utf-8"))
 
-        # Попытка преобразования тела запроса в JSON
+        # Попытка разобрать JSON
         try:
             data = await request.json()
             logging.info("Parsed JSON: %s", data)
@@ -84,13 +83,20 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             logging.error("Failed to parse JSON: %s", e)
             raise HTTPException(status_code=400, detail="Invalid JSON format")
 
-        # Извлечение данных из JSON
-        payment_id = data.get("id")
-        status = data.get("status")
-        user_telegram_id = data.get("metadata", {}).get("telegram_id")
-        logging.info("Parsed data - ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
+        # Проверка типа уведомления и извлечение объекта
+        if data.get("type") != "notification" or "object" not in data:
+            logging.error("Invalid notification type or missing 'object'")
+            raise HTTPException(status_code=400, detail="Invalid notification structure")
 
-        # Основная логика обработки успешного платежа
+        payment_data = data["object"]
+        payment_id = payment_data.get("id")
+        status = payment_data.get("status")
+        metadata = payment_data.get("metadata", {})
+        user_telegram_id = metadata.get("telegram_id")
+
+        logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
+
+        # Логика обработки успешного платежа
         if status == "succeeded" and user_telegram_id:
             user = get_user(db, user_telegram_id)
             if user:
@@ -201,10 +207,6 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
         "amount": {
             "value": f"{amount:.2f}",
             "currency": "RUB"
-        },
-        "confirmation": {
-            "type": "redirect",
-            "return_url": f"{SERVER_URL}/success"
         },
         "capture": True,
         "description": "Оплата курса",
