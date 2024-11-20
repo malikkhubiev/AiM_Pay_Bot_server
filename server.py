@@ -68,6 +68,7 @@ async def pay(request: PaymentRequest, db: Session = Depends(get_db)):
 @app.post("/payment_notification")
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
     """Обработка уведомления о платеже от YooKassa."""
+    logging.info("Received request: %s", await request.body())
     data = await request.json()
     payment_id = data.get("id")
     status = data.get("status")
