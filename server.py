@@ -56,16 +56,20 @@ def check_parameters(*args):
             detail=f"Не указаны следующие необходимые параметры: {', '.join(missing_params)}"
         )
 
-def get_user_by_telegram_id(db: Session, telegram_id: str):
+def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool):
     user = db.query(User).filter_by(telegram_id=telegram_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        if to_throw:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        else:
+            return None
     return user
 
 @app.post("/check_user")
 async def check_user(data: dict, db: Session = Depends(get_db)):
     telegram_id = data.get("telegram_id")
-    user = get_user_by_telegram_id(db, telegram_id)
+    to_throw = data.get("to_throw", True)
+    user = get_user_by_telegram_id(db, telegram_id, to_throw)
     return {"user_exists": True, "user": user}
 
 @app.post("/payout_to_referral")
@@ -170,7 +174,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
 
         check_parameters(username, telegram_id)
 
-        user = get_user_by_telegram_id(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
 
         if user:
             response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
