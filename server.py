@@ -56,7 +56,7 @@ def check_parameters(*args):
             detail=f"Не указаны следующие необходимые параметры: {', '.join(missing_params)}"
         )
 
-def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool):
+def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True):
     user = db.query(User).filter_by(telegram_id=telegram_id).first()
     if not user:
         if to_throw:
