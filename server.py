@@ -324,11 +324,11 @@ async def get_balance(telegram_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/create_payout_request") # Добавляем в Payout запрос на выплату
-async def create_payout_request(request: Request, db: Session = Depends(get_db)):
+@app.post("/add_payout_toDb")
+async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
     try:
         """
-        Делаем запрос на выплату
+        Добавляем в бд Payout pending выплату
         
         """
         data = await request.json()
@@ -411,7 +411,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                     "description": "Выплата за реферальную программу",
                     "payer": {
                         "type": "individual",
-                        "telegram_id": user.telegram_id  # передаем telegram_id
+                        "telegram_id": user.telegram_id
                     }
                 }
 
