@@ -124,7 +124,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
         logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
 
         if status == "succeeded" and user_telegram_id:
-            user = check_user(db, user_telegram_id)
+            user = await check_user(db, user_telegram_id)
             
             # Обновляем статус пользователя как оплаченный
             user.paid = True
@@ -167,7 +167,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
 
         check_parameters(username, telegram_id)
 
-        user = check_user(db, telegram_id)
+        user = await check_user(db, telegram_id)
 
         if user:
             response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
@@ -197,7 +197,7 @@ async def check_referrals(request: Request, db: Session = Depends(get_db)):
         telegram_id = data.get("telegram_id")
 
         check_parameters(telegram_id)
-        user = check_user(db, telegram_id)
+        user = await check_user(db, telegram_id)
         
         if user:
             # Проверка, есть ли рефералы для данного пользователя
@@ -260,7 +260,7 @@ async def generate_report(request: Request, db: Session = Depends(get_db)):
     
     check_parameters(telegram_id)
     # Находим пользователя
-    user = check_user(db, telegram_id)
+    user = await check_user(db, telegram_id)
 
     # Подсчет рефералов для пользователя
     referral_count = db.query(Referral).filter_by(referrer_id=user.id).count()
@@ -314,7 +314,7 @@ async def get_balance(telegram_id: int, db: Session = Depends(get_db)):
         """
         check_parameters(telegram_id)
         # Находим пользователя
-        user = check_user(db, telegram_id)
+        user = await check_user(db, telegram_id)
 
         return {"balance": user.balance}
     except HTTPException as he:
@@ -339,7 +339,7 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
         check_parameters(amount, telegram_id)
 
         # Находим пользователя
-        user = check_user(db, telegram_id)
+        user = await check_user(db, telegram_id)
 
         # Создаём запрос на выплату
         payout_request = Payout(telegram_id=telegram_id, amount=amount, status="pending")
@@ -368,7 +368,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 
         check_parameters(amount, telegram_id)
         # Находим пользователя
-        user = check_user(db, telegram_id)
+        user = await check_user(db, telegram_id)
 
         # Проверяем баланс
         if amount > user.balance:
@@ -482,7 +482,7 @@ async def process_successful_payout(request: Request, db: Session = Depends(get_
             return {"status": "error", "message": "Выплата не прошла успешно"}
 
         # Находим пользователя
-        user = check_user(db, payout_request.telegram_id)
+        user = await check_user(db, payout_request.telegram_id)
 
         # Обновляем статус выплаты и записываем транзакционный ID
         payout_request.status = "completed"
@@ -521,7 +521,7 @@ async def process_successful_payout(request: Request, db: Session = Depends(get_
 @app.get("/make_bal/{telegram_id}")
 async def make_bal(telegram_id: int, db: Session = Depends(get_db)):
 
-    user = check_user(telegram_id)
+    user = await check_user(telegram_id)
     user.balance += 15000
     db.commit()
 
