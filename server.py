@@ -8,6 +8,7 @@ import datetime
 from config import (
     REFERRAL_AMOUNT,
     YOOKASSA_SECRET_KEY,
+    YOOKASSA_PAYMENTS_URL,
     MAHIN_URL,
     SERVER_URL,
     YOOKASSA_SHOP_ID,
@@ -390,11 +391,25 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                     "description": "Выплата за реферальную программу"
                 }
 
-                payout = PayoutRequest(payout_data)
-                response = Payment.create(payout)
+                # Формируем заголовки с авторизацией
+                headers = {
+                    "Authorization": f"Basic {requests.auth._basic_auth_str(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)}",
+                    "Content-Type": "application/json",
+                }
 
-                if response.status == "succeeded":
+                # Отправляем POST-запрос
+                response = requests.post(YOOKASSA_PAYMENTS_URL, json=payout_data, headers=headers)
+                response_data = response.json()
+
+                if response_data.status == "succeeded":
                     user.balance -= amount
+                    payout_request = db.query(Payout).filter(telegram_id == telegram_id).first()
+                    if not payout_request:
+                        raise HTTPException(status_code=404, detail="Запрос на выплату не найден")
+
+                    payout_request.status = "completed"
+                    payout_request.transaction_id = response_data.id  # Сохраняем ID транзакции
+
                     db.commit()
                     return {"status": "success", "message": f"Выплата на сумму {amount:.2f} выполнена успешно"}
                 else:
@@ -421,7 +436,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                 }
 
                 # Делаем запрос в YooKassa для создания платежа
-                response = requests.post("https://api.yookassa.ru/v3/payments", json=payout_data, headers=headers)
+                response = requests.post(YOOKASSA_PAYMENTS_URL, json=payout_data, headers=headers)
 
                 if response.status_code == 200:
                     payment_data = response.json()
