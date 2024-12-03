@@ -56,14 +56,17 @@ def check_parameters(*args):
             detail=f"Не указаны следующие необходимые параметры: {', '.join(missing_params)}"
         )
 
+def get_user_by_telegram_id(db: Session, telegram_id: str):
+    user = db.query(User).filter_by(telegram_id=telegram_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    return user
+
 @app.post("/check_user")
 async def check_user(data: dict, db: Session = Depends(get_db)):
     telegram_id = data.get("telegram_id")
-    user = db.query(User).filter_by(telegram_id=telegram_id).first()
-    if user:
-        return {"user_exists": True, "user": user}
-    else:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    user = get_user_by_telegram_id(db, telegram_id)
+    return {"user_exists": True, "user": user}
 
 @app.post("/payout_to_referral")
 async def payout_to_referral(request: Request):
@@ -167,7 +170,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
 
         check_parameters(username, telegram_id)
 
-        user = await check_user(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id)
 
         if user:
             response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
@@ -197,7 +200,7 @@ async def check_referrals(request: Request, db: Session = Depends(get_db)):
         telegram_id = data.get("telegram_id")
 
         check_parameters(telegram_id)
-        user = await check_user(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id)
         
         if user:
             # Проверка, есть ли рефералы для данного пользователя
@@ -260,7 +263,7 @@ async def generate_report(request: Request, db: Session = Depends(get_db)):
     
     check_parameters(telegram_id)
     # Находим пользователя
-    user = await check_user(db, telegram_id)
+    user = get_user_by_telegram_id(db, telegram_id)
 
     # Подсчет рефералов для пользователя
     referral_count = db.query(Referral).filter_by(referrer_id=user.id).count()
@@ -314,7 +317,7 @@ async def get_balance(telegram_id: int, db: Session = Depends(get_db)):
         """
         check_parameters(telegram_id)
         # Находим пользователя
-        user = await check_user(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id)
 
         return {"balance": user.balance}
     except HTTPException as he:
@@ -339,7 +342,7 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
         check_parameters(amount, telegram_id)
 
         # Находим пользователя
-        user = await check_user(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id)
 
         # Создаём запрос на выплату
         payout_request = Payout(telegram_id=telegram_id, amount=amount, status="pending")
@@ -368,7 +371,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 
         check_parameters(amount, telegram_id)
         # Находим пользователя
-        user = await check_user(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id)
 
         # Проверяем баланс
         if amount > user.balance:
