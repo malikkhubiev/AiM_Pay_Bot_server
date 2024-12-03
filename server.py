@@ -438,6 +438,8 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                     "Content-Type": "application/json"
                 }
 
+                return {"message": "Ща отправим запрос"}
+
                 # Делаем запрос в YooKassa для создания платежа
                 response = requests.post(YOOKASSA_PAYMENTS_URL, json=payout_data, headers=headers)
 
