@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 import requests
@@ -271,10 +272,10 @@ async def generate_report(request: Request, db: Session = Depends(get_db)):
 
     # Подсчет рефералов для пользователя
     referral_count = db.query(Referral).filter_by(referrer_id=user.id).count()
+
+    all_paid_money = db.query(func.sum(Payout.amount)).filter(Payout.telegram_id == telegram_id).scalar()
     
-    # Расчет общей суммы потенциальных выплат
-    payout_per_referral = REFERRAL_AMOUNT  # значение должно быть задано где-то в server.py или в конфигурации
-    total_payout = referral_count * payout_per_referral
+    total_payout = user.balance + all_paid_money
     current_balance = user.balance
 
     report = {
