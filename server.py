@@ -458,7 +458,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 
                 else:
                     error_details = response.json() if response.text else "No response content"
-                    return {"error_details": {error_details}}
+                    return {"error_details": error_details}
                     raise HTTPException(status_code=500, detail="Ошибка при создании запроса на выплату")
 
         except Exception as e:
