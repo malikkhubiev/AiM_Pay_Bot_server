@@ -434,7 +434,8 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                     "payer": {
                         "type": "individual",
                         "telegram_id": user.telegram_id
-                    }
+                    },
+                    "shop_id": YOOKASSA_SHOP_ID
                 }
                 
                 headers = {
