@@ -436,7 +436,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                         "telegram_id": user.telegram_id
                     }
                 }
-
+                return {"message": YOOKASSA_SECRET_KEY}
                 headers = {
                     "Authorization": f"Bearer {YOOKASSA_SECRET_KEY}",
                     "Content-Type": "application/json"
