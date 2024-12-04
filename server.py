@@ -436,7 +436,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                         "telegram_id": user.telegram_id
                     }
                 }
-                return {"message": YOOKASSA_SECRET_KEY}
+                
                 headers = {
                     "Authorization": f"Bearer {YOOKASSA_SECRET_KEY}",
                     "Content-Type": "application/json"
@@ -457,6 +457,8 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                     return {"status": "awaiting_card", "payment_url": payment_url}
 
                 else:
+                    error_details = response.json() if response.text else "No response content"
+                    return {"error_details": {error_details}}
                     raise HTTPException(status_code=500, detail="Ошибка при создании запроса на выплату")
 
         except Exception as e:
