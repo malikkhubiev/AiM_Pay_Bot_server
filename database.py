@@ -25,7 +25,6 @@ class User(Base):
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
     referrer_id = Column(Integer, ForeignKey('users.id'), nullable=True)
-    account_token = Column(String, nullable=True)  # Токен карты
     balance = Column(Float, default=0.0)
     paid = Column(Boolean, default=False)  # Новый флаг для указания, оплатил ли пользователь курс
 
@@ -39,6 +38,7 @@ class Payout(Base):
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(Integer, ForeignKey('users.telegram_id'))
     amount = Column(Float)
+    card_number = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     notified = Column(Boolean, default=False)
     referral_id = Column(Integer, ForeignKey('referrals.id'))  # ID реферала, за которого выплачена награда
