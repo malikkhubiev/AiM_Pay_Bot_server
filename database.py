@@ -31,14 +31,14 @@ class User(Base):
 
     referrer = relationship("User", remote_side=[id], backref="referrals", foreign_keys=[referrer_id])
     referred_users = relationship("Referral", back_populates="referrer", foreign_keys="[Referral.referrer_id]")
-    payouts = relationship("Payout", back_populates="user")
+    payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Указываем foreign_keys
 
 class Payout(Base):
     __tablename__ = 'payouts'
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, ForeignKey('users.telegram_id'))
-    card_synonym = Column(Integer, ForeignKey('users.card_synonym'))
+    telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Исправлено на String, так как User.telegram_id — String
+    card_synonym = Column(String, ForeignKey('users.card_synonym'))  # Исправлено на String
     amount = Column(Float)
     created_at = Column(DateTime, default=datetime.now)
     notified = Column(Boolean, default=False)
@@ -46,7 +46,7 @@ class Payout(Base):
     transaction_id = Column(String, nullable=True)  # Новый столбец для ID транзакции из платежной системы
     status = Column(String, default="pending")  # Новый столбец для статуса выплаты
 
-    user = relationship("User", back_populates="payouts")
+    user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])  # Указываем foreign_keys
     referral = relationship("Referral", back_populates="payout")
 
 class Referral(Base):
