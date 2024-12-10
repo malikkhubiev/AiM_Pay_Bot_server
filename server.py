@@ -154,10 +154,12 @@ async def greet(request: Request, db: Session = Depends(get_db)):
 
         logging.info(f"checknuli")
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
-        logging.info(f"user есть")
+        logging.info(f"user = {user}")
         if user:
+            logging.info(f"Нам вернули юзера")
             response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
         else:
+            logging.info(f"Не, делаем нового")
             new_user = User(
                 telegram_id=telegram_id,
                 username=username,
