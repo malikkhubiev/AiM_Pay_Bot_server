@@ -26,7 +26,8 @@ class User(Base):
     telegram_id = Column(String, unique=True, nullable=False)
     referrer_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     balance = Column(Float, default=0.0)
-    paid = Column(Boolean, default=False)  # Новый флаг для указания, оплатил ли пользователь курс
+    paid = Column(Boolean, default=False)
+    card_synonym = Column(String, unique=True, nullable=False)
 
     referrer = relationship("User", remote_side=[id], backref="referrals", foreign_keys=[referrer_id])
     referred_users = relationship("Referral", back_populates="referrer", foreign_keys="[Referral.referrer_id]")
@@ -37,8 +38,8 @@ class Payout(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(Integer, ForeignKey('users.telegram_id'))
+    card_synonym = Column(Integer, ForeignKey('users.card_synonym'))
     amount = Column(Float)
-    card_number = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     notified = Column(Boolean, default=False)
     referral_id = Column(Integer, ForeignKey('referrals.id'))  # ID реферала, за которого выплачена награда

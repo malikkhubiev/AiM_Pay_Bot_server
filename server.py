@@ -4,15 +4,14 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from jinja2 import Environment, FileSystemLoader
 import requests
 import datetime
 from config import (
     REFERRAL_AMOUNT,
     YOOKASSA_SECRET_KEY,
     YOOKASSA_PAYMENTS_URL,
-    QIWI_WALLET,
-    QIWI_API_TOKEN,
-    QIWI_API_URL,
+    YOOKASSA_AGENT_ID,
     MAHIN_URL,
     SERVER_URL,
     YOOKASSA_SHOP_ID,
@@ -33,6 +32,8 @@ Configuration.secret_key = YOOKASSA_SECRET_KEY
 # Настроим логирование
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+template_env = Environment(loader=FileSystemLoader("templates"))
 
 # Логируем, чтобы проверить, что переменные установлены
 logger.info("Account ID: %s", Configuration.account_id)
@@ -76,57 +77,59 @@ async def check_user(data: dict, db: Session = Depends(get_db)):
 
 @app.post("/payment_notification")
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
-    """Обработка уведомления о платеже от Qiwi."""
+    """Обработка уведомления о платеже от YooKassa."""
     try:
-        # Попытка распарсить тело запроса
+        headers = request.headers
+        body = await request.body()
+        logging.info("Request headers: %s", headers)
+        logging.info("Raw request body: %s", body.decode("utf-8"))
+
         try:
             data = await request.json()
+            logging.info("Parsed JSON: %s", data)
         except Exception as e:
             logging.error("Failed to parse JSON: %s", e)
             raise HTTPException(status_code=400, detail="Invalid JSON format")
 
-        # Проверка обязательных полей в структуре уведомления
-        if not data.get("status") or "data" not in data:
-            logging.error("Invalid notification structure or missing 'data'")
+        if data.get("type") != "notification" or "object" not in data:
+            logging.error("Invalid notification type or missing 'object'")
             raise HTTPException(status_code=400, detail="Invalid notification structure")
 
-        payment_data = data["data"]
+        payment_data = data["object"]
         payment_id = payment_data.get("id")
         status = payment_data.get("status")
-        user_telegram_id = payment_data.get("comment")  # Qiwi передает comment как metadata
+        metadata = payment_data.get("metadata", {})
+        user_telegram_id = metadata.get("telegram_id")
 
-        logging.info(f"Payment ID: {payment_id}, Status: {status}, Telegram ID: {user_telegram_id}")
+        logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
 
-        if status == "success" and user_telegram_id:
+        if status == "succeeded" and user_telegram_id:
             user = await check_user(db, user_telegram_id)
-
-            if not user["user_exists"]:
-                raise HTTPException(status_code=404, detail="User not found")
-
+            
             # Обновляем статус пользователя как оплаченный
-            user["user"].paid = True
+            user.paid = True
             db.commit()
-            logging.info(f"Статус оплаты пользователя обновлен: {user_telegram_id}")
+            logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
 
             # Уведомление пользователя
+            notify_url = f"{MAHIN_URL}/notify_user"
+            notification_data = {
+                "telegram_id": user_telegram_id,
+                "message": "Поздравляем! Ваш платёж прошёл успешно, вы оплатили курс! 🎉"
+            }
             try:
-                notification_data = {
-                    "telegram_id": user_telegram_id,
-                    "message": "Поздравляем! Ваш платёж прошёл успешно, вы оплатили курс! 🎉"
-                }
-                response = requests.post(f"{MAHIN_URL}/notify_user", json=notification_data)
+                response = requests.post(notify_url, json=notification_data)
                 response.raise_for_status()
-                logging.info(f"Пользователь с Telegram ID {user_telegram_id} успешно уведомлен.")
+                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
 
                 # После успешного уведомления обновляем статус выплаты
                 mark_payout_as_notified(db, payment_id)
                 return {"message": "Payment processed and user notified successfully"}
-
             except requests.RequestException as e:
                 logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
 
         raise HTTPException(status_code=400, detail="Payment not processed")
-    
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -206,16 +209,37 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
     check = check_parameters(telegram_id=telegram_id, amount=amount)
     if not(check["result"]):
         return check["message"]
-
-    # Генерация ссылки для оплаты
-    payment_link = f"https://qiwi.com/payment/form/99?amountInteger={amount}&extra[%27comment%27]={telegram_id}&extra[%27account%27]={QIWI_WALLET}&currency=643&successUrl={SERVER_URL}/success"
-
+    
+    payment_data = {
+        "amount": {
+            "value": f"{amount:.2f}",
+            "currency": "RUB"
+        },
+        "confirmation": {
+            "type": "redirect",
+            "return_url": f"{SERVER_URL}/success"
+        },
+        "capture": True,
+        "description": "Оплата курса",
+        "metadata": {
+            "telegram_id": telegram_id
+        }
+    }
+    
     try:
-        logger.info("Создание ссылки на оплату для пользователя с Telegram ID: %s", telegram_id)
-        return JSONResponse({"confirmation": {"confirmation_url": payment_link}})
+        logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
+        payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
+        confirmation_url = payment.confirmation.confirmation_url
+        if confirmation_url:
+            logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
+            return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
+        else:
+            logger.error("Ошибка: Confirmation URL не найден в ответе от YooKassa.")
+            raise HTTPException(status_code=400, detail="No confirmation URL found")
     except Exception as e:
-        logger.error("Ошибка при создании ссылки на оплату: %s", str(e))
+        logger.error("Ошибка при создании платежа: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
+
 
 @app.post("/generate_report")
 async def generate_report(request: Request, db: Session = Depends(get_db)):
@@ -273,7 +297,7 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/success")
 async def success_payment(request: Request):
-    return HTMLResponse("<h1 style='text-align: center'>Платёж прошёл успешно. Вы можете возвращаться в бота</h1>")
+    return HTMLResponse("<h1 style='text-align: center'>Операция прошла успешно. Вы можете возвращаться в бота</h1>")
 
 # Реферальные выплаты
 @app.get("/get_balance/{telegram_id}")
@@ -308,20 +332,20 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
         data = await request.json()
         telegram_id = data.get("telegram_id")
         amount = data.get("amount")
-        card_number = data.get("card_number")
 
-        check = check_parameters(amount=amount, telegram_id=telegram_id, card_number=card_number)
+        check = check_parameters(amount=amount, telegram_id=telegram_id, card_synonym=card_synonym)
         if not(check["result"]):
             return {"status": "not_ready", "reason": check["message"]}
 
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
+        card_synonym = user.card_synonym
 
         # Создаём запрос на выплату
         payout_request = Payout(
             telegram_id=telegram_id, 
             amount=amount, 
-            card_number=card_number, 
+            card_synonym=card_synonym, 
             status="pending"
         )
         db.add(payout_request)
@@ -361,39 +385,17 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
         if payout_request.amount > user.balance:
             return {"status": "error", "message": "Недостаточно средств для выплаты."}
 
-        # Платёжные данные для Qiwi P2P API
-        payout_data = {
-            "amount": payout_request.amount,
-            "currency": "RUB",
-            "card_number": payout_request.card_number,  # Номер карты получателя
-            "comment": "Выплата за реферальную программу",
-        }
-
-        # Формируем заголовки с авторизацией
-        headers = {
-            "Authorization": f"Bearer {QIWI_API_TOKEN}",
-            "Content-Type": "application/json",
-        }
-
-        # Отправляем POST-запрос в Qiwi API
-        response = requests.post(QIWI_API_URL, json=payout_data, headers=headers)
-        response_data = response.json()
-
-        if response.status_code == 200 and response_data.get("status") == "success":
-            # Если запрос успешен, обновляем баланс пользователя
-            user.balance -= payout_request.amount
-
-            payout_request.status = "completed"
-            db.add(payout_request)
-            db.commit()
-
-            logging.info(f"Выплата на сумму {payout_request.amount} выполнена успешно для пользователя {telegram_id}")
-            return {"status": "success", "message": f"Выплата на сумму {payout_request.amount:.2f} выполнена успешно"}
-
-        else:
-            error_message = response_data.get("error", "Неизвестная ошибка")
-            logging.error(f"Ошибка при попытке выплаты через Qiwi: {error_message}")
-            raise HTTPException(status_code=500, detail=f"Ошибка при попытке выплаты: {error_message}")
+        payout = Payout.create({
+            "amount": {
+            "value": f"{payout_request.amount}",
+            "currency": "RUB"
+            },
+            "payout_token": f"{payout_request.card_synonym}",
+            "description": "Выплата рефералу",
+            "metadata": {
+                "telegramId": f"{telegram_id}"
+            }
+        })
 
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
@@ -403,7 +405,92 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.post("/payout_result")
+async def payout_result(request: Request, db: Session = Depends(get_db)):
+    try:
+        # Получаем тело запроса
+        body = await request.body()
+        data = await request.json()
 
+        # Проверяем, что уведомление содержит необходимую информацию
+        event_type = data.get("event")
+        payout_id = data.get("object", {}).get("id")
+        amount = data.get("object", {}).get("amount", {}).get("value")
+        telegram_id = data.get("object", {}).get("metadata", {}).get("telegram_id")
+        card_synonym = data.get("object", {}).get("payment_method", {}).get("card_synonym")  # Синоним карты
+
+        if not (event_type and payout_id and amount and telegram_id):
+            logging.error("Некорректные данные вебхука: %s", data)
+            raise HTTPException(status_code=400, detail="Invalid webhook data")
+
+        # Проверяем статус события
+        if event_type == "payout.succeeded":
+            user = get_user_by_telegram_id(db, telegram_id)
+            if not user:
+                logging.error("Пользователь с telegram_id %s не найден", telegram_id)
+                raise HTTPException(status_code=404, detail="User not found")
+
+            payout_request = db.query(Payout).filter(telegram_id == telegram_id, status="pending").first()
+            if not payout_request:
+                raise HTTPException(status_code=404, detail="Запрос на выплату не найден")
+
+            logging.error("Баланс до", user.balance)
+            # Уменьшаем баланс пользователя
+            user.balance -= float(amount)
+            payout_request.status = "completed"
+            db.add(payout_request)
+            db.commit()
+            logging.error("Баланс после", user.balance)
+            logging.error("Пользователь с telegram_id %s не найден", telegram_id)
+            user.card_synonym = card_synonym
+
+            logging.info(f"Выплата {payout_id} успешно обработана на сумму {amount} для пользователя {telegram_id}")
+            return {"status": "success", "message": f"Выплата {payout_id} успешно обработана"}
+
+        elif event_type == "payout.canceled":
+            logging.warning(f"Выплата {payout_id} отменена")
+            return {"status": "canceled", "message": f"Выплата {payout_id} отменена"}
+
+        else:
+            logging.error("Неизвестное событие: %s", event_type)
+            raise HTTPException(status_code=400, detail="Unknown event type")
+
+    except Exception as e:
+        logging.error("Ошибка обработки вебхука: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/bind_card")
+async def bind_card(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+
+        # Проверка обязательных параметров
+        check = check_parameters(
+            telegram_id=telegram_id
+        )
+        if not check["result"]:
+            return check["message"]
+
+        # Находим пользователя
+        user = get_user_by_telegram_id(db, telegram_id)
+
+        if not(user.paid):
+            return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
+        
+        # Рендеринг шаблона
+        template = template_env.get_template("bind_card.html")
+        account_id = YOOKASSA_AGENT_ID  # Укажите ваш account_id
+        rendered_html = template.render(account_id=account_id)
+
+        return HTMLResponse(content=rendered_html)
+
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 

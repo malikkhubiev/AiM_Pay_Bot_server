@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bind Card</title>
+    <script src="https://yookassa.ru/payouts-data/3.1.0/widget.js"></script>
+</head>
+<body>
+    <div id="payout-form"></div>
+    <script>
+        const payoutsData = new window.PayoutsData({
+            type: 'payout',
+            account_id: '{{ account_id }}',
+            success_callback: function(data) {
+                console.log("Success:", data);
+                alert("Карта успешно привязана!");
+            },
+            error_callback: function(error) {
+                console.log("Error:", error);
+                alert("Ошибка при привязке карты!");
+            },
+            customization: {
+                colors: {
+                    control_primary: '#00BF96',
+                    control_primary_content: '#FFFFFF'
+                }
+            }
+        });
+
+        payoutsData.render('payout-form').then(() => {
+            console.log("Форма загружена");
+        });
+    </script>
+</body>
+</html>
