@@ -27,7 +27,7 @@ class User(Base):
     referrer_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     balance = Column(Float, default=0.0)
     paid = Column(Boolean, default=False)
-    card_synonym = Column(String, unique=True, nullable=False)
+    card_synonym = Column(String, unique=True, nullable=True)
 
     referrer = relationship("User", remote_side=[id], backref="referrals", foreign_keys=[referrer_id])
     referred_users = relationship("Referral", back_populates="referrer", foreign_keys="[Referral.referrer_id]")
