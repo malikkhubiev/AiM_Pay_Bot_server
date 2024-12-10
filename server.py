@@ -61,7 +61,7 @@ def check_parameters(**kwargs):
 
 def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True):
     user = db.query(User).filter_by(telegram_id=telegram_id).first()
-    if not user:
+    if not(user):
         if to_throw:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         else:
@@ -145,12 +145,18 @@ async def greet(request: Request, db: Session = Depends(get_db)):
         username = data.get("username")
         referrer_id = data.get("referrer_id")
 
+        logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
+        logging.info(f"Результат проверки параметров: {check}")
+        logging.info(f"Пользователь найден: {user}")
+
         check = check_parameters(username=username, telegram_id=telegram_id)
+        logging.info(f"check = {check}")
         if not(check["result"]):
             return check["message"]
 
+        logging.info(f"checknuli")
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
-
+        logging.info(f"user есть")
         if user:
             response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
         else:
