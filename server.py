@@ -146,8 +146,6 @@ async def greet(request: Request, db: Session = Depends(get_db)):
         referrer_id = data.get("referrer_id")
 
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
-        logging.info(f"Результат проверки параметров: {check}")
-        logging.info(f"Пользователь найден: {user}")
 
         check = check_parameters(username=username, telegram_id=telegram_id)
         logging.info(f"check = {check}")
@@ -306,12 +304,15 @@ async def success_payment(request: Request):
     return HTMLResponse("<h1 style='text-align: center'>Операция прошла успешно. Вы можете возвращаться в бота</h1>")
 
 # Реферальные выплаты
-@app.get("/get_balance/{telegram_id}")
-async def get_balance(telegram_id: int, db: Session = Depends(get_db)):
+@app.post("/get_balance")
+async def get_balance(request: Request, db: Session = Depends(get_db)):
     try:
         """
         Возвращает текущий баланс пользователя по его Telegram ID.
         """
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+        
         check = check_parameters(telegram_id=telegram_id)
         if not(check["result"]):
             return check["message"]
