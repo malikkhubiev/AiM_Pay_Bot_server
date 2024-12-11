@@ -468,7 +468,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             amount = object_data['amount']['value']
 
             user = get_user_by_telegram_id(db, telegram_id)
-            user.balance -= amount
+            user.balance -= float(amount)
             db.commit()
 
             notify_url = f"{MAHIN_URL}/notify_user"
