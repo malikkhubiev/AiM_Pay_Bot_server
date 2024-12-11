@@ -464,10 +464,17 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
 
         # Обработка событий
         if event == "payout.succeeded":
+
+            amount = object_data['amount']['value']
+
+            user = get_user_by_telegram_id(db, telegram_id)
+            user.balance -= amount
+            db.commit()
+
             notify_url = f"{MAHIN_URL}/notify_user"
             notification_data = {
                 "telegram_id": telegram_id,
-                "message": f"Выплата на сумму {object_data['amount']['value']} произведена успешно"
+                "message": f"Выплата на сумму {amount} произведена успешно"
             }
             try:
                 response = requests.post(notify_url, json=notification_data)
