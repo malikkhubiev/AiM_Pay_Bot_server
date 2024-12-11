@@ -503,6 +503,11 @@ async def bind_card(request: Request, db: Session = Depends(get_db)):
 
         unique_str = f"{telegram_id}{int(time() * 1000)}"
 
+        binding = db.query(Binding).filter_by(telegram_id=telegram_id).first()
+        if binding:
+            db.delete(binding)
+            db.commit()
+
         new_binding = Binding(
             telegram_id=telegram_id,
             unique_str=unique_str
