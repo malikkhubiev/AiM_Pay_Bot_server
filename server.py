@@ -19,7 +19,7 @@ from config import (
     PORT,
     BOT_USERNAME,
 )
-from yookassa import Payment, Configuration
+from yookassa import Payout as YooPay, Payment, Configuration
 import logging
 import uvicorn
 from database import (
@@ -411,19 +411,22 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
             return {"status": "error", "message": "Недостаточно средств для выплаты."}
 
         logging.info(f"Средств хватает")
-        payout = Payout.create({
+        payout = YooPay.create({
             "amount": {
-            "value": f"{payout_request.amount}",
-            "currency": "RUB"
+                "value": f"{payout_request.amount}",
+                "currency": "RUB"
             },
-            "payout_token": f"{payout_request.card_synonym}",
+            "payout_destination_data": {
+                "type": "bank_card",
+                "card": {
+                    "number": f"{payout_request.card_synonym}"
+                }
+            },
             "description": "Выплата рефералу",
             "metadata": {
                 "telegramId": f"{telegram_id}"
             }
         })
-
-
 
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
