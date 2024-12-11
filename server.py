@@ -549,7 +549,7 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
         user.card_synonym = card_synonym
         db.commit()
 
-        return HTMLResponse("Операция прошла успешно. Вы можете возвращаться в бота")
+        return JSONResponse({"message": "Операция прошла успешно. Вы можете возвращаться в бота"})
         
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)

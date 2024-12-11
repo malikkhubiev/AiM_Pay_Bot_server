@@ -26,7 +26,7 @@
                         "unique_str": "{{unique_str}}"
                     })
                 }).then(response => response.json())
-                .then(result => alert(result))
+                .then(result => alert(result["message"]))
                 .catch(error => console.error(error))
             },
             error_callback: function(error) {
