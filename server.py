@@ -562,7 +562,7 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
 @app.get("/make_bal/{telegram_id}")
 async def make_bal(telegram_id: int, db: Session = Depends(get_db)):
 
-    user = await check_user(telegram_id)
+    user = get_user_by_telegram_id(db, telegram_id)
     user.balance += 15000
     db.commit()
 
