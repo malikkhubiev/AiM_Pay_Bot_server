@@ -37,15 +37,16 @@ from database import (
 
 load_dotenv()
 
+def switch_configuration(account_id, secret_key):
+    Configuration.configure(account_id, secret_key)
+
 def setup_payment_config():
     """Настроить конфигурацию для платежей."""
-    Configuration.account_id = YOOKASSA_SHOP_ID
-    Configuration.secret_key = YOOKASSA_SECRET_KEY
+    switch_configuration(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
 
 def setup_payout_config():
     """Настроить конфигурацию для выплат."""
-    Configuration.account_id = YOOKASSA_SHOP_ID
-    Configuration.secret_key = YOOKASSA_PAYOUT_KEY
+    switch_configuration(YOOKASSA_SHOP_ID, YOOKASSA_PAYOUT_KEY)
 
 # Настройка идентификатора магазина и секретного ключа
 Configuration.account_id = YOOKASSA_SHOP_ID
@@ -424,6 +425,10 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 
         logging.info(f"Средств хватает")
         setup_payout_config()
+        # Логирование
+        current_secret_key = Configuration.secret_key
+        logging.info(f"Current secret key: {current_secret_key}")
+
         payout = YooPay.create({
             "amount": {
                 "value": f"{payout_request.amount}",
