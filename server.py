@@ -416,12 +416,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
                 "value": f"{payout_request.amount}",
                 "currency": "RUB"
             },
-            "payout_destination_data": {
-                "type": "bank_card",
-                "card": {
-                    "number": f"{payout_request.card_synonym}"
-                }
-            },
+            "payout_token": f"{payout_request.card_synonym}",
             "description": "Выплата рефералу",
             "metadata": {
                 "telegramId": f"{telegram_id}"
