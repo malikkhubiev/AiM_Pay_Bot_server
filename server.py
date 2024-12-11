@@ -116,7 +116,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
 
         if status == "succeeded" and user_telegram_id:
             logging.info(f"status {status}, и мы внутри")
-            user = await check_user(db, user_telegram_id)
+            user = get_user_by_telegram_id(db, user_telegram_id)
             logging.info(f"юзера тоже получили {user.paid}")
             # Обновляем статус пользователя как оплаченный
             user.paid = True
