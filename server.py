@@ -11,6 +11,7 @@ import datetime
 from config import (
     REFERRAL_AMOUNT,
     YOOKASSA_SECRET_KEY,
+    YOOKASSA_PAYOUT_KEY,
     YOOKASSA_PAYMENTS_URL,
     YOOKASSA_AGENT_ID,
     MAHIN_URL,
@@ -35,6 +36,16 @@ from database import (
 )
 
 load_dotenv()
+
+def setup_payment_config():
+    """Настроить конфигурацию для платежей."""
+    Configuration.account_id = YOOKASSA_SHOP_ID
+    Configuration.secret_key = YOOKASSA_SECRET_KEY
+
+def setup_payout_config():
+    """Настроить конфигурацию для выплат."""
+    Configuration.account_id = YOOKASSA_SHOP_ID
+    Configuration.secret_key = YOOKASSA_PAYOUT_KEY
 
 # Настройка идентификатора магазина и секретного ключа
 Configuration.account_id = YOOKASSA_SHOP_ID
@@ -246,6 +257,7 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
     
     try:
         logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
+        setup_payment_config()
         payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
         confirmation_url = payment.confirmation.confirmation_url
         if confirmation_url:
@@ -411,6 +423,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
             return {"status": "error", "message": "Недостаточно средств для выплаты."}
 
         logging.info(f"Средств хватает")
+        setup_payout_config()
         payout = YooPay.create({
             "amount": {
                 "value": f"{payout_request.amount}",
