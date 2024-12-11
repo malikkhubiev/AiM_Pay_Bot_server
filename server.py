@@ -401,7 +401,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
         user = get_user_by_telegram_id(db, telegram_id)
         logging.info(f"user есть")
 
-        payout_request = db.query(Payout).filter(telegram_id == telegram_id, status="pending").first()
+        payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
         if not payout_request:
             raise HTTPException(status_code=404, detail="Запрос на выплату не найден")
 
