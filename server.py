@@ -12,6 +12,7 @@ from config import (
     REFERRAL_AMOUNT,
     YOOKASSA_SECRET_KEY,
     YOOKASSA_PAYOUT_KEY,
+    YOOKASSA_GATEWAY_ID,
     YOOKASSA_PAYMENTS_URL,
     YOOKASSA_AGENT_ID,
     MAHIN_URL,
@@ -47,7 +48,7 @@ def setup_payment_config():
 
 def setup_payout_config():
     """Настроить конфигурацию для выплат."""
-    switch_configuration(YOOKASSA_SHOP_ID, YOOKASSA_PAYOUT_KEY)
+    switch_configuration(YOOKASSA_AGENT_ID, YOOKASSA_PAYOUT_KEY)
 
 # Настроим логирование
 logging.basicConfig(level=logging.DEBUG)
