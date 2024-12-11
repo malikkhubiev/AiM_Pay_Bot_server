@@ -354,7 +354,7 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
         telegram_id = data.get("telegram_id")
         amount = data.get("amount")
 
-        check = check_parameters(amount=amount, telegram_id=telegram_id, card_synonym=card_synonym)
+        check = check_parameters(amount=amount, telegram_id=telegram_id)
         if not(check["result"]):
             return {"status": "not_ready", "reason": check["message"]}
 
