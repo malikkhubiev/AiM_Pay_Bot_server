@@ -38,6 +38,7 @@ from database import (
 load_dotenv()
 
 def switch_configuration(account_id, secret_key):
+    logging.info(f"{account_id}, {secret_key}")
     Configuration.configure(account_id, secret_key)
 
 def setup_payment_config():
