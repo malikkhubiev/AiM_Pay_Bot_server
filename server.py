@@ -467,7 +467,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             notify_url = f"{MAHIN_URL}/notify_user"
             notification_data = {
                 "telegram_id": telegram_id,
-                "message": f"Выплата на сумму {object_data.amount.value} произведена успешно"
+                "message": f"Выплата на сумму {object_data["amount"]["value"]} произведена успешно"
             }
             try:
                 response = requests.post(notify_url, json=notification_data)
@@ -475,7 +475,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
                 logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
 
                 # После успешного уведомления обновляем статус выплаты
-                mark_payout_as_notified(db, object_data.id)
+                mark_payout_as_notified(db, object_data["id"])
                 return {"message": "Payment processed and user notified successfully"}
             except requests.RequestException as e:
                 logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
