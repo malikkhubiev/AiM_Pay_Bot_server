@@ -49,10 +49,6 @@ def setup_payout_config():
     """Настроить конфигурацию для выплат."""
     switch_configuration(YOOKASSA_SHOP_ID, YOOKASSA_PAYOUT_KEY)
 
-# Настройка идентификатора магазина и секретного ключа
-Configuration.account_id = YOOKASSA_SHOP_ID
-Configuration.secret_key = YOOKASSA_SECRET_KEY
-
 # Настроим логирование
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
