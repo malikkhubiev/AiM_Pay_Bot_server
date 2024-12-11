@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from time import time
 from jinja2 import Environment, FileSystemLoader
 import requests
 import datetime
@@ -21,7 +22,17 @@ from config import (
 from yookassa import Payment, Configuration
 import logging
 import uvicorn
-from database import User, Referral, Payout, get_db, create_payout, get_user, mark_payout_as_notified, create_referral
+from database import (
+    Binding,
+    User,
+    Referral,
+    Payout,
+    get_db,
+    create_payout,
+    get_user,
+    mark_payout_as_notified,
+    create_referral
+)
 
 load_dotenv()
 
@@ -486,13 +497,19 @@ async def bind_card(request: Request, db: Session = Depends(get_db)):
 
         if not(user.paid):
             return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
-        
-        # Рендеринг шаблона
-        template = template_env.get_template("bind_card.html")
-        account_id = YOOKASSA_AGENT_ID  # Укажите ваш account_id
-        rendered_html = template.render(account_id=account_id)
 
-        return HTMLResponse(content=rendered_html)
+        unique_str = f"{telegram_id}{int(time() * 1000)}"
+
+        new_binding = Binding(
+            telegram_id=telegram_id,
+            unique_str=unique_str
+        )
+        db.add(new_binding)
+        db.commit()
+
+        url = f"{SERVER_URL}/bind_card_page/{unique_str}"
+
+        return {"status": "success", "binding_url": url}
 
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
@@ -501,7 +518,44 @@ async def bind_card(request: Request, db: Session = Depends(get_db)):
         logging.error("Unexpected error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/bind_card_page/{unique_str}")
+def render_bind_card_page(unique_str: str):
+    
+    check = check_parameters(
+        unique_str=unique_str
+    )
+    if not check["result"]:
+        return check["message"]
 
+    template = template_env.get_template("bind_card.html")
+    account_id = YOOKASSA_AGENT_ID
+    rendered_html = template.render(account_id=account_id, unique_str=unique_str)
+
+    return HTMLResponse(content=rendered_html)
+    
+@app.post("/bind_success")
+async def bind_success(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        card_synonym = data.get("card_synonym")
+        unique_str = data.get("unique_str")
+
+        binding = db.query(Binding).filter(unique_str == unique_str).first()
+        if not binding:
+            raise HTTPException(status_code=404, detail="Запрос на привязку карты не был осуществлён")
+
+        user = get_user_by_telegram_id(db, binding.telegram_id)
+        user.card_synonym = card_synonym
+        db.commit()
+
+        return HTMLResponse("Операция прошла успешно. Вы можете возвращаться в бота")
+        
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/make_bal/{telegram_id}")

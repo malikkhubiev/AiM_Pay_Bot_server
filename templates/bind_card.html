@@ -14,7 +14,20 @@
             account_id: '{{ account_id }}',
             success_callback: function(data) {
                 console.log("Success:", data);
-                alert("Карта успешно привязана!");
+                console.log("Success:", data.payout_token);
+                console.log("Unique str: {{unique_str}}",)
+                fetch('/bind_success', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        "card_synonym": data.payout_token,
+                        "unique_str": "{{unique_str}}"
+                    })
+                }).then(response => response.json())
+                .then(result => alert(result))
+                .catch(error => console.error(error))
             },
             error_callback: function(error) {
                 console.log("Error:", error);

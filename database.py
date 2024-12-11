@@ -61,6 +61,13 @@ class Referral(Base):
     referred_user = relationship("User", foreign_keys=[referred_id], backref="referred_by")
     payout = relationship("Payout", back_populates="referral")  # Связь с выплатой
 
+class Binding(Base):
+    __tablename__ = 'bindings'
+
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(String, ForeignKey('users.telegram_id'))  
+    unique_str = Column(String, unique=True, nullable=False)
+
 # Создание всех таблиц в базе данных
 Base.metadata.create_all(bind=engine)
 
