@@ -387,6 +387,7 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
     try:
         data = await request.json()
         telegram_id = data.get("telegram_id")
+        logging.info(f"telegram_id {telegram_id}")
 
         # Проверка обязательных параметров
         check = check_parameters(
@@ -395,17 +396,21 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
         if not check["result"]:
             return check["message"]
 
+        logging.info(f"Прочекали")
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
+        logging.info(f"user есть")
 
         payout_request = db.query(Payout).filter(telegram_id == telegram_id, status="pending").first()
         if not payout_request:
             raise HTTPException(status_code=404, detail="Запрос на выплату не найден")
 
+        logging.info(f"payout тоже")
         # Проверка на достаточность средств
         if payout_request.amount > user.balance:
             return {"status": "error", "message": "Недостаточно средств для выплаты."}
 
+        logging.info(f"Средств хватает")
         payout = Payout.create({
             "amount": {
             "value": f"{payout_request.amount}",
@@ -418,6 +423,8 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
             }
         })
 
+
+
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -429,56 +436,53 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 @app.post("/payout_result")
 async def payout_result(request: Request, db: Session = Depends(get_db)):
     try:
-        # Получаем тело запроса
-        body = await request.body()
+        # Получение JSON данных из запроса
         data = await request.json()
+        event = data.get("event")
+        object_data = data.get("object", {})
+        metadata = object_data.get("metadata", {})
 
-        # Проверяем, что уведомление содержит необходимую информацию
-        event_type = data.get("event")
-        payout_id = data.get("object", {}).get("id")
-        amount = data.get("object", {}).get("amount", {}).get("value")
-        telegram_id = data.get("object", {}).get("metadata", {}).get("telegram_id")
-        card_synonym = data.get("object", {}).get("payment_method", {}).get("card_synonym")  # Синоним карты
+        # Извлечение telegramId из метаданных
+        telegram_id = metadata.get("telegramId")
 
-        if not (event_type and payout_id and amount and telegram_id):
-            logging.error("Некорректные данные вебхука: %s", data)
-            raise HTTPException(status_code=400, detail="Invalid webhook data")
+        # Логирование события
+        print(f"Получено уведомление: {event}")
+        print(f"Данные объекта: {object_data}")
 
-        # Проверяем статус события
-        if event_type == "payout.succeeded":
-            user = get_user_by_telegram_id(db, telegram_id)
-            if not user:
-                logging.error("Пользователь с telegram_id %s не найден", telegram_id)
-                raise HTTPException(status_code=404, detail="User not found")
+        # Обработка событий
+        if event == "payout.succeeded":
+            notify_url = f"{MAHIN_URL}/notify_user"
+            notification_data = {
+                "telegram_id": telegram_id,
+                "message": f"Выплата на сумму {object_data.amount.value} произведена успешно"
+            }
+            try:
+                response = requests.post(notify_url, json=notification_data)
+                response.raise_for_status()
+                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
 
-            payout_request = db.query(Payout).filter(telegram_id == telegram_id, status="pending").first()
-            if not payout_request:
-                raise HTTPException(status_code=404, detail="Запрос на выплату не найден")
+                # После успешного уведомления обновляем статус выплаты
+                mark_payout_as_notified(db, object_data.id)
+                return {"message": "Payment processed and user notified successfully"}
+            except requests.RequestException as e:
+                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
 
-            logging.error("Баланс до", user.balance)
-            # Уменьшаем баланс пользователя
-            user.balance -= float(amount)
-            payout_request.status = "completed"
-            db.add(payout_request)
-            db.commit()
-            logging.error("Баланс после", user.balance)
-            logging.error("Пользователь с telegram_id %s не найден", telegram_id)
-            user.card_synonym = card_synonym
-
-            logging.info(f"Выплата {payout_id} успешно обработана на сумму {amount} для пользователя {telegram_id}")
-            return {"status": "success", "message": f"Выплата {payout_id} успешно обработана"}
-
-        elif event_type == "payout.canceled":
-            logging.warning(f"Выплата {payout_id} отменена")
-            return {"status": "canceled", "message": f"Выплата {payout_id} отменена"}
-
+        elif event == "payout.canceled":
+            # Выплата отменена
+            print("Выплата отменена.")
+            # Здесь можно обработать отмену выплаты
         else:
-            logging.error("Неизвестное событие: %s", event_type)
-            raise HTTPException(status_code=400, detail="Unknown event type")
+            # Неизвестное событие
+            print(f"Неизвестное событие: {event}")
+
+        # Возвращаем подтверждение получения уведомления
+        return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
 
     except Exception as e:
-        logging.error("Ошибка обработки вебхука: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Обработка ошибок
+        print(f"Ошибка при обработке вебхука: {e}")
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
 
 @app.post("/bind_card")
 async def bind_card(request: Request, db: Session = Depends(get_db)):
