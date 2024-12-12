@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, and_, joinedload
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from time import time
@@ -129,6 +129,8 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             logging.info(f"юзера тоже получили {user.paid}")
             # Обновляем статус пользователя как оплаченный
             user.paid = True
+            referrer = db.query(Referral).filter_by(referred_id=user.id).first()
+            referrer.balance += REFERRAL_AMOUNT
             db.commit()
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
 
@@ -181,13 +183,21 @@ async def greet(request: Request, db: Session = Depends(get_db)):
             response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
         else:
             logging.info(f"Не, делаем нового")
+            # Создаём пользователя и реферала в одной транзакции
             new_user = User(
                 telegram_id=telegram_id,
-                username=username,
-                referrer_id=referrer_id
+                username=username
             )
             db.add(new_user)
-            db.commit()
+            db.flush()  # Обновляет локальный объект new_user с присвоенным id
+
+            new_referral = Referral(
+                referrer_id=referrer_id,
+                referred_id=new_user.id
+            )
+            db.add(new_referral)
+            db.commit()  # Фиксируем изменения для обеих операций
+
             response_message = f"Добро пожаловать, {username}! Ты успешно зарегистрирован."
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
 
@@ -268,9 +278,8 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
         logger.error("Ошибка при создании платежа: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
 
-
-@app.post("/generate_report")
-async def generate_report(request: Request, db: Session = Depends(get_db)):
+@app.post("/generate_overview_report")
+async def generate_overview_report(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
     telegram_id = data.get("telegram_id")
     
@@ -281,21 +290,75 @@ async def generate_report(request: Request, db: Session = Depends(get_db)):
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
 
-    # Подсчет рефералов для пользователя
-    referral_count = db.query(Referral).filter_by(referrer_id=user.id).count()
+    # Calculate total paid money
+    all_paid_money = db.query(func.sum(Payout.amount))\
+        .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
+        .scalar() or 0.0
 
-    all_paid_money = db.query(func.sum(Payout.amount)).filter(Payout.telegram_id == telegram_id).scalar()
-    
     total_payout = user.balance + all_paid_money
     current_balance = user.balance
 
+    referral_count = db.query(func.count(Referral.id))\
+        .filter(Referral.referrer_id == user.id).scalar()
+
+    paid_count = db.query(func.count(Referral.id))\
+        .join(User, Referral.referred_id == User.id)\
+        .filter(Referral.referrer_id == user.id, User.paid == True).scalar()
+
+    paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
+
+    # Generate the report
     report = {
         "username": user.username,
         "referral_count": referral_count,
+        "paid_count": paid_count,
+        "paid_percentage": paid_percentage,
         "total_payout": total_payout,
-        "current_balance": current_balance,
+        "current_balance": current_balance
     }
+
+    return JSONResponse(report)
+
+@app.post("/generate_clients_report")
+async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
     
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return check["message"]
+    
+    # Находим пользователя
+    user = get_user_by_telegram_id(db, telegram_id)
+
+    # Query to get the list of referrers with details of their referred users
+    referral_details = db.query(User).options(joinedload(User.referred_users))\
+        .join(Referral, Referral.referrer_id == User.id)\
+        .join(User, Referral.referred_id == User.id)\
+        .filter(User.telegram_id == telegram_id)\
+        .first()
+
+    # Extract referral data and calculate statistics
+    invited_list = []
+    referral_count = 0
+    paid_count = 0
+
+    if referral_details:
+        for referred in referral_details.referrals:
+            invited_list.append({
+                "telegram_id": referred.referred_user.telegram_id,
+                "username": referred.referred_user.username,
+                "paid": referred.referred_user.paid
+            })
+            referral_count += 1
+            if referred.referred_user.paid:
+                paid_count += 1
+
+    # Generate the report
+    report = {
+        "invited_list": invited_list
+    }
+
     return JSONResponse(report)
 
 @app.post("/get_referral_link")
@@ -469,6 +532,8 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
 
             user = get_user_by_telegram_id(db, telegram_id)
             user.balance -= float(amount)
+            payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
+            payout_request.status = "completed"
             db.commit()
 
             notify_url = f"{MAHIN_URL}/notify_user"

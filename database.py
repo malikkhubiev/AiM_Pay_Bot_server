@@ -24,42 +24,40 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
-    referrer_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     balance = Column(Float, default=0.0)
     paid = Column(Boolean, default=False)
     card_synonym = Column(String, unique=True, nullable=True)
 
-    referrer = relationship("User", remote_side=[id], backref="referrals", foreign_keys=[referrer_id])
-    referred_users = relationship("Referral", back_populates="referrer", foreign_keys="[Referral.referrer_id]")
-    payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Указываем foreign_keys
+    payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
+
 
 class Payout(Base):
     __tablename__ = 'payouts'
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Исправлено на String, так как User.telegram_id — String
-    card_synonym = Column(String, ForeignKey('users.card_synonym'))  # Исправлено на String
+    telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
+    card_synonym = Column(String, ForeignKey('users.card_synonym'))  # Ссылка на карточный идентификатор
     amount = Column(Float)
     created_at = Column(DateTime, default=datetime.now)
     notified = Column(Boolean, default=False)
-    referral_id = Column(Integer, ForeignKey('referrals.id'))  # ID реферала, за которого выплачена награда
-    transaction_id = Column(String, nullable=True)  # Новый столбец для ID транзакции из платежной системы
-    status = Column(String, default="pending")  # Новый столбец для статуса выплаты
+    referral_id = Column(Integer, ForeignKey('referrals.id'))  # Ссылка на реферал
+    transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
+    status = Column(String, default="pending")  # Статус выплаты
 
-    user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])  # Указываем foreign_keys
+    user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
     referral = relationship("Referral", back_populates="payout")
 
 class Referral(Base):
     __tablename__ = 'referrals'
 
     id = Column(Integer, primary_key=True, index=True)
-    referrer_id = Column(Integer, ForeignKey('users.id'))
-    referred_id = Column(Integer, ForeignKey('users.id'))
+    referrer_id = Column(Integer, ForeignKey('users.id'))  # Кто пригласил
+    referred_id = Column(Integer, ForeignKey('users.id'))  # Кто был приглашён
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    referrer = relationship("User", foreign_keys=[referrer_id], back_populates="referred_users")
-    referred_user = relationship("User", foreign_keys=[referred_id], backref="referred_by")
-    payout = relationship("Payout", back_populates="referral")  # Связь с выплатой
+    referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
+    referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
+    payout = relationship("Payout", back_populates="referral")  # Связь с выплатами
 
 class Binding(Base):
     __tablename__ = 'bindings'
