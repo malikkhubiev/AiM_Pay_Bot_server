@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
-from sqlalchemy import func, and_, joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy import func, and_
+from sqlalchemy.orm import Session, joinedload
 from dotenv import load_dotenv
 from time import time
 from jinja2 import Environment, FileSystemLoader
