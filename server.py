@@ -319,11 +319,11 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     current_balance = user.balance
 
     referral_count = db.query(func.count(Referral.id))\
-        .filter(Referral.referrer_id == user.id).scalar()
+        .filter(Referral.referrer_id == user.telegram_id).scalar()
 
     paid_count = db.query(func.count(Referral.id))\
-        .join(User, Referral.referred_id == User.id)\
-        .filter(Referral.referrer_id == user.id, User.paid == True).scalar()
+        .join(User, Referral.referred_id == User.telegram_id)\
+        .filter(Referral.referrer_id == user.telegram_id, User.paid == True).scalar()
 
     paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
 
@@ -356,8 +356,8 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     # Query to get the list of referrers with details of their referred users
     user_alias = aliased(User)
 
-    referral_details = db.query(User).join(Referral, Referral.referrer_id == User.id)\
-        .join(user_alias, Referral.referred_id == user_alias.id)\
+    referral_details = db.query(User).join(Referral, Referral.referrer_id == User.telegram_id)\
+        .join(user_alias, Referral.referred_id == user_alias.telegram_id)\
         .filter(User.telegram_id == telegram_id)\
         .first()
 
