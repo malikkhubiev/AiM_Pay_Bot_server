@@ -130,15 +130,11 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             # Обновляем статус пользователя как оплаченный
             user.paid = True
             referrer = db.query(Referral).filter_by(referred_id=user.id).first()
-            if referrer is None:
-                raise ValueError("Реферал не найден для данного пользователя.")
+            if referrer:
+                referrer_user = db.query(User).filter_by(id=referrer.referrer_id).first()
+                if referrer_user:
+                    referrer_user.balance += REFERRAL_AMOUNT
 
-            referrer_user = db.query(User).filter_by(id=referrer.referrer_id).first()
-            if referrer_user is None:
-                raise ValueError("Пользователь-реферер не найден.")
-
-            referrer_user.balance += REFERRAL_AMOUNT
-            db.commit()  # Сохраняем изменения в БД
             db.commit()
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
 
