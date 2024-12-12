@@ -289,14 +289,16 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     telegram_id = data.get("telegram_id")
     
     check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
+    if not check["result"]:
         return check["message"]
     
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
-
+    if not user:
+        return {"error": "User not found."}
+    
     # Вывод логов, потом убрать
-    r = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
+    r = db.query(Referral).filter_by(referrer_id=user.id).first()
 
     if r is None:
         logging.info(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
@@ -310,7 +312,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
         else:
             logging.info(f"Пользователь с ID {r.referred_id} не найден.")
 
-    # Calculate total paid money
+    # Рассчитываем общую сумму выплат
     all_paid_money = db.query(func.sum(Payout.amount))\
         .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
         .scalar() or 0.0
@@ -318,16 +320,19 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     total_payout = user.balance + all_paid_money
     current_balance = user.balance
 
+    # Подсчитываем количество рефералов
     referral_count = db.query(func.count(Referral.id))\
-        .filter(Referral.referrer_id == user.telegram_id).scalar()
+        .filter(Referral.referrer_id == user.id).scalar()
 
+    # Подсчитываем количество оплаченных рефералов
     paid_count = db.query(func.count(Referral.id))\
-        .join(User, Referral.referred_id == User.telegram_id)\
-        .filter(Referral.referrer_id == user.telegram_id, User.paid == True).scalar()
+        .join(User, Referral.referred_id == User.id)\
+        .filter(Referral.referrer_id == user.id, User.paid == True).scalar()
 
+    # Рассчитываем процент оплаченных рефералов
     paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
 
-    # Generate the report
+    # Генерируем отчет
     report = {
         "username": user.username,
         "referral_count": referral_count,
@@ -339,6 +344,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
 
     return JSONResponse(report)
 
+
 @app.post("/generate_clients_report")
 async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
@@ -346,20 +352,20 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     logging.info(f"telegram_id {telegram_id}")
     
     check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
+    if not check["result"]:
         return check["message"]
     
-    logging.info(f"Чекнули")
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
-    logging.info(f"user есть")
-    # Query to get the list of referrers with details of their referred users
-    user_alias = aliased(User)
+    if not user:
+        return {"error": "User not found."}
 
+    logging.info(f"user найден")
+    
+    # Получаем список рефералов с деталями их пригласивших пользователей
     referral_details = db.query(Referral).filter_by(referrer_id=user.id).all()
-
-    logging.info(f"detales есть")
-    # Extract referral data and calculate statistics
+    
+    # Извлекаем данные о рефералах и вычисляем статистику
     invited_list = []
     referral_count = 0
     paid_count = 0
@@ -377,10 +383,12 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
                 if referred_user.paid:
                     paid_count += 1
 
-    # Generate the report
+    # Генерируем отчет
     report = {
         "username": user.username,
-        "invited_list": invited_list
+        "invited_list": invited_list,
+        "referral_count": referral_count,
+        "paid_count": paid_count
     }
 
     return JSONResponse(report)
