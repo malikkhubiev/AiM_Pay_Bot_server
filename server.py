@@ -202,6 +202,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
             db.add(new_referral)
             db.commit()  # Фиксируем изменения для обеих операций
 
+            logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
             response_message = f"Добро пожаловать, {username}! Ты успешно зарегистрирован."
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
 
@@ -293,6 +294,13 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
+
+    # Вывод логов, потом убрать
+    r = db.query(Referral).filter_by(referrer_id=user.id).first()
+    logging.info(f"referrer_id {r.referrer_id}")
+    logging.info(f"referred_id {r.referred_id}")
+    user = get_user_by_telegram_id(db, r.referred_id)
+    logging.info(f"user referred {user.username}")
 
     # Calculate total paid money
     all_paid_money = db.query(func.sum(Payout.amount))\
