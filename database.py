@@ -30,6 +30,17 @@ class User(Base):
 
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
 
+class Referral(Base):
+    __tablename__ = 'referrals'
+
+    id = Column(Integer, primary_key=True, index=True)
+    referrer_id = Column(Integer, ForeignKey('users.id'))  # Кто пригласил
+    referred_id = Column(Integer, ForeignKey('users.id'))  # Кто был приглашён
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
+    referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
+    payout = relationship("Payout", back_populates="referral")  # Связь с выплатами
 
 class Payout(Base):
     __tablename__ = 'payouts'
@@ -46,18 +57,6 @@ class Payout(Base):
 
     user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
     referral = relationship("Referral", back_populates="payout")
-
-class Referral(Base):
-    __tablename__ = 'referrals'
-
-    id = Column(Integer, primary_key=True, index=True)
-    referrer_id = Column(Integer, ForeignKey('users.id'))  # Кто пригласил
-    referred_id = Column(Integer, ForeignKey('users.id'))  # Кто был приглашён
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
-    referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
-    payout = relationship("Payout", back_populates="referral")  # Связь с выплатами
 
 class Binding(Base):
     __tablename__ = 'bindings'
