@@ -327,14 +327,16 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
 async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
     telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
     
     check = check_parameters(telegram_id=telegram_id)
     if not(check["result"]):
         return check["message"]
     
+    logging.info(f"Чекнули")
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
-
+    logging.info(f"user есть")
     # Query to get the list of referrers with details of their referred users
     referral_details = db.query(User).options(joinedload(User.referred_users))\
         .join(Referral, Referral.referrer_id == User.id)\
@@ -342,6 +344,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
         .filter(User.telegram_id == telegram_id)\
         .first()
 
+    logging.info(f"detales есть")
     # Extract referral data and calculate statistics
     invited_list = []
     referral_count = 0
@@ -360,6 +363,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
 
     # Generate the report
     report = {
+        "username": user.username,
         "invited_list": invited_list
     }
 
@@ -375,8 +379,7 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
         if not(check["result"]):
             return check["message"]
         
-        # Находим пользователя
-        check_user(db, telegram_id)
+        user = get_user_by_telegram_id(db, telegram_id)
         
         # Генерируем реферальную ссылку
         bot_username = BOT_USERNAME  # Укажите имя бота в настройках или конфигурации
