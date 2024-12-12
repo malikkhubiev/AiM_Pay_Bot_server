@@ -356,10 +356,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     # Query to get the list of referrers with details of their referred users
     user_alias = aliased(User)
 
-    referral_details = db.query(User).join(Referral, Referral.referrer_id == User.telegram_id)\
-        .join(user_alias, Referral.referred_id == user_alias.telegram_id)\
-        .filter(User.telegram_id == telegram_id)\
-        .first()
+    referral_details = db.query(Referral).filter_by(referrer_id=user.id).all()
 
     logging.info(f"detales есть")
     # Extract referral data and calculate statistics
