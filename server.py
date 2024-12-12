@@ -197,7 +197,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
 
             new_referral = Referral(
                 referrer_id=referrer_id,
-                referred_id=new_user.id
+                referred_id=new_user.telegram_id
             )
             db.add(new_referral)
             db.commit()  # Фиксируем изменения для обеих операций
