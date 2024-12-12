@@ -368,15 +368,17 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     paid_count = 0
 
     if referral_details:
-        for referred in referral_details.referrals:
-            invited_list.append({
-                "telegram_id": referred.referred_user.telegram_id,
-                "username": referred.referred_user.username,
-                "paid": referred.referred_user.paid
-            })
-            referral_count += 1
-            if referred.referred_user.paid:
-                paid_count += 1
+        for referral in referral_details:  # referral_details — список объектов Referral
+            referred_user = referral.referred_user  # Получаем приглашённого пользователя
+            if referred_user:
+                invited_list.append({
+                    "telegram_id": referred_user.telegram_id,
+                    "username": referred_user.username,
+                    "paid": referred_user.paid
+                })
+                referral_count += 1
+                if referred_user.paid:
+                    paid_count += 1
 
     # Generate the report
     report = {
