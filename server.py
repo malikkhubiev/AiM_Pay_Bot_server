@@ -295,11 +295,11 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
 
-        # Вывод логов, потом убрать
+    # Вывод логов, потом убрать
     r = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
 
     if r is None:
-        logging.warning(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
+        logging.info(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
     else:
         logging.info(f"referrer_id {r.referrer_id}")
         logging.info(f"referred_id {r.referred_id}")
@@ -308,7 +308,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
         if referred_user:
             logging.info(f"user referred {referred_user.username}")
         else:
-            logging.warning(f"Пользователь с ID {r.referred_id} не найден.")
+            logging.info(f"Пользователь с ID {r.referred_id} не найден.")
 
     # Calculate total paid money
     all_paid_money = db.query(func.sum(Payout.amount))\
