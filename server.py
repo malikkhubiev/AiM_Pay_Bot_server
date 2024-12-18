@@ -416,11 +416,11 @@ async def success_payment(request: Request):
     return HTMLResponse("<h1 style='text-align: center'>Операция прошла успешно. Вы можете возвращаться в бота</h1>")
 
 # Реферальные выплаты
-@app.post("/get_balance_and_paid_status")
-async def get_balance_and_paid_status(request: Request, db: Session = Depends(get_db)):
+@app.post("/isAbleToGetPayout")
+async def isAbleToGetPayout(request: Request, db: Session = Depends(get_db)):
     try:
         """
-        Возвращает текущий баланс пользователя и статус оплаты курса по его Telegram ID.
+        Возвращает текущий баланс пользователя, привязана ли карта и статус оплаты курса по его Telegram ID.
         """
         data = await request.json()
         telegram_id = data.get("telegram_id")
@@ -432,7 +432,12 @@ async def get_balance_and_paid_status(request: Request, db: Session = Depends(ge
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
         logging.info(f"paid {user.paid}")
-        return {"balance": user.balance, "paid": user.paid}
+        logging.info(f"card_synonym {user.card_synonym}")
+        return {
+            "balance": user.balance,
+            "paid": user.paid,
+            "isBinded": bool(user.card_synonym)
+        }
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -675,8 +680,21 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
         user.card_synonym = card_synonym
         db.commit()
 
-        return JSONResponse({"message": "Операция прошла успешно. Вы можете возвращаться в бота"})
-        
+        # Уведомление пользователя
+        notify_url = f"{MAHIN_URL}/notify_user"
+        notification_data = {
+            "telegram_id": binding.telegram_id,
+            "message": "Поздравляем! Ваша карта успешно привязана! 🎉"
+        }
+        try:
+            response = requests.post(notify_url, json=notification_data)
+            response.raise_for_status()
+            logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", binding.telegram_id)
+
+        except requests.RequestException as e:
+            logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
