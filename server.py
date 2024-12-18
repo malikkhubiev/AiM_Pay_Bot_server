@@ -431,7 +431,7 @@ async def get_balance_and_paid_status(request: Request, db: Session = Depends(ge
         
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
-
+        logging.info(f"paid {user.paid}")
         return {"balance": user.balance, "paid": user.paid}
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
