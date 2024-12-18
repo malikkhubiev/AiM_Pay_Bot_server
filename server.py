@@ -136,7 +136,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user:
                     logging.info(f"referrer_user есть")
-                    referrer_user.balance += REFERRAL_AMOUNT
+                    referrer_user.balance += float(REFERRAL_AMOUNT)
 
             db.commit()
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
