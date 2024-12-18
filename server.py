@@ -197,12 +197,12 @@ async def greet(request: Request, db: Session = Depends(get_db)):
             )
             db.add(new_user)
             db.flush()  # Обновляет локальный объект new_user с присвоенным id
-
-            new_referral = Referral(
-                referrer_id=referrer_id,
-                referred_id=new_user.telegram_id
-            )
-            db.add(new_referral)
+            if referrer_id != telegram_id:
+                new_referral = Referral(
+                    referrer_id=referrer_id,
+                    referred_id=new_user.telegram_id
+                )
+                db.add(new_referral)
             db.commit()  # Фиксируем изменения для обеих операций
 
             logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
@@ -369,6 +369,8 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
         logging.info(f" referral {referral_details}")
         for referral in referral_details:  # referral_details — список объектов Referral
             logging.info(f"referral есть и вот он: {referral}")
+            attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
+            logging.info(f"Referral attributes: {attributes}")
             referred_user = db.query(User).filter_by(id=referral.referrer_id).first()
             logging.info(f"referred_user {referred_user}")
             if referred_user:
