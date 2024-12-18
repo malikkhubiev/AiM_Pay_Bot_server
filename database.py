@@ -47,7 +47,7 @@ class Payout(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
-    card_synonym = Column(String, unique=True, nullable=True)
+    card_synonym = Column(String, nullable=False)
     amount = Column(Float)
     created_at = Column(DateTime, default=datetime.now)
     notified = Column(Boolean, default=False)
