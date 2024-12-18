@@ -360,6 +360,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     referral_details = db.query(Referral).filter_by(referrer_id=user.id).all()
 
     logging.info(f"detales есть")
+    logging.info(f"{referral_details} referral_details")
     # Extract referral data and calculate statistics
     invited_list = []
     logging.info(f"invited_list {invited_list}")
