@@ -396,12 +396,14 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
             return check["message"]
         
         user = get_user_by_telegram_id(db, telegram_id)
+        if not(user.paid):
+            return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
         
         # Генерируем реферальную ссылку
         bot_username = BOT_USERNAME  # Укажите имя бота в настройках или конфигурации
         referral_link = f"https://t.me/{bot_username}?start={telegram_id}"
         
-        return {"referral_link": referral_link}
+        return {"status": "success", "referral_link": referral_link}
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -414,11 +416,11 @@ async def success_payment(request: Request):
     return HTMLResponse("<h1 style='text-align: center'>Операция прошла успешно. Вы можете возвращаться в бота</h1>")
 
 # Реферальные выплаты
-@app.post("/get_balance")
-async def get_balance(request: Request, db: Session = Depends(get_db)):
+@app.post("/get_balance_and_paid_status")
+async def get_balance_and_paid_status(request: Request, db: Session = Depends(get_db)):
     try:
         """
-        Возвращает текущий баланс пользователя по его Telegram ID.
+        Возвращает текущий баланс пользователя и статус оплаты курса по его Telegram ID.
         """
         data = await request.json()
         telegram_id = data.get("telegram_id")
@@ -430,7 +432,7 @@ async def get_balance(request: Request, db: Session = Depends(get_db)):
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
 
-        return {"balance": user.balance}
+        return {"balance": user.balance, "paid": user.paid}
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -669,6 +671,7 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Запрос на привязку карты не был осуществлён")
 
         user = get_user_by_telegram_id(db, binding.telegram_id)
+        logging.info(f"card_synonym {card_synonym}")
         user.card_synonym = card_synonym
         db.commit()
 
