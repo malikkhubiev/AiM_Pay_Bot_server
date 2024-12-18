@@ -371,7 +371,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
             logging.info(f"referral есть и вот он: {referral}")
             attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
             logging.info(f"Referral attributes: {attributes}")
-            referred_user = db.query(User).filter_by(telegram_id=referral.referrer_id).first()
+            referred_user = db.query(User).filter_by(telegram_id=referral.referred_id).first()
             logging.info(f"referred_user {referred_user}")
             if referred_user:
                 logging.info(f"referred_user точно есть")
