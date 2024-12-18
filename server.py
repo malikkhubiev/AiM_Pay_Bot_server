@@ -131,8 +131,11 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             user.paid = True
             referrer = db.query(Referral).filter_by(referred_id=user.id).first()
             if referrer:
+                logging.info(f"referrer {referrer} есть")
                 referrer_user = db.query(User).filter_by(id=referrer.referrer_id).first()
+                logging.info(f"referrer_user {referrer_user}")
                 if referrer_user:
+                    logging.info(f"referrer_user есть")
                     referrer_user.balance += REFERRAL_AMOUNT
 
             db.commit()
@@ -376,7 +379,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
                 })
                 logging.info(f"invited_list {invited_list}")
 
-    logging.info(f"invited_list когда вышли")
+    logging.info(f"invited_list {invited_list} когда вышли")
 
     # Generate the report
     report = {
