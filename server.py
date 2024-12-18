@@ -353,29 +353,30 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
     logging.info(f"user есть")
-    # Query to get the list of referrers with details of their referred users
-    user_alias = aliased(User)
 
     referral_details = db.query(Referral).filter_by(referrer_id=user.id).all()
 
     logging.info(f"detales есть")
     # Extract referral data and calculate statistics
     invited_list = []
-    referral_count = 0
-    paid_count = 0
+    logging.info(f"invited_list {invited_list}")
 
     if referral_details:
+        logging.info(f" referral {referral_details}")
         for referral in referral_details:  # referral_details — список объектов Referral
+            logging.info(f"referral есть и вот он: {referral}")
             referred_user = referral.referred_user  # Получаем приглашённого пользователя
+            logging.info(f"referred_user {referred_user}")
             if referred_user:
+                logging.info(f"referred_user точно есть")
                 invited_list.append({
                     "telegram_id": referred_user.telegram_id,
                     "username": referred_user.username,
                     "paid": referred_user.paid
                 })
-                referral_count += 1
-                if referred_user.paid:
-                    paid_count += 1
+                logging.info(f"invited_list {invited_list}")
+
+    logging.info(f"invited_list когда вышли")
 
     # Generate the report
     report = {
