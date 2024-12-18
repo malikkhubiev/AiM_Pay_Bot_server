@@ -289,16 +289,14 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     telegram_id = data.get("telegram_id")
     
     check = check_parameters(telegram_id=telegram_id)
-    if not check["result"]:
+    if not(check["result"]):
         return check["message"]
     
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
-    if not user:
-        return {"error": "User not found."}
-    
+
     # Вывод логов, потом убрать
-    r = db.query(Referral).filter_by(referrer_id=user.id).first()
+    r = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
 
     if r is None:
         logging.info(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
@@ -312,7 +310,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
         else:
             logging.info(f"Пользователь с ID {r.referred_id} не найден.")
 
-    # Рассчитываем общую сумму выплат
+    # Calculate total paid money
     all_paid_money = db.query(func.sum(Payout.amount))\
         .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
         .scalar() or 0.0
@@ -320,19 +318,16 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
     total_payout = user.balance + all_paid_money
     current_balance = user.balance
 
-    # Подсчитываем количество рефералов
     referral_count = db.query(func.count(Referral.id))\
-        .filter(Referral.referrer_id == user.id).scalar()
+        .filter(Referral.referrer_id == user.telegram_id).scalar()
 
-    # Подсчитываем количество оплаченных рефералов
     paid_count = db.query(func.count(Referral.id))\
-        .join(User, Referral.referred_id == User.id)\
-        .filter(Referral.referrer_id == user.id, User.paid == True).scalar()
+        .join(User, Referral.referred_id == User.telegram_id)\
+        .filter(Referral.referrer_id == user.telegram_id, User.paid == True).scalar()
 
-    # Рассчитываем процент оплаченных рефералов
     paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
 
-    # Генерируем отчет
+    # Generate the report
     report = {
         "username": user.username,
         "referral_count": referral_count,
@@ -344,7 +339,6 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
 
     return JSONResponse(report)
 
-
 @app.post("/generate_clients_report")
 async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
@@ -352,20 +346,20 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     logging.info(f"telegram_id {telegram_id}")
     
     check = check_parameters(telegram_id=telegram_id)
-    if not check["result"]:
+    if not(check["result"]):
         return check["message"]
     
+    logging.info(f"Чекнули")
     # Находим пользователя
     user = get_user_by_telegram_id(db, telegram_id)
-    if not user:
-        return {"error": "User not found."}
+    logging.info(f"user есть")
+    # Query to get the list of referrers with details of their referred users
+    user_alias = aliased(User)
 
-    logging.info(f"user найден")
-    
-    # Получаем список рефералов с деталями их пригласивших пользователей
     referral_details = db.query(Referral).filter_by(referrer_id=user.id).all()
-    
-    # Извлекаем данные о рефералах и вычисляем статистику
+
+    logging.info(f"detales есть")
+    # Extract referral data and calculate statistics
     invited_list = []
     referral_count = 0
     paid_count = 0
@@ -383,12 +377,10 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
                 if referred_user.paid:
                     paid_count += 1
 
-    # Генерируем отчет
+    # Generate the report
     report = {
         "username": user.username,
-        "invited_list": invited_list,
-        "referral_count": referral_count,
-        "paid_count": paid_count
+        "invited_list": invited_list
     }
 
     return JSONResponse(report)
@@ -466,16 +458,22 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
         user = get_user_by_telegram_id(db, telegram_id)
         card_synonym = user.card_synonym
 
-        # Создаём запрос на выплату
-        payout_request = Payout(
-            telegram_id=telegram_id, 
-            amount=amount, 
-            card_synonym=card_synonym, 
-            status="pending"
-        )
-        db.add(payout_request)
+        # Проверяем наличие запроса в режиме ожидания
+        payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
+        if payout_request:
+            # Обновляем запрос на выплату
+            payout_request.card_synonym = card_synonym
+            payout_request.amount = amount
+        else:
+            # Создаём запрос на выплату
+            payout_request = Payout(
+                telegram_id=telegram_id, 
+                amount=amount, 
+                card_synonym=card_synonym, 
+                status="pending"
+            )
+            db.add(payout_request)
         db.commit()
-        db.refresh(payout_request)
 
         return {"status": "ready_to_pay"}
 
