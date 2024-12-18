@@ -129,10 +129,10 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             logging.info(f"юзера тоже получили {user.paid}")
             # Обновляем статус пользователя как оплаченный
             user.paid = True
-            referrer = db.query(Referral).filter_by(referred_id=user.id).first()
+            referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
             if referrer:
                 logging.info(f"referrer {referrer} есть")
-                referrer_user = db.query(User).filter_by(id=referrer.referrer_id).first()
+                referrer_user = db.query(User).filter_by(telegram_id=referrer.referrer_id).first()
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user:
                     logging.info(f"referrer_user есть")
@@ -231,7 +231,7 @@ async def check_referrals(request: Request, db: Session = Depends(get_db)):
         
         if user:
             # Проверка, есть ли рефералы для данного пользователя
-            referral_exists = db.query(Referral).filter_by(referrer_id=user.id).first()
+            referral_exists = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
             if referral_exists:
                 return {"has_referrals": True}
             else:
