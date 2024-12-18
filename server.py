@@ -357,7 +357,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     user = get_user_by_telegram_id(db, telegram_id)
     logging.info(f"user есть")
 
-    referral_details = db.query(Referral).filter_by(referrer_id=user.id).all()
+    referral_details = db.query(Referral).filter_by(referrer_id=user.telegram_id).all()
 
     logging.info(f"detales есть")
     logging.info(f"{referral_details} referral_details")
