@@ -7,12 +7,46 @@
 </head>
 <body>
     <h1>{{balance}}</h1>
-    <form action="/getMyMoney" method="post">
-        <label for="card_num">Номер карты:</label>
-        <input id="card_num" name="card_num" type="number" required>
-        <label for="secret_key">Секретный ключ:</label>
+    <form>
         <input id="secret_key" name="secret_key" type="text" required>
-        <button type="submit">Отправить</button>
     </form>
+    <div id="payout-form"></div>
+    <script>
+        const secret_key = document.getElementById("secret_key")
+        const payoutsData = new window.PayoutsData({
+            type: 'payout',
+            account_id: '{{ account_id }}',
+            success_callback: function(data) {
+                console.log("Success:", data);
+                console.log("Success:", data.payout_token);
+                fetch('/getMyMoney', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        "card_synonym": data.payout_token,
+                        "secret_key": secret_key.value
+                    })
+                }).then(response => response.json())
+                .then(result => alert(result["message"]))
+                .catch(error => console.error(error))
+            },
+            error_callback: function(error) {
+                console.log("Error:", error);
+                alert("Ошибка при привязке карты!");
+            },
+            customization: {
+                colors: {
+                    control_primary: '#00BF96',
+                    control_primary_content: '#FFFFFF'
+                }
+            }
+        });
+
+        payoutsData.render('payout-form').then(() => {
+            console.log("Форма загружена");
+        });
+    </script>
 </body>
 </html>

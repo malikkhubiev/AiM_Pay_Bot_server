@@ -724,7 +724,8 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
             user = get_user_by_telegram_id(db, telegram_id)
             logging.info(f"user have")
             template = template_env.get_template("getMyMoney.html")
-            rendered_html = template.render(balance=user.balance)
+            account_id = YOOKASSA_AGENT_ID
+            rendered_html = template.render(account_id=account_id, balance=user.balance)
             return HTMLResponse(content=rendered_html)
         
     except HTTPException as he:
@@ -739,12 +740,9 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
 async def getMyMoney(request: Request, db: Session = Depends(get_db)):
     logging.info(f"внутри поста")
     try:
-        form_data = await request.form()
-        logging.info(f"Взяли формдату")
-        card_num = form_data.get("card_num")
-        logging.info(f"Взяли номер карты {card_num}")
-        secret_key = form_data.get("secret_key")
-        logging.info(f"Взяли секретный ключ {secret_key}")
+        data = await request.json()
+        card_synonym = data.get("card_synonym")
+        secret_key = data.get("secret_key")
 
         if secret_key == SECRET_KEY:
             logging.info("💰 Выплата пользователю")
@@ -757,13 +755,8 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
                     # "value": f"{user.balance}",
                     "currency": "RUB"
                 },
-                "payout_destination_data": {
-                    "type": "bank_card",
-                    "card": {
-                        "number": f"{int(card_num)}"
-                    }
-                },
-                "description": "Выплата рефералу",
+                "payout_token": f"{card_synonym}",
+                "description": "Выплата мне",
                 "metadata": {
                     "telegramId": "999"
                 }
