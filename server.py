@@ -719,7 +719,7 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
     try:
         logging.info("💰 моней")
         logging.info(f"{telegram_id} telegram_id")
-        if telegram_id == "999":
+        if telegram_id == 999:
             logging.info(f"equals")
             user = get_user_by_telegram_id(db, telegram_id)
             logging.info(f"user have")
