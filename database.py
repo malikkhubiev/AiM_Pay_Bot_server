@@ -68,6 +68,24 @@ class Binding(Base):
 # Создание всех таблиц в базе данных
 Base.metadata.create_all(bind=engine)
 
+def add_initial_user():
+    session = SessionLocal()
+    try:
+        # Проверка, существует ли пользователь с заданным telegram_id
+        existing_user = session.query(User).filter_by(telegram_id="999").first()
+        if not existing_user:
+            new_user = User(
+                id=1000000,
+                username="Malik_The_Author",
+                telegram_id="999"
+            )
+            session.add(new_user)
+            session.commit()
+    finally:
+        session.close()
+
+add_initial_user()
+
 # Функции работы с пользователями и выплатами
 def get_user(session: Session, telegram_id: str) -> User:
     """Получение пользователя по telegram_id"""

@@ -7,6 +7,7 @@ SERVER_URL = os.getenv("SERVER_URL")
 MAHIN_URL = os.getenv("MAHIN_URL")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///bot_database.db")
 
+COURSE_AMOUNT = os.getenv("COURSE_AMOUNT")
 REFERRAL_AMOUNT = os.getenv("REFERRAL_AMOUNT")
 
 # YooKassa configuration
@@ -18,3 +19,5 @@ YOOKASSA_AGENT_ID = os.getenv("YOOKASSA_AGENT_ID")
 
 PORT = os.getenv("PORT", 8000)
 BOT_USERNAME = os.getenv("BOT_USERNAME")
+
+SECRET_KEY = os.getenv("SECRET_KEY")

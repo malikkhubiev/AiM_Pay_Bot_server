@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader
 import requests
 import datetime
 from config import (
+    COURSE_AMOUNT,
     REFERRAL_AMOUNT,
     YOOKASSA_SECRET_KEY,
     YOOKASSA_PAYOUT_KEY,
@@ -19,6 +20,7 @@ from config import (
     YOOKASSA_SHOP_ID,
     PORT,
     BOT_USERNAME,
+    SECRET_KEY
 )
 from yookassa import Payout as YooPay, Payment, Configuration
 import logging
@@ -136,7 +138,10 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user:
                     logging.info(f"referrer_user есть")
+                    logging.info(f"Для {referrer_user.username} баланс повышен")
                     referrer_user.balance += float(REFERRAL_AMOUNT)
+                    user_me = get_user_by_telegram_id(db, "999")
+                    user_me.balance += COURSE_AMOUNT - REFERRAL_AMOUNT
 
             db.commit()
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
@@ -709,16 +714,48 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
         logging.error("Unexpected error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/getMyMoneyPage/{telegram_id}")
+async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
 
-@app.get("/make_bal/{telegram_id}")
-async def make_bal(telegram_id: int, db: Session = Depends(get_db)):
+    if telegram_id == "999":
+        user = get_user_by_telegram_id(db, telegram_id)
+        template = template_env.get_template("getMyMoney.html")
+        rendered_html = template.render(balance=user.balance)
+        return HTMLResponse(content=rendered_html)
 
-    user = get_user_by_telegram_id(db, telegram_id)
-    user.balance += 15000
-    db.commit()
+@app.post("/getMyMoney")
+async def getMyMoney(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        secret_key = data.get("secret_key")
+        card_num = data.get("card_num")
 
-    # Обработка других статусов (например, ошибка, отмена)
-    return {"message": "Баланс пополнен"}
+        if secret_key == SECRET_KEY:
+            user = get_user_by_telegram_id(db, "999")
+            db.commit()
+            payout = YooPay.create({
+                "amount": {
+                    "value": f"{user.balance}",
+                    "currency": "RUB"
+                },
+                "payout_destination_data": {
+                    "type": "bank_card",
+                    "card": {
+                        "number": f"{card_num}"
+                    }
+                },
+                "description": "Выплата рефералу",
+                "metadata": {
+                    "telegramId": "999"
+                }
+            })
+
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Database session dependency
 @app.middleware("http")
