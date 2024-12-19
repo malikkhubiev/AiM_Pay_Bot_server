@@ -586,22 +586,23 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
                 payout_request.status = "completed"
             db.commit()
 
-            notify_url = f"{MAHIN_URL}/notify_user"
-            notification_data = {
-                "telegram_id": telegram_id,
-                "message": f"Выплата на сумму {amount} произведена успешно"
-            }
-            try:
-                response = requests.post(notify_url, json=notification_data)
-                response.raise_for_status()
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
+            if telegram_id != "999":
+                notify_url = f"{MAHIN_URL}/notify_user"
+                notification_data = {
+                    "telegram_id": telegram_id,
+                    "message": f"Выплата на сумму {amount} произведена успешно"
+                }
+                try:
+                    response = requests.post(notify_url, json=notification_data)
+                    response.raise_for_status()
+                    logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
 
-                # После успешного уведомления обновляем статус выплаты
-                mark_payout_as_notified(db, object_data["id"])
-                return {"message": "Payment processed and user notified successfully"}
-            except requests.RequestException as e:
-                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+                    # После успешного уведомления обновляем статус выплаты
+                    mark_payout_as_notified(db, object_data["id"])
+                    return {"message": "Payment processed and user notified successfully"}
+                except requests.RequestException as e:
+                    logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to notify user through bot")
 
         elif event == "payout.canceled":
             # Выплата отменена
@@ -751,6 +752,14 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
             user = get_user_by_telegram_id(db, "999")
             logging.info(f"Найден пользователь: {user}")
             setup_payout_config()
+            payout_request = Payout(
+                telegram_id="999", 
+                amount=user.balance, 
+                card_synonym=card_synonym, 
+                status="pending"
+            )
+            db.add(payout_request)
+            db.commit()
             payout = YooPay.create({
                 "amount": {
                     "value": f"{user.balance}",
