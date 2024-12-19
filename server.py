@@ -733,17 +733,19 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logging.error("Unexpected error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
+    
 
 @app.post("/getMyMoney")
 async def getMyMoney(request: Request, db: Session = Depends(get_db)):
     try:
-        data = await request.json()
-        secret_key = data.get("secret_key")
-        card_num = data.get("card_num")
+        form_data = await request.form()
+        card_num = form_data.get("card_num")
+        secret_key = form_data.get("secret_key")
 
         if secret_key == SECRET_KEY:
+            logging.info("💰 Выплата пользователю")
             user = get_user_by_telegram_id(db, "999")
-            db.commit()
+            logging.info(f"Найден пользователь: {user}")
             payout = YooPay.create({
                 "amount": {
                     "value": f"{user.balance}",

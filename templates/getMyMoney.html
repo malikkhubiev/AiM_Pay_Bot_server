@@ -7,10 +7,11 @@
 </head>
 <body>
     <h1>{{balance}}</h1>
-    <form action="getMyMoney">
-        <input name="card_num" type="number">
-        <input name="secret_key" type="number">
-        <button type="submit">Отправить</button>
-    </form>
+    <form action="getMyMoney" method="post">
+        <label for="card_num">Номер карты:</label>
+        <input id="card_num" name="card_num" type="number" required>
+        <label for="secret_key">Секретный ключ:</label>
+        <input id="secret_key" name="secret_key" type="text" required>
+        <button type="submit">Отправить</button>    </form>
 </body>
 </html>
