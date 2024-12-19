@@ -750,6 +750,7 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
             logging.info("💰 Выплата пользователю")
             user = get_user_by_telegram_id(db, "999")
             logging.info(f"Найден пользователь: {user}")
+            setup_payout_config()
             payout = YooPay.create({
                 "amount": {
                     "value": f"{user.balance}",
