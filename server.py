@@ -716,12 +716,23 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/getMyMoneyPage/{telegram_id}")
 async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
-
-    if telegram_id == "999":
-        user = get_user_by_telegram_id(db, telegram_id)
-        template = template_env.get_template("getMyMoney.html")
-        rendered_html = template.render(balance=user.balance)
-        return HTMLResponse(content=rendered_html)
+    try:
+        logging.info("💰 моней")
+        logging.info(f"{telegram_id} telegram_id")
+        if telegram_id == "999":
+            logging.info(f"equals")
+            user = get_user_by_telegram_id(db, telegram_id)
+            logging.info(f"user have")
+            template = template_env.get_template("getMyMoney.html")
+            rendered_html = template.render(balance=user.balance)
+            return HTMLResponse(content=rendered_html)
+        
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/getMyMoney")
 async def getMyMoney(request: Request, db: Session = Depends(get_db)):
