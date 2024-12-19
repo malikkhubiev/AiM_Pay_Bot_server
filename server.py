@@ -737,10 +737,14 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
 
 @app.post("/getMyMoney")
 async def getMyMoney(request: Request, db: Session = Depends(get_db)):
+    logging.info(f"внутри поста")
     try:
         form_data = await request.form()
+        logging.info(f"Взяли формдату")
         card_num = form_data.get("card_num")
+        logging.info(f"Взяли номер карты {card_num}")
         secret_key = form_data.get("secret_key")
+        logging.info(f"Взяли секретный ключ {secret_key}")
 
         if secret_key == SECRET_KEY:
             logging.info("💰 Выплата пользователю")
