@@ -579,9 +579,11 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             amount = object_data['amount']['value']
 
             user = get_user_by_telegram_id(db, telegram_id)
+            logging.info(f"balance перед снятием {user.balance}")
             user.balance -= float(amount)
             payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
-            payout_request.status = "completed"
+            if payout_request: 
+                payout_request.status = "completed"
             db.commit()
 
             notify_url = f"{MAHIN_URL}/notify_user"
