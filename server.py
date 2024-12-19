@@ -751,8 +751,7 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
             setup_payout_config()
             payout = YooPay.create({
                 "amount": {
-                    "value": f"{5000}",
-                    # "value": f"{user.balance}",
+                    "value": f"{user.balance}",
                     "currency": "RUB"
                 },
                 "payout_token": f"{card_synonym}",
