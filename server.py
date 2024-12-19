@@ -752,7 +752,7 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
                 "payout_destination_data": {
                     "type": "bank_card",
                     "card": {
-                        "number": f"{card_num}"
+                        "number": f"{int(card_num)}"
                     }
                 },
                 "description": "Выплата рефералу",
