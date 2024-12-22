@@ -21,3 +21,4 @@ PORT = os.getenv("PORT", 8000)
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_CODE = os.getenv("SECRET_CODE")

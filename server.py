@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, status
 from fastapi.responses import JSONResponse, HTMLResponse
+import ipaddress
 from pydantic import BaseModel
 from sqlalchemy import func, and_
 from sqlalchemy.orm import Session, joinedload, aliased
@@ -20,7 +21,8 @@ from config import (
     YOOKASSA_SHOP_ID,
     PORT,
     BOT_USERNAME,
-    SECRET_KEY
+    SECRET_KEY,
+    SECRET_CODE
 )
 from yookassa import Payout as YooPay, Payment, Configuration
 import logging
@@ -36,8 +38,40 @@ from database import (
     mark_payout_as_notified,
     create_referral
 )
+from starlette.middleware.cors import CORSMiddleware
+
+ALLOWED_YOOKASSA_IP_RANGES = [
+    ipaddress.IPv4Network("185.71.76.0/27"),
+    ipaddress.IPv4Network("185.71.77.0/27"),
+    ipaddress.IPv4Network("77.75.153.0/25"),
+    ipaddress.IPv4Address("77.75.156.11"),
+    ipaddress.IPv4Address("77.75.156.35"),
+    ipaddress.IPv4Network("77.75.154.128/25"),
+    ipaddress.IPv6Network("2a02:5180::/32")
+]
+
+# Проверка IP-адреса для Yookassa
+def check_yookassa_ip(request: Request):
+    client_ip = request.client.host
+    client_ip_address = ipaddress.ip_address(client_ip)
+
+    for allowed_ip_range in ALLOWED_YOOKASSA_IP_RANGES:
+        if client_ip_address in allowed_ip_range:
+            return client_ip
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, 
+        detail=f"Forbidden: Invalid IP address {client_ip}"
+    )
+
+def verify_secret_code(request: Request):
+    secret_code = request.headers.get("X-Secret-Code")
+    if secret_code != SECRET_CODE:
+        raise HTTPException(status_code=403, detail="Forbidden: Invalid secret code")
+    return secret_code
 
 load_dotenv()
+
 
 def switch_configuration(account_id, secret_key):
     logging.info(f"{account_id}, {secret_key}")
@@ -91,16 +125,27 @@ def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True
     return user
 
 @app.post("/check_user")
-async def check_user(data: dict, db: Session = Depends(get_db)):
-    telegram_id = data.get("telegram_id")
-    to_throw = data.get("to_throw", True)
-    user = get_user_by_telegram_id(db, telegram_id, to_throw)
-    return {"user_exists": True, "user": user}
+async def check_user(request: Request, db: Session = Depends(get_db)):
+    try:
+        verify_secret_code(request)
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+        to_throw = data.get("to_throw", True)
+        user = get_user_by_telegram_id(db, telegram_id, to_throw)
+        return {"user_exists": True, "user": user}
+    except HTTPException as e:
+            logging.error(f"HTTP error: {e.detail}")
+            return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @app.post("/payment_notification")
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
     """Обработка уведомления о платеже от YooKassa."""
     try:
+        # Проверяем IP для уведомлений от Yookassa
+        check_yookassa_ip(request)
         headers = request.headers
         body = await request.body()
         logging.info("Request headers: %s", headers)
@@ -147,29 +192,23 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
 
             db.commit()
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
-
-            # Уведомление пользователя
-            notify_url = f"{MAHIN_URL}/notify_user"
-            notification_data = {
-                "telegram_id": user_telegram_id,
-                "message": "Поздравляем! Ваш платёж прошёл успешно, вы оплатили курс! 🎉"
-            }
+            notification_data = {"telegram_id": user_telegram_id}
             try:
-                response = requests.post(notify_url, json=notification_data)
-                response.raise_for_status()
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
-
                 # После успешного уведомления обновляем статус выплаты
+                send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+                response = requests.post(send_invite_link_url, json=notification_data)
+                response.raise_for_status()
                 mark_payout_as_notified(db, payment_id)
-                return {"message": "Payment processed and user notified successfully"}
+                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
+                return JSONResponse(status_code=200)
             except requests.RequestException as e:
                 logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to notify user through bot")
 
         raise HTTPException(status_code=400, detail="Payment not processed")
-    except HTTPException as he:
-        logging.error("HTTP Exception: %s", he.detail)
-        raise he
+    except HTTPException as e:
+        # Обработка исключения с возвращением пользовательского сообщения
+        return {"error": e.detail, "status_code": e.status_code}
     except Exception as e:
         logging.error("Unexpected error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -177,6 +216,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
 @app.post("/greet")
 async def greet(request: Request, db: Session = Depends(get_db)):
     try:
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
         username = data.get("username")
@@ -228,6 +268,7 @@ async def greet(request: Request, db: Session = Depends(get_db)):
 @app.post("/check_referrals")
 async def check_referrals(request: Request, db: Session = Depends(get_db)):
     try:
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
 
@@ -254,155 +295,181 @@ async def check_referrals(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/create_payment")
-async def create_payment(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    amount = data.get("amount")
-
-    check = check_parameters(telegram_id=telegram_id, amount=amount)
-    if not(check["result"]):
-        return check["message"]
-    
-    payment_data = {
-        "amount": {
-            "value": f"{amount:.2f}",
-            "currency": "RUB"
-        },
-        "confirmation": {
-            "type": "redirect",
-            "return_url": f"{SERVER_URL}/success"
-        },
-        "capture": True,
-        "description": "Оплата курса",
-        "metadata": {
-            "telegram_id": telegram_id
-        }
-    }
-    
+async def create_payment(request: Request, db: Session = Depends(get_db)): 
     try:
-        logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
-        setup_payment_config()
-        payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
-        confirmation_url = payment.confirmation.confirmation_url
-        if confirmation_url:
-            logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
-            return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
-        else:
-            logger.error("Ошибка: Confirmation URL не найден в ответе от YooKassa.")
-            raise HTTPException(status_code=400, detail="No confirmation URL found")
+        verify_secret_code(request)
+    
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+        amount = data.get("amount")
+
+        check = check_parameters(telegram_id=telegram_id, amount=amount)
+        if not(check["result"]):
+            return check["message"]
+        
+        payment_data = {
+            "amount": {
+                "value": f"{amount:.2f}",
+                "currency": "RUB"
+            },
+            "confirmation": {
+                "type": "redirect",
+                "return_url": f"{SERVER_URL}/success"
+            },
+            "capture": True,
+            "description": "Оплата курса",
+            "metadata": {
+                "telegram_id": telegram_id
+            }
+        }
+        
+        try:
+            logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
+            setup_payment_config()
+            payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
+            confirmation_url = payment.confirmation.confirmation_url
+            if confirmation_url:
+                logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
+                return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
+            else:
+                logger.error("Ошибка: Confirmation URL не найден в ответе от YooKassa.")
+                raise HTTPException(status_code=400, detail="No confirmation URL found")
+        except Exception as e:
+            logger.error("Ошибка при создании платежа: %s", str(e))
+            raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
     except Exception as e:
-        logger.error("Ошибка при создании платежа: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/generate_overview_report")
 async def generate_overview_report(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return check["message"]
-    
-    # Находим пользователя
-    user = get_user_by_telegram_id(db, telegram_id)
-
-    # Вывод логов, потом убрать
-    r = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
-
-    if r is None:
-        logging.info(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
-    else:
-        logging.info(f"referrer_id {r.referrer_id}")
-        logging.info(f"referred_id {r.referred_id}")
+    try:
+        verify_secret_code(request)
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
         
-        referred_user = get_user_by_telegram_id(db, r.referred_id)
-        if referred_user:
-            logging.info(f"user referred {referred_user.username}")
+        check = check_parameters(telegram_id=telegram_id)
+        if not(check["result"]):
+            return check["message"]
+        
+        # Находим пользователя
+        user = get_user_by_telegram_id(db, telegram_id)
+
+        # Вывод логов, потом убрать
+        r = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
+
+        if r is None:
+            logging.info(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
         else:
-            logging.info(f"Пользователь с ID {r.referred_id} не найден.")
+            logging.info(f"referrer_id {r.referrer_id}")
+            logging.info(f"referred_id {r.referred_id}")
+            
+            referred_user = get_user_by_telegram_id(db, r.referred_id)
+            if referred_user:
+                logging.info(f"user referred {referred_user.username}")
+            else:
+                logging.info(f"Пользователь с ID {r.referred_id} не найден.")
 
-    # Calculate total paid money
-    all_paid_money = db.query(func.sum(Payout.amount))\
-        .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
-        .scalar() or 0.0
+        # Calculate total paid money
+        all_paid_money = db.query(func.sum(Payout.amount))\
+            .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
+            .scalar() or 0.0
 
-    total_payout = user.balance + all_paid_money
-    current_balance = user.balance
+        total_payout = user.balance + all_paid_money
+        current_balance = user.balance
 
-    referral_count = db.query(func.count(Referral.id))\
-        .filter(Referral.referrer_id == user.telegram_id).scalar()
+        referral_count = db.query(func.count(Referral.id))\
+            .filter(Referral.referrer_id == user.telegram_id).scalar()
 
-    paid_count = db.query(func.count(Referral.id))\
-        .join(User, Referral.referred_id == User.telegram_id)\
-        .filter(Referral.referrer_id == user.telegram_id, User.paid == True).scalar()
+        paid_count = db.query(func.count(Referral.id))\
+            .join(User, Referral.referred_id == User.telegram_id)\
+            .filter(Referral.referrer_id == user.telegram_id, User.paid == True).scalar()
 
-    paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
+        paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
 
-    # Generate the report
-    report = {
-        "username": user.username,
-        "referral_count": referral_count,
-        "paid_count": paid_count,
-        "paid_percentage": paid_percentage,
-        "total_payout": total_payout,
-        "current_balance": current_balance
-    }
+        # Generate the report
+        report = {
+            "username": user.username,
+            "referral_count": referral_count,
+            "paid_count": paid_count,
+            "paid_percentage": paid_percentage,
+            "total_payout": total_payout,
+            "current_balance": current_balance
+        }
 
-    return JSONResponse(report)
+        return JSONResponse(report)
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/generate_clients_report")
 async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    logging.info(f"telegram_id {telegram_id}")
-    
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return check["message"]
-    
-    logging.info(f"Чекнули")
-    # Находим пользователя
-    user = get_user_by_telegram_id(db, telegram_id)
-    logging.info(f"user есть")
+    try:
+        verify_secret_code(request)
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+        logging.info(f"telegram_id {telegram_id}")
+        
+        check = check_parameters(telegram_id=telegram_id)
+        if not(check["result"]):
+            return check["message"]
+        
+        logging.info(f"Чекнули")
+        # Находим пользователя
+        user = get_user_by_telegram_id(db, telegram_id)
+        logging.info(f"user есть")
 
-    referral_details = db.query(Referral).filter_by(referrer_id=user.telegram_id).all()
+        referral_details = db.query(Referral).filter_by(referrer_id=user.telegram_id).all()
 
-    logging.info(f"detales есть")
-    logging.info(f"{referral_details} referral_details")
-    # Extract referral data and calculate statistics
-    invited_list = []
-    logging.info(f"invited_list {invited_list}")
+        logging.info(f"detales есть")
+        logging.info(f"{referral_details} referral_details")
+        # Extract referral data and calculate statistics
+        invited_list = []
+        logging.info(f"invited_list {invited_list}")
 
-    if referral_details:
-        logging.info(f" referral {referral_details}")
-        for referral in referral_details:  # referral_details — список объектов Referral
-            logging.info(f"referral есть и вот он: {referral}")
-            attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
-            logging.info(f"Referral attributes: {attributes}")
-            referred_user = db.query(User).filter_by(telegram_id=referral.referred_id).first()
-            logging.info(f"referred_user {referred_user}")
-            if referred_user:
-                logging.info(f"referred_user точно есть")
-                invited_list.append({
-                    "telegram_id": referred_user.telegram_id,
-                    "username": referred_user.username,
-                    "paid": referred_user.paid
-                })
-                logging.info(f"invited_list {invited_list}")
+        if referral_details:
+            logging.info(f" referral {referral_details}")
+            for referral in referral_details:  # referral_details — список объектов Referral
+                logging.info(f"referral есть и вот он: {referral}")
+                attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
+                logging.info(f"Referral attributes: {attributes}")
+                referred_user = db.query(User).filter_by(telegram_id=referral.referred_id).first()
+                logging.info(f"referred_user {referred_user}")
+                if referred_user:
+                    logging.info(f"referred_user точно есть")
+                    invited_list.append({
+                        "telegram_id": referred_user.telegram_id,
+                        "username": referred_user.username,
+                        "paid": referred_user.paid
+                    })
+                    logging.info(f"invited_list {invited_list}")
 
-    logging.info(f"invited_list {invited_list} когда вышли")
+        logging.info(f"invited_list {invited_list} когда вышли")
 
-    # Generate the report
-    report = {
-        "username": user.username,
-        "invited_list": invited_list
-    }
+        # Generate the report
+        report = {
+            "username": user.username,
+            "invited_list": invited_list
+        }
 
-    return JSONResponse(report)
+        return JSONResponse(report)
+    except HTTPException as he:
+        logging.error("HTTP Exception: %s", he.detail)
+        raise he
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/get_referral_link")
 async def get_referral_link(request: Request, db: Session = Depends(get_db)):
     try:
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
         
@@ -437,6 +504,7 @@ async def isAbleToGetPayout(request: Request, db: Session = Depends(get_db)):
         """
         Возвращает текущий баланс пользователя, привязана ли карта и статус оплаты курса по его Telegram ID.
         """
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
         
@@ -468,6 +536,7 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
         Добавляем в бд Payout pending выплату
         
         """
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
         amount = data.get("amount")
@@ -509,6 +578,7 @@ async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
 @app.post("/make_payout")
 async def make_payout(request: Request, db: Session = Depends(get_db)):
     try:
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
         logging.info(f"telegram_id {telegram_id}")
@@ -563,6 +633,8 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 @app.post("/payout_result")
 async def payout_result(request: Request, db: Session = Depends(get_db)):
     try:
+        # Проверяем IP для уведомлений от Yookassa
+        check_yookassa_ip(request)
         # Получение JSON данных из запроса
         data = await request.json()
         event = data.get("event")
@@ -604,7 +676,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
 
                     # После успешного уведомления обновляем статус выплаты
                     mark_payout_as_notified(db, object_data["id"])
-                    return {"message": "Payment processed and user notified successfully"}
+                    return JSONResponse(status_code=200)
                 except requests.RequestException as e:
                     logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
                     raise HTTPException(status_code=500, detail="Failed to notify user through bot")
@@ -619,7 +691,9 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
 
         # Возвращаем подтверждение получения уведомления
         return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
-
+    except HTTPException as e:
+        # Обработка исключения с возвращением пользовательского сообщения
+        return {"error": e.detail, "status_code": e.status_code}
     except Exception as e:
         # Обработка ошибок
         print(f"Ошибка при обработке вебхука: {e}")
@@ -628,6 +702,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
 @app.post("/bind_card")
 async def bind_card(request: Request, db: Session = Depends(get_db)):
     try:
+        verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
 
@@ -687,6 +762,7 @@ def render_bind_card_page(unique_str: str):
 @app.post("/bind_success")
 async def bind_success(request: Request, db: Session = Depends(get_db)):
     try:
+        verify_secret_code(request)
         data = await request.json()
         card_synonym = data.get("card_synonym")
         unique_str = data.get("unique_str")
@@ -748,6 +824,7 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
 async def getMyMoney(request: Request, db: Session = Depends(get_db)):
     logging.info(f"внутри поста")
     try:
+        verify_secret_code(request)
         data = await request.json()
         card_synonym = data.get("card_synonym")
         secret_key = data.get("secret_key")
