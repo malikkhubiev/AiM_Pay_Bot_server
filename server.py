@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import func, and_
@@ -120,6 +120,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
         payment_data = data["object"]
         payment_id = payment_data.get("id")
         status = payment_data.get("status")
+        income_amount = payment_data.get("income_amount")
         metadata = payment_data.get("metadata", {})
         user_telegram_id = metadata.get("telegram_id")
 
@@ -782,6 +783,15 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         logging.error("Unexpected error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@app.get("/offer")
+async def get_offer():
+    pdf_path = "offer.pdf"  # Путь к вашему PDF-файлу
+    with open(pdf_path, "rb") as file:
+        pdf_data = file.read()
+    return Response(content=pdf_data, media_type="application/pdf", headers={
+        "Content-Disposition": "inline; filename=offer.pdf"
+    })
 
 # Database session dependency
 @app.middleware("http")
