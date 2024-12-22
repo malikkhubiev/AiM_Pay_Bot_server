@@ -792,6 +792,12 @@ async def get_offer():
     return Response(content=pdf_data, media_type="application/pdf", headers={
         "Content-Disposition": "inline; filename=offer.pdf"
     })
+    
+@app.get("/increase_money/{telegram_id}")
+async def get_offer(telegram_id: int, db: Session = Depends(get_db)):
+    user = get_user_by_telegram_id(telegram_id)
+    user.balance = 15000
+    db.commit()
 
 # Database session dependency
 @app.middleware("http")
