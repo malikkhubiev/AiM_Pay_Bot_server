@@ -123,6 +123,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
         metadata = payment_data.get("metadata", {})
         user_telegram_id = metadata.get("telegram_id")
 
+        logging.info(payment_data)
         logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
 
         if status == "succeeded" and user_telegram_id:
@@ -201,19 +202,20 @@ async def greet(request: Request, db: Session = Depends(get_db)):
                 username=username
             )
             db.add(new_user)
-            db.flush()  # Обновляет локальный объект new_user с присвоенным id
-            if referrer_id != telegram_id:
-                new_referral = Referral(
-                    referrer_id=referrer_id,
-                    referred_id=new_user.telegram_id
-                )
-                db.add(new_referral)
-            db.commit()  # Фиксируем изменения для обеих операций
-
             logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
             response_message = f"Добро пожаловать, {username}! Ты успешно зарегистрирован."
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
-
+        if referrer_id != telegram_id:
+            existing_referral = db.query(Referral).filter_by(referred_id=telegram_id).first()
+            if existing_referral:
+                existing_referral.referrer_id = referrer_id
+            else:
+                new_referral = Referral(
+                    referrer_id=referrer_id,
+                    referred_id=telegram_id
+                )
+                db.add(new_referral)
+        db.commit()  # Фиксируем изменения для всех операций
         return JSONResponse({"message": response_message})
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
@@ -565,6 +567,8 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
         event = data.get("event")
         object_data = data.get("object", {})
         metadata = object_data.get("metadata", {})
+
+        logging.info(data)
 
         # Извлечение telegramId из метаданных
         telegram_id = metadata.get("telegramId")
