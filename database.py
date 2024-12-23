@@ -28,7 +28,9 @@ class User(Base):
     paid = Column(Boolean, default=False)
     card_synonym = Column(String, unique=True, nullable=True)
 
+    payments = relationship("Payment", back_populates="user")  # Убедитесь, что имя таблицы и свойства совпадают
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
+    
     created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
 
 class Payment(Base):
