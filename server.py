@@ -200,7 +200,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             payment = db.query(PaymentTable).filter_by(id=payment_id).first()
             if not(payment):
                 new_payment = PaymentTable(
-                    id=payment_id,
+                    transaction_id=payment_id,
                     telegram_id=user_telegram_id
                 )
                 db.add(new_payment)
