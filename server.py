@@ -320,7 +320,7 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
     
         data = await request.json()
         telegram_id = data.get("telegram_id")
-        amount = data.get("amount")
+        amount = float(COURSE_AMOUNT)
         logging.info(f"telegram_id {telegram_id}")
         logging.info(f"amount {amount}")
 
