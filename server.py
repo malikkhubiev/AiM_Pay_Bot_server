@@ -206,7 +206,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                 db.add(new_payment)
                 user.paid = True
                 user_me = get_user_by_telegram_id(db, "999")
-                user_me.balance += float(COURSE_AMOUNT) - float(REFERRAL_AMOUNT)
+                user_me.balance += float(income_amount)
                 referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
                 if referrer:
                     logging.info(f"referrer {referrer} есть")
@@ -637,9 +637,6 @@ async def make_payout(request: Request, db: Session = Depends(get_db)):
 
         logging.info(f"Средств хватает")
         setup_payout_config()
-        # Логирование
-        current_secret_key = Configuration.secret_key
-        logging.info(f"Current secret key: {current_secret_key}")
 
         payout = YooPay.create({
             "amount": {
