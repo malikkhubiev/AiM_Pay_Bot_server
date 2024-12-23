@@ -321,10 +321,14 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
         data = await request.json()
         telegram_id = data.get("telegram_id")
         amount = data.get("amount")
+        logging.info(f"telegram_id {telegram_id}")
+        logging.info(f"amount {amount}")
 
         check = check_parameters(telegram_id=telegram_id, amount=amount)
         if not(check["result"]):
             return check["message"]
+        
+        logging.info(f"чекнули и делаем платёж")
         
         payment_data = {
             "amount": {
