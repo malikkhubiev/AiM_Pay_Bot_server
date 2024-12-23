@@ -688,10 +688,10 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             amount = object_data['amount']['value']
 
             user = get_user_by_telegram_id(db, telegram_id)
-            logging.info(f"balance перед снятием {user.balance}")
-            user.balance -= float(amount)
             payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
             if payout_request: 
+                logging.info(f"balance перед снятием {user.balance}")
+                user.balance -= float(amount)
                 payout_request.status = "completed"
                 payout_request.transaction_id = transaction_id
                 if telegram_id != "999":
