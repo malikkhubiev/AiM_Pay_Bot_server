@@ -40,6 +40,7 @@ from database import (
 )
 from starlette.middleware.cors import CORSMiddleware
 
+# Разрешённые диапазоны и адреса для Yookassa
 ALLOWED_YOOKASSA_IP_RANGES = [
     ipaddress.IPv4Network("185.71.76.0/27"),
     ipaddress.IPv4Network("185.71.77.0/27"),
@@ -52,17 +53,31 @@ ALLOWED_YOOKASSA_IP_RANGES = [
 
 # Проверка IP-адреса для Yookassa
 def check_yookassa_ip(request: Request):
-    client_ip = request.client.host
-    client_ip_address = ipaddress.ip_address(client_ip)
+    try:
+        client_ip = request.client.host  # Получаем IP клиента
+        client_ip_address = ipaddress.ip_address(client_ip)  # Преобразуем в объект IP
 
-    for allowed_ip_range in ALLOWED_YOOKASSA_IP_RANGES:
-        if client_ip_address in allowed_ip_range:
-            return client_ip
+        # Проверяем, входит ли IP-адрес в разрешённые диапазоны
+        for allowed_ip_range in ALLOWED_YOOKASSA_IP_RANGES:
+            if isinstance(allowed_ip_range, (ipaddress.IPv4Network, ipaddress.IPv6Network)):
+                if client_ip_address in allowed_ip_range:
+                    return client_ip  # Возвращаем IP, если он валиден
+            elif isinstance(allowed_ip_range, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
+                if client_ip_address == allowed_ip_range:
+                    return client_ip  # Возвращаем IP, если он валиден
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN, 
-        detail=f"Forbidden: Invalid IP address {client_ip}"
-    )
+        # Если IP не разрешён, выбрасываем исключение
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Forbidden: Invalid IP address {client_ip}"
+        )
+
+    except ValueError:
+        # Обработка случая, если IP некорректен
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Bad Request: Invalid IP address format {request.client.host}"
+        )
 
 def verify_secret_code(request: Request):
     secret_code = request.headers.get("X-Secret-Code")
