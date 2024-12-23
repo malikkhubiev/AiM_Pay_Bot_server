@@ -185,7 +185,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
         payment_data = data["object"]
         payment_id = payment_data.get("id")
         status = payment_data.get("status")
-        income_amount = payment_data.get("income_amount")
+        income_amount = payment_data.get("income_amount")["value"]
         metadata = payment_data.get("metadata", {})
         user_telegram_id = metadata.get("telegram_id")
 
