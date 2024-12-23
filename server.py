@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, aliased
 from dotenv import load_dotenv
 from time import time
 from jinja2 import Environment, FileSystemLoader
+from sqlalchemy.exc import IntegrityError
 import requests
 import datetime
 from config import (
@@ -199,11 +200,15 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             # Обновляем статус пользователя как оплаченный
             payment = db.query(PaymentTable).filter_by(id=payment_id).first()
             if not(payment):
-                new_payment = PaymentTable(
-                    transaction_id=payment_id,
-                    telegram_id=user_telegram_id
-                )
-                db.add(new_payment)
+                try:
+                    new_payment = PaymentTable(
+                        transaction_id=payment_id,
+                        telegram_id=user_telegram_id
+                    )
+                    db.add(new_payment)
+                except IntegrityError:
+                    db.rollback()
+                    print("Transaction already exists or another integrity error occurred.")
                 user.paid = True
                 user_me = get_user_by_telegram_id(db, "999")
                 user_me.balance += float(income_amount)
