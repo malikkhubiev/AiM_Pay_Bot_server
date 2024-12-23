@@ -670,6 +670,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
         data = await request.json()
         event = data.get("event")
         object_data = data.get("object", {})
+        transaction_id = object_data.get("id", {})
         metadata = object_data.get("metadata", {})
 
         logging.info(data)
@@ -692,26 +693,25 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
             if payout_request: 
                 payout_request.status = "completed"
+                payout_request.transaction_id = transaction_id
+                if telegram_id != "999":
+                    notify_url = f"{MAHIN_URL}/notify_user"
+                    notification_data = {
+                        "telegram_id": telegram_id,
+                        "message": f"Выплата на сумму {amount} произведена успешно"
+                    }
+                    try:
+                        response = requests.post(notify_url, json=notification_data)
+                        response.raise_for_status()
+                        logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
+
+                        # После успешного уведомления обновляем статус выплаты
+                        mark_payout_as_notified(db, object_data["id"])
+                        return JSONResponse(status_code=200)
+                    except requests.RequestException as e:
+                        logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                        raise HTTPException(status_code=500, detail="Failed to notify user through bot")
             db.commit()
-
-            if telegram_id != "999":
-                notify_url = f"{MAHIN_URL}/notify_user"
-                notification_data = {
-                    "telegram_id": telegram_id,
-                    "message": f"Выплата на сумму {amount} произведена успешно"
-                }
-                try:
-                    response = requests.post(notify_url, json=notification_data)
-                    response.raise_for_status()
-                    logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
-
-                    # После успешного уведомления обновляем статус выплаты
-                    mark_payout_as_notified(db, object_data["id"])
-                    return JSONResponse(status_code=200)
-                except requests.RequestException as e:
-                    logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                    raise HTTPException(status_code=500, detail="Failed to notify user through bot")
-
         elif event == "payout.canceled":
             # Выплата отменена
             print("Выплата отменена.")
