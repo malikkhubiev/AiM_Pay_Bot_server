@@ -31,6 +31,7 @@ import uvicorn
 from database import (
     Binding,
     User,
+    Payment,
     Referral,
     Payout,
     get_db,
@@ -196,33 +197,40 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             user = get_user_by_telegram_id(db, user_telegram_id)
             logging.info(f"юзера тоже получили {user.paid}")
             # Обновляем статус пользователя как оплаченный
-            user.paid = True
-            user_me = get_user_by_telegram_id(db, "999")
-            user_me.balance += float(COURSE_AMOUNT) - float(REFERRAL_AMOUNT)
-            referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
-            if referrer:
-                logging.info(f"referrer {referrer} есть")
-                referrer_user = db.query(User).filter_by(telegram_id=referrer.referrer_id).first()
-                logging.info(f"referrer_user {referrer_user}")
-                if referrer_user:
-                    logging.info(f"referrer_user есть")
-                    logging.info(f"Для {referrer_user.username} баланс повышен")
-                    referrer_user.balance += float(REFERRAL_AMOUNT)
+            payment = db.query(Payment).filter_by(id=payment_id).first()
+            if not(payment):
+                new_payment = Payment(
+                    id=payment_id,
+                    telegram_id=user_telegram_id
+                )
+                db.add(new_payment)
+                user.paid = True
+                user_me = get_user_by_telegram_id(db, "999")
+                user_me.balance += float(COURSE_AMOUNT) - float(REFERRAL_AMOUNT)
+                referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
+                if referrer:
+                    logging.info(f"referrer {referrer} есть")
+                    referrer_user = db.query(User).filter_by(telegram_id=referrer.referrer_id).first()
+                    logging.info(f"referrer_user {referrer_user}")
+                    if referrer_user:
+                        logging.info(f"referrer_user есть")
+                        logging.info(f"Для {referrer_user.username} баланс повышен")
+                        referrer_user.balance += float(REFERRAL_AMOUNT)
 
-            db.commit()
-            logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
-            notification_data = {"telegram_id": user_telegram_id}
-            try:
-                # После успешного уведомления обновляем статус выплаты
-                send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
-                response = requests.post(send_invite_link_url, json=notification_data)
-                response.raise_for_status()
-                mark_payout_as_notified(db, payment_id)
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
-                return JSONResponse(status_code=200)
-            except requests.RequestException as e:
-                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+                db.commit()
+                logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
+                notification_data = {"telegram_id": user_telegram_id}
+                try:
+                    # После успешного уведомления обновляем статус выплаты
+                    send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+                    response = requests.post(send_invite_link_url, json=notification_data)
+                    response.raise_for_status()
+                    mark_payout_as_notified(db, payment_id)
+                    logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
+                    return JSONResponse(status_code=200)
+                except requests.RequestException as e:
+                    logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to notify user through bot")
 
         raise HTTPException(status_code=400, detail="Payment not processed")
     except HTTPException as e:

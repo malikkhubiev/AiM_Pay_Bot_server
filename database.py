@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Generator
 
 # Создание базы данных и её подключение
@@ -29,6 +29,17 @@ class User(Base):
     card_synonym = Column(String, unique=True, nullable=True)
 
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
+
+class Payment(Base):
+    __tablename__ = 'payments'
+
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(String, ForeignKey('users.telegram_id'), nullable=False)  # Ссылка на пользователя
+    transaction_id = Column(String, nullable=False, unique=True)  # Идентификатор транзакции
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
+
+    user = relationship("User", back_populates="payments")  # Связь с пользователем
 
 class Referral(Base):
     __tablename__ = 'referrals'
@@ -36,7 +47,7 @@ class Referral(Base):
     id = Column(Integer, primary_key=True, index=True)
     referrer_id = Column(Integer, ForeignKey('users.id'))  # Кто пригласил
     referred_id = Column(Integer, ForeignKey('users.id'))  # Кто был приглашён
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
     referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
@@ -49,7 +60,7 @@ class Payout(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
     card_synonym = Column(String, nullable=False)
     amount = Column(Float)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     notified = Column(Boolean, default=False)
     referral_id = Column(Integer, ForeignKey('referrals.id'))  # Ссылка на реферал
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
