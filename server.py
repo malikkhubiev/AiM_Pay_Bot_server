@@ -31,7 +31,7 @@ import uvicorn
 from database import (
     Binding,
     User,
-    Payment,
+    Payment as PaymentTable,
     Referral,
     Payout,
     get_db,
@@ -197,9 +197,9 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             user = get_user_by_telegram_id(db, user_telegram_id)
             logging.info(f"юзера тоже получили {user.paid}")
             # Обновляем статус пользователя как оплаченный
-            payment = db.query(Payment).filter_by(id=payment_id).first()
+            payment = db.query(PaymentTable).filter_by(id=payment_id).first()
             if not(payment):
-                new_payment = Payment(
+                new_payment = PaymentTable(
                     id=payment_id,
                     telegram_id=user_telegram_id
                 )
