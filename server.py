@@ -22,7 +22,8 @@ from config import (
     PORT,
     BOT_USERNAME,
     SECRET_KEY,
-    SECRET_CODE
+    SECRET_CODE,
+    DISABLE_SECRET_CODE_CHECK
 )
 from yookassa import Payout as YooPay, Payment, Configuration
 import logging
@@ -80,10 +81,13 @@ def check_yookassa_ip(request: Request):
         )
 
 def verify_secret_code(request: Request):
-    secret_code = request.headers.get("X-Secret-Code")
-    if secret_code != SECRET_CODE:
-        raise HTTPException(status_code=403, detail="Forbidden: Invalid secret code")
-    return secret_code
+    if DISABLE_SECRET_CODE_CHECK == "True":
+        return True
+    else:
+        secret_code = request.headers.get("X-Secret-Code")
+        if secret_code != SECRET_CODE:
+            raise HTTPException(status_code=403, detail="Forbidden: Invalid secret code")
+        return True
 
 load_dotenv()
 
