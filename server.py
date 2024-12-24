@@ -210,8 +210,6 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                     db.rollback()
                     print("Transaction already exists or another integrity error occurred.")
                 user.paid = True
-                user_me = get_user_by_telegram_id(db, "999")
-                user_me.balance += float(income_amount)
                 referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
                 if referrer:
                     logging.info(f"referrer {referrer} есть")
@@ -219,8 +217,17 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                     logging.info(f"referrer_user {referrer_user}")
                     if referrer_user:
                         logging.info(f"referrer_user есть")
-                        logging.info(f"Для {referrer_user.username} баланс повышен")
-                        referrer_user.balance += float(REFERRAL_AMOUNT)
+                        payout = YooPay.create({
+                            "amount": {
+                                "value": f"{REFERRAL_AMOUNT}",
+                                "currency": "RUB"
+                            },
+                            "payout_token": f"{referrer.card_synonym}",
+                            "description": "Выплата рефералу",
+                            "metadata": {
+                                "telegramId": f"{referrer.telegram_id}"
+                            }
+                        })
 
                 db.commit()
                 logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
@@ -279,15 +286,17 @@ async def greet(request: Request, db: Session = Depends(get_db)):
             response_message = f"Добро пожаловать, {username}! Ты успешно зарегистрирован."
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
         if referrer_id != telegram_id:
-            existing_referral = db.query(Referral).filter_by(referred_id=telegram_id).first()
-            if existing_referral:
-                existing_referral.referrer_id = referrer_id
+            existing_referrer = db.query(Referral).filter_by(referred_id=telegram_id).first()
+            if existing_referrer:
+                existing_referrer.referrer_id = referrer_id
             else:
-                new_referral = Referral(
-                    referrer_id=referrer_id,
-                    referred_id=telegram_id
-                )
-                db.add(new_referral)
+                referrer_as_user = get_user_by_telegram_id(db, referrer_id, to_throw=False)
+                if referrer_as_user and referrer_as_user.paid:
+                    new_referrer = Referral(
+                        referrer_id=referrer_id,
+                        referred_id=telegram_id
+                    )
+                    db.add(new_referrer)
         db.commit()  # Фиксируем изменения для всех операций
         return JSONResponse({"message": response_message})
     except HTTPException as he:
@@ -414,9 +423,6 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
             .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
             .scalar() or 0.0
 
-        total_payout = user.balance + all_paid_money
-        current_balance = user.balance
-
         referral_count = db.query(func.count(Referral.id))\
             .filter(Referral.referrer_id == user.telegram_id).scalar()
 
@@ -432,8 +438,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
             "referral_count": referral_count,
             "paid_count": paid_count,
             "paid_percentage": paid_percentage,
-            "total_payout": total_payout,
-            "current_balance": current_balance
+            "total_payout": all_paid_money
         }
 
         return JSONResponse(report)
@@ -517,11 +522,14 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
         if not(user.paid):
             return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
         
-        # Генерируем реферальную ссылку
-        bot_username = BOT_USERNAME  # Укажите имя бота в настройках или конфигурации
-        referral_link = f"https://t.me/{bot_username}?start={telegram_id}"
+        binding = db.query(Binding).filter_by(telegram_id=user.telegram_id).first()
         
-        return {"status": "success", "referral_link": referral_link}
+        if binding:
+            referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
+            return {"status": "success", "referral_link": referral_link}
+        else:
+            return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не привязав карту"}
+        
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -532,136 +540,6 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
 @app.get("/success")
 async def success_payment(request: Request):
     return HTMLResponse("<h1 style='text-align: center'>Операция прошла успешно. Вы можете возвращаться в бота</h1>")
-
-# Реферальные выплаты
-@app.post("/isAbleToGetPayout")
-async def isAbleToGetPayout(request: Request, db: Session = Depends(get_db)):
-    try:
-        """
-        Возвращает текущий баланс пользователя, привязана ли карта и статус оплаты курса по его Telegram ID.
-        """
-        verify_secret_code(request)
-        data = await request.json()
-        telegram_id = data.get("telegram_id")
-        
-        check = check_parameters(telegram_id=telegram_id)
-        if not(check["result"]):
-            return check["message"]
-        
-        # Находим пользователя
-        user = get_user_by_telegram_id(db, telegram_id)
-        logging.info(f"paid {user.paid}")
-        logging.info(f"card_synonym {user.card_synonym}")
-        return {
-            "balance": user.balance,
-            "paid": user.paid,
-            "isBinded": bool(user.card_synonym)
-        }
-    except HTTPException as he:
-        logging.error("HTTP Exception: %s", he.detail)
-        raise he
-    except Exception as e:
-        logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.post("/add_payout_toDb")
-async def add_payout_toDb(request: Request, db: Session = Depends(get_db)):
-    try:
-        """
-        Добавляем в бд Payout pending выплату
-        
-        """
-        verify_secret_code(request)
-        data = await request.json()
-        telegram_id = data.get("telegram_id")
-        amount = data.get("amount")
-
-        check = check_parameters(amount=amount, telegram_id=telegram_id)
-        if not(check["result"]):
-            return {"status": "not_ready", "reason": check["message"]}
-
-        # Находим пользователя
-        user = get_user_by_telegram_id(db, telegram_id)
-        card_synonym = user.card_synonym
-
-        # Проверяем наличие запроса в режиме ожидания
-        payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
-        if payout_request:
-            # Обновляем запрос на выплату
-            payout_request.card_synonym = card_synonym
-            payout_request.amount = amount
-        else:
-            # Создаём запрос на выплату
-            payout_request = Payout(
-                telegram_id=telegram_id, 
-                amount=amount, 
-                card_synonym=card_synonym, 
-                status="pending"
-            )
-            db.add(payout_request)
-        db.commit()
-
-        return {"status": "ready_to_pay"}
-
-    except HTTPException as he:
-        logging.error("HTTP Exception: %s", he.detail)
-        raise he
-    except Exception as e:
-        logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.post("/make_payout")
-async def make_payout(request: Request, db: Session = Depends(get_db)):
-    try:
-        verify_secret_code(request)
-        data = await request.json()
-        telegram_id = data.get("telegram_id")
-        logging.info(f"telegram_id {telegram_id}")
-
-        # Проверка обязательных параметров
-        check = check_parameters(
-            telegram_id=telegram_id
-        )
-        if not check["result"]:
-            return check["message"]
-
-        logging.info(f"Прочекали")
-        # Находим пользователя
-        user = get_user_by_telegram_id(db, telegram_id)
-        logging.info(f"user есть")
-
-        payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
-        if not payout_request:
-            raise HTTPException(status_code=404, detail="Запрос на выплату не найден")
-
-        logging.info(f"payout тоже")
-        # Проверка на достаточность средств
-        if payout_request.amount > user.balance:
-            return {"status": "error", "message": "Недостаточно средств для выплаты."}
-
-        logging.info(f"Средств хватает")
-        setup_payout_config()
-
-        payout = YooPay.create({
-            "amount": {
-                "value": f"{payout_request.amount}",
-                "currency": "RUB"
-            },
-            "payout_token": f"{payout_request.card_synonym}",
-            "description": "Выплата рефералу",
-            "metadata": {
-                "telegramId": f"{telegram_id}"
-            }
-        })
-
-    except HTTPException as he:
-        logging.error("HTTP Exception: %s", he.detail)
-        raise he
-    except Exception as e:
-        logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
 
 @app.post("/payout_result")
 async def payout_result(request: Request, db: Session = Depends(get_db)):
@@ -692,8 +570,6 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             user = get_user_by_telegram_id(db, telegram_id)
             payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
             if payout_request: 
-                logging.info(f"balance перед снятием {user.balance}")
-                user.balance -= float(amount)
                 payout_request.status = "completed"
                 payout_request.transaction_id = transaction_id
                 if telegram_id != "999":
@@ -842,7 +718,7 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
             logging.info(f"user have")
             template = template_env.get_template("getMyMoney.html")
             account_id = YOOKASSA_AGENT_ID
-            rendered_html = template.render(account_id=account_id, balance=user.balance)
+            rendered_html = template.render(account_id=account_id)
             return HTMLResponse(content=rendered_html)
         
     except HTTPException as he:
@@ -869,7 +745,7 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
             setup_payout_config()
             payout_request = Payout(
                 telegram_id="999", 
-                amount=user.balance, 
+                amount=99999999999999,
                 card_synonym=card_synonym, 
                 status="pending"
             )
@@ -877,7 +753,7 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
             db.commit()
             payout = YooPay.create({
                 "amount": {
-                    "value": f"{user.balance}",
+                    "value": f"{9999999999999999}",
                     "currency": "RUB"
                 },
                 "payout_token": f"{card_synonym}",

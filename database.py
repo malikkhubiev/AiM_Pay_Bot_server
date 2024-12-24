@@ -18,13 +18,21 @@ def get_db() -> Generator[Session, None, None]:
     finally:
         db.close()
 
+class TempUser(Base):
+    __tablename__ = 'tempusers'
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True, nullable=False)
+    telegram_id = Column(String, unique=True, nullable=False)
+    referrer_id = Column(String, nullable=True)  # Кто пригласил
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
+
 class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
-    balance = Column(Float, default=0.0)
     paid = Column(Boolean, default=False)
     card_synonym = Column(String, unique=True, nullable=True)
 
@@ -47,8 +55,8 @@ class Referral(Base):
     __tablename__ = 'referrals'
 
     id = Column(Integer, primary_key=True, index=True)
-    referrer_id = Column(Integer, ForeignKey('users.id'))  # Кто пригласил
-    referred_id = Column(Integer, ForeignKey('users.id'))  # Кто был приглашён
+    referrer_id = Column(String, ForeignKey('users.telegram_id'))  # Кто пригласил
+    referred_id = Column(String, ForeignKey('users.telegram_id'))  # Кто был приглашён
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
