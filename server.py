@@ -39,7 +39,9 @@ from database import (
     Payout,
     get_db,
     delete_expired_records,
-    mark_payout_as_notified
+    mark_payout_as_notified,
+    update_temp_user,
+    create_temp_user
 )
 from starlette.middleware.cors import CORSMiddleware
 
@@ -150,28 +152,6 @@ def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True
         else:
             return None
     return user
-
-@app.post("/create_temp_user")
-async def check_user(request: Request, db: Session = Depends(get_db)):
-    try:
-        verify_secret_code(request)
-        data = await request.json()
-        telegram_id = data.get("telegram_id")
-        username = data.get("telegram_id")
-        referrer_id = data.get("referrer_id")
-        temp_user = TempUser(
-            telegram_id=telegram_id,
-            username=username,
-            referrer_id=referrer_id
-        )
-        return {"temp_user": temp_user}
-    
-    except HTTPException as e:
-            logging.error(f"HTTP error: {e.detail}")
-            return JSONResponse(status_code=e.status_code, content={"error": e.detail})
-    except Exception as e:
-        logging.error(f"Unexpected error: {e}")
-        return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 @app.post("/check_user")
 async def check_user(request: Request, db: Session = Depends(get_db)):
@@ -288,10 +268,40 @@ async def start(request: Request, db: Session = Depends(get_db)):
         telegram_id = data.get("telegram_id")
         username = data.get("username")
         referrer_id = data.get('referrer_id')
-        
+
+        check = check_parameters(telegram_id=telegram_id)
+        if not(check["result"]):
+            return check["message"]
+
+        return_data = {
+            "response_message": "",
+            "to_show": None
+        }
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
-
-
+        if user:
+            return_data["response_message"] = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
+            if not(user.paid):
+                return_data["to_show"] = "pay_course"
+            if referrer_id != telegram_id:
+                existing_referrer = db.query(Referral).filter_by(referred_id=telegram_id).first()
+                if existing_referrer:
+                    existing_referrer.referrer_id = referrer_id
+                else:
+                    referrer_user = get_user_by_telegram_id(db, referrer_id, to_throw=False)
+                    if referrer_user and referrer_user.paid:
+                        new_referrer = Referral(
+                            referrer_id=referrer_id,
+                            referred_id=telegram_id
+                        )
+                        db.add(new_referrer) 
+        else:
+            return_data["response_message"] = f"Добро пожаловать, {username}!"
+            temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
+            if temp_user:
+                update_temp_user(telegramId=telegram_id, username=username)
+            else:
+                create_temp_user(telegramId=telegram_id, username=username, referrer_id=referrer_id)
+            return {"type": "temp_user"}
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -305,12 +315,11 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
-        username = data.get("username")
         referrer_id = data.get('referrer_id')
 
-        logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}")
+        logging.info(f"Получены данные: telegram_id={telegram_id}")
 
-        check = check_parameters(username=username, telegram_id=telegram_id)
+        check = check_parameters(telegram_id=telegram_id)
         logging.info(f"check = {check}")
         if not(check["result"]):
             return check["message"]
@@ -318,66 +327,21 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         logging.info(f"checknuli")
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
         logging.info(f"user = {user}")
-        if user:
-            logging.info(f"Нам вернули юзера")
-            response_message = f"Привет, {username}! Я тебя знаю. Ты участник AiM course!"
-        else:
-            logging.info(f"Не, делаем нового")
-            temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
-            if temp_user:
-                referrer_id = temp_user.referrer_id
-                new_user = User(
-                    telegram_id=telegram_id,
-                    username=username,
-                )
-                db.add(new_user)
-                logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
-                response_message = f"Добро пожаловать, {username}! Ты успешно зарегистрирован."
-                logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
+
+        temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
+        if temp_user:
+            username = temp_user.username
+            referrer_id = temp_user.referrer_id
+            new_user = User(
+                telegram_id=telegram_id,
+                username=username,
+            )
+            db.add(new_user)
+            logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
+            logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
         
-        if referrer_id != telegram_id:
-            existing_referrer = db.query(Referral).filter_by(referred_id=telegram_id).first()
-            if existing_referrer:
-                existing_referrer.referrer_id = referrer_id
-            else:
-                referrer_as_user = get_user_by_telegram_id(db, referrer_id, to_throw=False)
-                if referrer_as_user and referrer_as_user.paid:
-                    new_referrer = Referral(
-                        referrer_id=referrer_id,
-                        referred_id=telegram_id
-                    )
-                    db.add(new_referrer)
         db.commit()  # Фиксируем изменения для всех операций
-        return JSONResponse({"message": response_message})
-    except HTTPException as he:
-        logging.error("HTTP Exception: %s", he.detail)
-        raise he
-    except Exception as e:
-        logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.post("/check_referrals")
-async def check_referrals(request: Request, db: Session = Depends(get_db)):
-    try:
-        verify_secret_code(request)
-        data = await request.json()
-        telegram_id = data.get("telegram_id")
-
-        check = check_parameters(telegram_id=telegram_id)
-        if not(check["result"]):
-            return check["message"]
-        
-        user = get_user_by_telegram_id(db, telegram_id)
-        
-        if user:
-            # Проверка, есть ли рефералы для данного пользователя
-            referral_exists = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
-            if referral_exists:
-                return {"has_referrals": True}
-            else:
-                return {"has_referrals": False}
-        else:
-            return {"has_referrals": False}
+        return JSONResponse({"message": "Добро пожаловать!"})
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
