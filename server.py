@@ -298,9 +298,9 @@ async def start(request: Request, db: Session = Depends(get_db)):
             return_data["response_message"] = f"Добро пожаловать, {username}!"
             temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
             if temp_user:
-                update_temp_user(telegramId=telegram_id, username=username)
+                update_temp_user(telegram_id=telegram_id, username=username)
             else:
-                create_temp_user(telegramId=telegram_id, username=username, referrer_id=referrer_id)
+                create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
             return {"type": "temp_user"}
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
