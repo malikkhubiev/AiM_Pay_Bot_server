@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Generator
 
 # Создание базы данных и её подключение
@@ -107,18 +107,6 @@ def add_initial_user():
 
 add_initial_user()
 
-# Функции работы с пользователями и выплатами
-def get_user(session: Session, telegram_id: str) -> User:
-    """Получение пользователя по telegram_id"""
-    return session.query(User).filter_by(telegram_id=telegram_id).first()
-
-def create_payout(session: Session, user_id: int, amount: float):
-    """Создание выплаты для пользователя"""
-    payout = Payout(user_id=user_id, amount=amount)
-    session.add(payout)
-    session.commit()
-    return payout
-
 def mark_payout_as_notified(session: Session, payout_id: int):
     """Обновление статуса выплаты как уведомленной"""
     payout = session.query(Payout).filter_by(id=payout_id).first()
@@ -126,11 +114,9 @@ def mark_payout_as_notified(session: Session, payout_id: int):
         payout.notified = True
         session.commit()
 
-def create_referral(session: Session, referrer_id: int, referred_id: int):
-    """Создание записи в таблице Referral (реферал)"""
-    referral = Referral(referrer_id=referrer_id, referred_id=referred_id)
-    session.add(referral)
-    
-    # Здесь мы не обновляем 'referral_count', так как его больше нет
-    session.commit()
-    return referral
+# Функция для удаления старых записей
+def delete_expired_records():
+    with SessionLocal() as session:  # Создаём сессию для работы с базой
+        expiration_date = datetime.utcnow() - timedelta(days=30)
+        session.query(TempUser).filter(TempUser.created_at < expiration_date).delete()
+        session.commit()
