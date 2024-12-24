@@ -133,7 +133,7 @@ def create_temp_user(telegram_id, username, referrer_id=None):
         session.commit()
 
 # Функция для удаления старых записей
-def update_temp_user(telegramId, username=None):
+def update_temp_user(telegram_id, username=None):
     with SessionLocal() as session:  # Создаём сессию для работы с базой
         temp_user = session.query(TempUser).filter_by(telegramId=telegramId)
         temp_user.createdAt = datetime.now(timezone.utc)
