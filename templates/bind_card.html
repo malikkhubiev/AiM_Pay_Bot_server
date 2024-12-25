@@ -26,7 +26,9 @@
                         "unique_str": "{{unique_str}}"
                     })
                 }).then(response => response.json())
-                .then(result => alert(result["message"]))
+                .then(result => {
+                    window.location.href = "/success";
+                })
                 .catch(error => console.error(error))
             },
             error_callback: function(error) {
