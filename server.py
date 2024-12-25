@@ -145,7 +145,7 @@ def check_parameters(**kwargs):
     return {"result": True}
 
 def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True):
-    logging.info("in get_user_by_telegram_id telegram_id = {telegram_id}")
+    logging.info(f"in get_user_by_telegram_id telegram_id = {telegram_id}")
     user = db.query(User).filter_by(telegram_id=telegram_id).first()
     if not(user):
         if to_throw:
