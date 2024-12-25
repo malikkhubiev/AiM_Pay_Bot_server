@@ -208,7 +208,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             user = get_user_by_telegram_id(db, user_telegram_id)
             logging.info(f"юзера тоже получили {user.paid}")
             # Обновляем статус пользователя как оплаченный
-            payment = db.query(PaymentTable).filter_by(id=payment_id).first()
+            payment = db.query(PaymentTable).filter_by(transaction_id=payment_id).first()
             if not(payment):
                 try:
                     new_payment = PaymentTable(
