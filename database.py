@@ -132,6 +132,13 @@ def create_temp_user(telegram_id, username, referrer_id=None):
         session.add(new_temp_user)
         session.commit()
 
+# Функция для получения временного пользователя
+def get_temp_user(telegram_id):
+    with SessionLocal() as session:  # Создаём сессию для работы с базой
+        temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id)
+        session.commit()
+        return temp_user
+
 # Функция для удаления старых записей
 def update_temp_user(telegram_id, username=None):
     with SessionLocal() as session:  # Создаём сессию для работы с базой

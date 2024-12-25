@@ -40,6 +40,7 @@ from database import (
     get_db,
     delete_expired_records,
     mark_payout_as_notified,
+    get_temp_user,
     update_temp_user,
     create_temp_user
 )
@@ -347,7 +348,7 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
         logging.info(f"user = {user}")
 
-        temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
+        temp_user = get_temp_user(telegram_id)
         logging.info(f"temp_user {temp_user}")
         if temp_user:
             logging.info(f"Есть временный юзер")
