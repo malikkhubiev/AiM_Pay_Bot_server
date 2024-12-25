@@ -145,6 +145,7 @@ def check_parameters(**kwargs):
     return {"result": True}
 
 def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True):
+    logging.info("in get_user_by_telegram_id telegram_id = {telegram_id}")
     user = db.query(User).filter_by(telegram_id=telegram_id).first()
     if not(user):
         if to_throw:
@@ -315,7 +316,7 @@ async def start(request: Request, db: Session = Depends(get_db)):
             return_data["response_message"] = f"Добро пожаловать, {username}!"
             temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
             if temp_user:
-                logging.info(f"Есть временный юзер")
+                logging.info(f"Есть только временный юзер. Обновляем")
                 update_temp_user(telegram_id=telegram_id, username=username)
             else:
                 logging.info(f"Делаем временный юзер")
@@ -361,8 +362,8 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
             logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
         
-        db.commit()  # Фиксируем изменения для всех операций
-        return JSONResponse({"status": "success"})
+            db.commit()  # Фиксируем изменения для всех операций
+            return JSONResponse({"status": "success"})
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
