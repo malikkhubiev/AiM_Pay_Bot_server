@@ -315,7 +315,6 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         verify_secret_code(request)
         data = await request.json()
         telegram_id = data.get("telegram_id")
-        referrer_id = data.get('referrer_id')
 
         logging.info(f"Получены данные: telegram_id={telegram_id}")
 
@@ -341,7 +340,9 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
         
         db.commit()  # Фиксируем изменения для всех операций
-        return JSONResponse({"message": "Добро пожаловать!"})
+        if not(user.paid):
+            return JSONResponse({"to_show": "pay_course"})
+        return JSONResponse({"to_show": None})
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
