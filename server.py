@@ -312,6 +312,7 @@ async def start(request: Request, db: Session = Depends(get_db)):
                         )
                         logging.info(f"Сделали реферала в бд")
                         db.add(new_referrer) 
+            return {"type": "user"}
         else:
             logging.info(f"Юзера нет")
             return_data["response_message"] = f"Добро пожаловать, {username}!"
