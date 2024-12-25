@@ -315,7 +315,7 @@ async def start(request: Request, db: Session = Depends(get_db)):
         else:
             logging.info(f"Юзера нет")
             return_data["response_message"] = f"Добро пожаловать, {username}!"
-            temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
+            temp_user = get_temp_user(telegram_id=telegram_id)
             if temp_user:
                 logging.info(f"Есть только временный юзер. Обновляем")
                 update_temp_user(telegram_id=telegram_id, username=username)

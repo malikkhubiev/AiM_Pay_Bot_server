@@ -130,23 +130,35 @@ def create_temp_user(telegram_id, username, referrer_id=None):
             raise ValueError(f"Ошибка при создании временного пользователя: {e}")
 
 def get_temp_user(telegram_id):
-    with SessionLocal() as session:  # Создаём сессию для работы с базой
-        temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()  
-        return temp_user
+    try:
+        with SessionLocal() as session:  # Создаём сессию для работы с базой
+            temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()  
+            return temp_user
+    except Exception as e:
+        session.rollback()
+        raise ValueError(f"Ошибка при получении временного пользователя: {e}")
 
 # Функция для удаления старых записей
 def update_temp_user(telegram_id, username=None):
-    with SessionLocal() as session:  # Создаём сессию для работы с базой
-        temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()
-        temp_user.createdAt = datetime.now(timezone.utc)
-        if username:
-            temp_user.username = username
-        session.commit()
+    try:
+        with SessionLocal() as session:  # Создаём сессию для работы с базой
+            temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()
+            temp_user.createdAt = datetime.now(timezone.utc)
+            if username:
+                temp_user.username = username
+            session.commit()
+    except Exception as e:
+        session.rollback()
+        raise ValueError(f"Ошибка при получении временного пользователя: {e}")
 
 # Функция для удаления старых записей
 def delete_expired_records():
-    with SessionLocal() as session:  # Создаём сессию для работы с базой
-        expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
-        expired_records_count = session.query(TempUser).filter(TempUser.created_at < expiration_date).delete()
-        session.commit()
-        return expired_records_count
+    try:
+        with SessionLocal() as session:  # Создаём сессию для работы с базой
+            expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
+            expired_records_count = session.query(TempUser).filter(TempUser.created_at < expiration_date).delete()
+            session.commit()
+            return expired_records_count
+    except Exception as e:
+        session.rollback()
+        raise ValueError(f"Ошибка при получении временного пользователя: {e}")
