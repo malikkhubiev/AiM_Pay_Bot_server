@@ -362,9 +362,7 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
         
         db.commit()  # Фиксируем изменения для всех операций
-        if not(user.paid):
-            return JSONResponse({"to_show": "pay_course"})
-        return JSONResponse({"to_show": None})
+        return JSONResponse({"status": "success"})
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
