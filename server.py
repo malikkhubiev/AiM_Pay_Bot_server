@@ -348,6 +348,7 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         logging.info(f"user = {user}")
 
         temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
+        logging.info(f"temp_user {temp_user}")
         if temp_user:
             logging.info(f"Есть временный юзер")
             username = temp_user.username
