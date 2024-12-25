@@ -115,13 +115,6 @@ def mark_payout_as_notified(session: Session, payout_id: int):
         session.commit()
 
 # Функция для удаления старых записей
-def delete_expired_records():
-    with SessionLocal() as session:  # Создаём сессию для работы с базой
-        expiration_date = datetime.utcnow() - timedelta(days=30)
-        session.query(TempUser).filter(TempUser.created_at < expiration_date).delete()
-        session.commit()
-
-# Функция для удаления старых записей
 def create_temp_user(telegram_id, username, referrer_id=None):
     with SessionLocal() as session:  # Создаём сессию для работы с базой
         new_temp_user = TempUser(
@@ -132,11 +125,9 @@ def create_temp_user(telegram_id, username, referrer_id=None):
         session.add(new_temp_user)
         session.commit()
 
-# Функция для получения временного пользователя
 def get_temp_user(telegram_id):
     with SessionLocal() as session:  # Создаём сессию для работы с базой
-        temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id)
-        session.commit()
+        temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()  
         return temp_user
 
 # Функция для удаления старых записей
@@ -146,4 +137,11 @@ def update_temp_user(telegram_id, username=None):
         temp_user.createdAt = datetime.now(timezone.utc)
         if username:
             temp_user.username = username
+        session.commit()
+
+# Функция для удаления старых записей
+def delete_expired_records():
+    with SessionLocal() as session:  # Создаём сессию для работы с базой
+        expiration_date = datetime.utcnow() - timedelta(days=30)
+        session.query(TempUser).filter(TempUser.created_at < expiration_date).delete()
         session.commit()
