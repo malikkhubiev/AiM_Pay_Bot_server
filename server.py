@@ -269,37 +269,56 @@ async def start(request: Request, db: Session = Depends(get_db)):
         username = data.get("username")
         referrer_id = data.get('referrer_id')
 
-        check = check_parameters(telegram_id=telegram_id)
+        logging.info(f"Есть telegram_id {telegram_id}")
+        logging.info(f"Есть username {username}")
+        logging.info(f"Есть referrer_id {referrer_id}")
+
+        check = check_parameters(
+            telegram_id=telegram_id,
+            username=username
+        )
         if not(check["result"]):
             return check["message"]
 
+        logging.info(f"Check done")
         return_data = {
             "response_message": "",
             "to_show": None
         }
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
+        logging.info(f"user есть {user}")
         if user:
             return_data["response_message"] = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
+            logging.info(f"user есть")
             if not(user.paid):
+                logging.info(f"user не платил")
                 return_data["to_show"] = "pay_course"
-            if referrer_id != telegram_id:
+            if referrer_id and referrer_id != telegram_id:
+                logging.info(f"Есть реферрал и сам себя не привёл")
                 existing_referrer = db.query(Referral).filter_by(referred_id=telegram_id).first()
                 if existing_referrer:
+                    logging.info(f"Реферал уже был")
                     existing_referrer.referrer_id = referrer_id
                 else:
+                    logging.info(f"Реферала ещё не было")
                     referrer_user = get_user_by_telegram_id(db, referrer_id, to_throw=False)
                     if referrer_user and referrer_user.paid:
+                        logging.info(f"Пользователь который привёл есть и он оплатил курс")
                         new_referrer = Referral(
                             referrer_id=referrer_id,
                             referred_id=telegram_id
                         )
+                        logging.info(f"Сделали реферала в бд")
                         db.add(new_referrer) 
         else:
+            logging.info(f"Юзера нет")
             return_data["response_message"] = f"Добро пожаловать, {username}!"
             temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
             if temp_user:
+                logging.info(f"Есть временный юзер")
                 update_temp_user(telegram_id=telegram_id, username=username)
             else:
+                logging.info(f"Делаем временный юзер")
                 create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
             return {"type": "temp_user"}
     except HTTPException as he:
@@ -329,8 +348,11 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
 
         temp_user = db.query(TempUser).filter_by(telegram_id=telegram_id).first()
         if temp_user:
+            logging.info(f"Есть временный юзер")
             username = temp_user.username
             referrer_id = temp_user.referrer_id
+            logging.info(f"У него есть username {username}")
+            logging.info(f"У него есть referrer_id {referrer_id}")
             new_user = User(
                 telegram_id=telegram_id,
                 username=username,
