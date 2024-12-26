@@ -596,16 +596,11 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
         user = get_user_by_telegram_id(db, telegram_id)
         if not(user.paid):
             return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
-        
-        binding = db.query(Binding).filter_by(telegram_id=user.telegram_id).first()
-        logging.info(f"binding {binding}")
-        if binding:
-            logging.info(f"there is binding")
-            referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
-            return {"status": "success", "referral_link": referral_link}
-        else:
-            logging.info(f"no binding")
+        if not(user.card_synonym):
             return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не привязав карту"}
+        
+        referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
+        return {"status": "success", "referral_link": referral_link}
         
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
