@@ -74,10 +74,10 @@ class Payout(Base):
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
-    # referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига
+    referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига
 
     user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
-    # referral = relationship("Referral", back_populates="payout") # Не знаю нафига
+    referral = relationship("Referral", back_populates="payout") # Не знаю нафига
 
 class Binding(Base):
     __tablename__ = 'bindings'
