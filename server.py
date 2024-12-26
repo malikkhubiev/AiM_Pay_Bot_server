@@ -243,7 +243,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                                 "value": f"{REFERRAL_AMOUNT}",
                                 "currency": "RUB"
                             },
-                            "payout_token": f"{referrer.card_synonym}",
+                            "payout_token": f"{referrer_user.card_synonym}",
                             "description": "Выплата рефералу",
                             "metadata": {
                                 "telegramId": f"{referrer.telegram_id}"
