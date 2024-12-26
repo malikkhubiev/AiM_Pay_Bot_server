@@ -206,9 +206,16 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
         if status == "succeeded" and user_telegram_id:
             logging.info(f"status {status}, и мы внутри")
             user = get_user_by_telegram_id(db, user_telegram_id)
-            logging.info(f"юзера тоже получили {user.paid}")
+            logging.info(f"юзера тоже получили {user}")
             payment = db.query(PaymentTable).filter_by(transaction_id=payment_id).first()
-            logging.info(f"payment {payment.telegram_id}")
+            if payment:
+                logging.info(f"payment {payment}")
+            else:
+                logging.info(f"payment нет")
+
+            if not(payment):
+                logging.info(f"payment нет")
+
             if not(payment):
                 logging.info(f"Такой платёж мы видим в первый раз и это хорошо")
                 try:
