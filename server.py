@@ -165,8 +165,8 @@ async def check_user(request: Request, db: Session = Depends(get_db)):
         user = get_user_by_telegram_id(db, telegram_id, to_throw)
         return {"user_exists": True, "user": user}
     except HTTPException as e:
-            logging.error(f"HTTP error: {e.detail}")
-            return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+        logging.error(f"HTTP error: {e.detail}")
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
         return JSONResponse(status_code=500, content={"error": "Internal server error"})
@@ -281,10 +281,11 @@ async def start(request: Request, db: Session = Depends(get_db)):
             username=username
         )
         if not(check["result"]):
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
 
         logging.info(f"Check done")
         return_data = {
+            "status": "success",
             "response_message": "Привет",
             "to_show": None,
             "type": None
@@ -347,7 +348,7 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         check = check_parameters(telegram_id=telegram_id)
         logging.info(f"check = {check}")
         if not(check["result"]):
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
 
         logging.info(f"checknuli")
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
@@ -391,7 +392,7 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
 
         check = check_parameters(telegram_id=telegram_id, amount=amount)
         if not(check["result"]):
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
         
         logging.info(f"чекнули и делаем платёж")
         
@@ -418,7 +419,10 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
             confirmation_url = payment.confirmation.confirmation_url
             if confirmation_url:
                 logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
-                return JSONResponse({"confirmation": {"confirmation_url": confirmation_url}})
+                return JSONResponse({
+                    "status": "success",
+                    "confirmation": {"confirmation_url": confirmation_url}
+                })
             else:
                 logger.error("Ошибка: Confirmation URL не найден в ответе от YooKassa.")
                 raise HTTPException(status_code=400, detail="No confirmation URL found")
@@ -427,10 +431,16 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
-        raise he
+        return JSONResponse({
+            "status": "error",
+            "message": he.detail
+        })
     except Exception as e:
         logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        return JSONResponse({
+            "status": "error",
+            "message": e
+        })
 
 @app.post("/generate_overview_report")
 async def generate_overview_report(request: Request, db: Session = Depends(get_db)):
@@ -441,7 +451,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
         
         check = check_parameters(telegram_id=telegram_id)
         if not(check["result"]):
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
         
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
@@ -484,13 +494,22 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
             "total_payout": all_paid_money
         }
 
-        return JSONResponse(report)
+        return JSONResponse({
+            "status": "success",
+            "report": report
+        })
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
-        raise he
+        return JSONResponse({
+            "status": "error",
+            "report": he.detail
+        })
     except Exception as e:
         logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        return JSONResponse({
+            "status": "error",
+            "report": e
+        })
 
 @app.post("/generate_clients_report")
 async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
@@ -502,7 +521,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
         
         check = check_parameters(telegram_id=telegram_id)
         if not(check["result"]):
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
         
         logging.info(f"Чекнули")
         # Находим пользователя
@@ -542,7 +561,10 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
             "invited_list": invited_list
         }
 
-        return JSONResponse(report)
+        return JSONResponse({
+            "status": "success",
+            "report": report
+        })
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -559,7 +581,7 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
         
         check = check_parameters(telegram_id=telegram_id)
         if not(check["result"]):
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
         
         user = get_user_by_telegram_id(db, telegram_id)
         if not(user.paid):
@@ -575,10 +597,10 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
         
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
-        raise he
+        return JSONResponse({"status": "error", "message": he.detail})
     except Exception as e:
         logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        return JSONResponse({"status": "error", "message": e})
 
 @app.get("/success")
 async def success_payment(request: Request):
@@ -633,7 +655,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             except requests.RequestException as e:
                 logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
                 raise HTTPException(status_code=500, detail="Failed to notify user through bot")
-            db.commit()
+        
         elif event == "payout.canceled":
             # Выплата отменена
             print("Выплата отменена.")
@@ -641,7 +663,7 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
         else:
             # Неизвестное событие
             print(f"Неизвестное событие: {event}")
-
+        db.commit()
         # Возвращаем подтверждение получения уведомления
         return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
     except HTTPException as e:
@@ -664,7 +686,7 @@ async def bind_card(request: Request, db: Session = Depends(get_db)):
             telegram_id=telegram_id
         )
         if not check["result"]:
-            return check["message"]
+            return {"status": "error", "message": check["message"]}
 
         # Находим пользователя
         user = get_user_by_telegram_id(db, telegram_id)
@@ -688,14 +710,14 @@ async def bind_card(request: Request, db: Session = Depends(get_db)):
 
         url = f"{SERVER_URL}/bind_card_page/{unique_str}"
 
-        return {"status": "success", "binding_url": url}
+        return JSONResponse({"status": "success", "binding_url": url})
 
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
-        raise he
+        return JSONResponse({"status": "error", "message": he.detail})
     except Exception as e:
         logging.error("Unexpected error: %s", e)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        return JSONResponse({"status": "error", "message": e})
 
 @app.get("/bind_card_page/{unique_str}")
 def render_bind_card_page(unique_str: str):
@@ -704,7 +726,7 @@ def render_bind_card_page(unique_str: str):
         unique_str=unique_str
     )
     if not check["result"]:
-        return check["message"]
+        return {"status": "error", "message": check["message"]}
 
     template = template_env.get_template("bind_card.html")
     account_id = YOOKASSA_AGENT_ID
