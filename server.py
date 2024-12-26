@@ -207,11 +207,12 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             logging.info(f"status {status}, и мы внутри")
             user = get_user_by_telegram_id(db, user_telegram_id)
             logging.info(f"юзера тоже получили {user.paid}")
-            # Обновляем статус пользователя как оплаченный
             payment = db.query(PaymentTable).filter_by(transaction_id=payment_id).first()
+            logging.info(f"payment {payment.telegram_id}")
             if not(payment):
                 logging.info(f"Такой платёж мы видим в первый раз и это хорошо")
                 try:
+                    logging.info(f"Делаем платёж")
                     new_payment = PaymentTable(
                         transaction_id=payment_id,
                         telegram_id=user_telegram_id
@@ -221,7 +222,9 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                     db.rollback()
                     logging.info("Ошибка при добавлении платежа в базу данных")
                 user.paid = True
+                logging.info(f"Ищём реферрала")
                 referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
+                logging.info(f"referrer {referrer}")
                 if referrer:
                     logging.info(f"referrer {referrer} есть")
                     referrer_user = get_user_by_telegram_id(db, referrer.referrer_id, to_throw=False)
