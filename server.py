@@ -463,7 +463,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
 
         # Calculate total paid money
         all_paid_money = db.query(func.sum(Payout.amount))\
-            .filter(and_(Payout.telegram_id == telegram_id, Payout.status == 'completed'))\
+            .filter(and_(Payout.telegram_id == telegram_id))\
             .scalar() or 0.0
 
         referral_count = db.query(func.count(Referral.id))\
@@ -790,8 +790,7 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
             payout_request = Payout(
                 telegram_id="999", 
                 amount=99999999999999,
-                card_synonym=card_synonym, 
-                status="pending"
+                card_synonym=card_synonym
             )
             db.add(payout_request)
             db.commit()
