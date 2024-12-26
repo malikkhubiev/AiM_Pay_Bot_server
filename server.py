@@ -379,7 +379,12 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
                 telegram_id=telegram_id,
                 username=username,
             )
+            new_referrer = Referral(
+                referrer_id=referrer_id,
+                referred_id=telegram_id
+            )
             db.add(new_user)
+            db.add(new_referrer)
             logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
             logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
         
