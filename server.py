@@ -337,6 +337,9 @@ async def start(request: Request, db: Session = Depends(get_db)):
                 update_temp_user(telegram_id=telegram_id, username=username)
             else:
                 logging.info(f"Делаем временный юзер")
+                logging.info(f"telegram_id {telegram_id}")
+                logging.info(f"username {username}")
+                logging.info(f"referrer_id {referrer_id}")
                 create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
             return JSONResponse(return_data)
     except HTTPException as he:
