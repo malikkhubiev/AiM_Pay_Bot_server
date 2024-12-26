@@ -210,6 +210,7 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             # Обновляем статус пользователя как оплаченный
             payment = db.query(PaymentTable).filter_by(transaction_id=payment_id).first()
             if not(payment):
+                logging.info(f"Такой платёж мы видим в первый раз и это хорошо")
                 try:
                     new_payment = PaymentTable(
                         transaction_id=payment_id,
@@ -218,14 +219,14 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                     db.add(new_payment)
                 except IntegrityError:
                     db.rollback()
-                    print("Transaction already exists or another integrity error occurred.")
+                    logging.info("Ошибка при добавлении платежа в базу данных")
                 user.paid = True
                 referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
                 if referrer:
                     logging.info(f"referrer {referrer} есть")
-                    referrer_user = db.query(User).filter_by(telegram_id=referrer.referrer_id).first()
+                    referrer_user = get_user_by_telegram_id(db, referrer.referrer_id, to_throw=False)
                     logging.info(f"referrer_user {referrer_user}")
-                    if referrer_user:
+                    if referrer_user and referrer_user.card_synonym:
                         logging.info(f"referrer_user есть")
                         payout = YooPay.create({
                             "amount": {
@@ -284,13 +285,15 @@ async def start(request: Request, db: Session = Depends(get_db)):
 
         logging.info(f"Check done")
         return_data = {
-            "response_message": "",
-            "to_show": None
+            "response_message": "Привет",
+            "to_show": None,
+            "type": None
         }
         user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
         logging.info(f"user есть {user}")
         if user:
             return_data["response_message"] = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
+            return_data["type"] = "user"
             logging.info(f"user есть")
             if not(user.paid):
                 logging.info(f"user не платил")
@@ -312,8 +315,9 @@ async def start(request: Request, db: Session = Depends(get_db)):
                         )
                         logging.info(f"Сделали реферала в бд")
                         db.add(new_referrer) 
-            return {"type": "user"}
+            return JSONResponse(return_data)
         else:
+            return_data["type"] = "temp_user"
             logging.info(f"Юзера нет")
             return_data["response_message"] = f"Добро пожаловать, {username}!"
             temp_user = get_temp_user(telegram_id=telegram_id)
@@ -323,7 +327,7 @@ async def start(request: Request, db: Session = Depends(get_db)):
             else:
                 logging.info(f"Делаем временный юзер")
                 create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
-            return {"type": "temp_user"}
+            return JSONResponse(return_data)
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
         raise he
@@ -607,27 +611,28 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             amount = object_data['amount']['value']
 
             user = get_user_by_telegram_id(db, telegram_id)
-            payout_request = db.query(Payout).filter(Payout.telegram_id == telegram_id, Payout.status == "pending").first()
-            if payout_request: 
-                payout_request.status = "completed"
-                payout_request.transaction_id = transaction_id
-                if telegram_id != "999":
-                    notify_url = f"{MAHIN_URL}/notify_user"
-                    notification_data = {
-                        "telegram_id": telegram_id,
-                        "message": f"Выплата на сумму {amount} произведена успешно"
-                    }
-                    try:
-                        response = requests.post(notify_url, json=notification_data)
-                        response.raise_for_status()
-                        logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
+            new_payout = Payout(
+                telegram_id=telegram_id,
+                card_synonym=user.card_synonym,
+                amount=amount,
+                transaction_id=transaction_id
+            )
+            notify_url = f"{MAHIN_URL}/notify_user"
+            notification_data = {
+                "telegram_id": telegram_id,
+                "message": f"Выплата на сумму {amount} произведена успешно"
+            }
+            try:
+                response = requests.post(notify_url, json=notification_data)
+                response.raise_for_status()
+                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
 
-                        # После успешного уведомления обновляем статус выплаты
-                        mark_payout_as_notified(db, object_data["id"])
-                        return JSONResponse(status_code=200)
-                    except requests.RequestException as e:
-                        logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                        raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+                # После успешного уведомления обновляем статус выплаты
+                mark_payout_as_notified(db, transaction_id)
+                return JSONResponse(status_code=200)
+            except requests.RequestException as e:
+                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
             db.commit()
         elif event == "payout.canceled":
             # Выплата отменена

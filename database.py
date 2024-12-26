@@ -70,14 +70,14 @@ class Payout(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
     card_synonym = Column(String, nullable=False)
     amount = Column(Float)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     notified = Column(Boolean, default=False)
-    referral_id = Column(Integer, ForeignKey('referrals.id'))  # Ссылка на реферал
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
-    status = Column(String, default="pending")  # Статус выплаты
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    # referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига
 
     user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
-    referral = relationship("Referral", back_populates="payout")
+    # referral = relationship("Referral", back_populates="payout") # Не знаю нафига
 
 class Binding(Base):
     __tablename__ = 'bindings'
