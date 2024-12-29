@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from time import time
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.exc import IntegrityError
+from responses import *
 import requests
 import datetime
 from config import (
@@ -163,13 +164,13 @@ async def check_user(request: Request, db: Session = Depends(get_db)):
         telegram_id = data.get("telegram_id")
         to_throw = data.get("to_throw", True)
         user = get_user_by_telegram_id(db, telegram_id, to_throw)
-        return {"user_exists": True, "user": user}
+        return {"status": "success", "user": user}
     except HTTPException as e:
         logging.error(f"HTTP error: {e.detail}")
-        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+        return JSONResponse({"status": "error", "message": e.detail})
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
-        return JSONResponse(status_code=500, content={"error": "Internal server error"})
+        return JSONResponse({"status": "error", "message": "Internal server error"})
 
 @app.post("/payment_notification")
 async def payment_notification(request: Request, db: Session = Depends(get_db)):
@@ -211,9 +212,6 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             if payment:
                 logging.info(f"payment {payment}")
             else:
-                logging.info(f"payment нет")
-
-            if not(payment):
                 logging.info(f"payment нет")
 
             if not(payment):
@@ -264,8 +262,58 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                 except requests.RequestException as e:
                     logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
                     raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+        if status == "canceled" and user_telegram_id:
+            logging.info(f"status {status}, и мы внутри")
+            cancellation_details = payment_data.get("cancellation_details")
+            reason = cancellation_details["reason"]
+            user = get_user_by_telegram_id(db, user_telegram_id)
+            logging.info(f"юзера тоже получили {user}")
+            notify_url = f"{MAHIN_URL}/notify_user"
+            notification_data = {
+                "telegram_id": user_telegram_id,
+                "message": payment_responces[reason]
+            }
+            try:
+                response = requests.post(notify_url, json=notification_data)
+                response.raise_for_status()
+                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
 
+                # После успешного уведомления обновляем статус выплаты
+                mark_payout_as_notified(db, payment_id)
+                return JSONResponse(status_code=200)
+            except requests.RequestException as e:
+                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
         raise HTTPException(status_code=400, detail="Payment not processed")
+    except HTTPException as e:
+        # Обработка исключения с возвращением пользовательского сообщения
+        return {"error": e.detail, "status_code": e.status_code}
+    except Exception as e:
+        logging.error("Unexpected error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
+@app.post("/save_invite_link")
+async def save_invite_link(request: Request, db: Session = Depends(get_db)):
+    try:
+        verify_secret_code(request)
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+        invite_link = data.get("invite_link")
+
+        logging.info(f"Получены данные: telegram_id={telegram_id}, invite_link={invite_link}")
+
+        check = check_parameters(telegram_id=telegram_id, invite_link=invite_link)
+        logging.info(f"check = {check}")
+        if not(check["result"]):
+            return {"status": "error", "message": check["message"]}
+
+        logging.info(f"checknuli")
+        user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
+        logging.info(f"user = {user}")
+        user.invite_link = invite_link
+        db.commit()
+        return {"status": "success"}
+
     except HTTPException as e:
         # Обработка исключения с возвращением пользовательского сообщения
         return {"error": e.detail, "status_code": e.status_code}
@@ -633,52 +681,76 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
         transaction_id = object_data.get("id", {})
         metadata = object_data.get("metadata", {})
 
-        logging.info(data)
-
-        # Извлечение telegramId из метаданных
-        telegram_id = metadata.get("telegramId")
-
-        # Логирование события
-        print(f"Получено уведомление: {event}")
-        print(f"Данные объекта: {object_data}")
-
-        # Обработка событий
-        if event == "payout.succeeded":
-
-            amount = object_data['amount']['value']
-
-            user = get_user_by_telegram_id(db, telegram_id)
-            new_payout = Payout(
-                telegram_id=telegram_id,
-                card_synonym=user.card_synonym,
-                amount=amount,
-                transaction_id=transaction_id
-            )
-            notify_url = f"{MAHIN_URL}/notify_user"
-            notification_data = {
-                "telegram_id": telegram_id,
-                "message": f"Выплата на сумму {amount} произведена успешно"
-            }
-            try:
-                response = requests.post(notify_url, json=notification_data)
-                response.raise_for_status()
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
-
-                # После успешного уведомления обновляем статус выплаты
-                mark_payout_as_notified(db, transaction_id)
-                return JSONResponse(status_code=200)
-            except requests.RequestException as e:
-                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
-        
-        elif event == "payout.canceled":
-            # Выплата отменена
-            print("Выплата отменена.")
-            # Здесь можно обработать отмену выплаты
+        if metadata.get("author") == "me":
+            return JSONResponse(status_code=200)
         else:
-            # Неизвестное событие
-            print(f"Неизвестное событие: {event}")
-        db.commit()
+            logging.info(data)
+
+            # Извлечение telegramId из метаданных
+            telegram_id = metadata.get("telegramId")
+
+            # Логирование события
+            print(f"Получено уведомление: {event}")
+            print(f"Данные объекта: {object_data}")
+
+            # Обработка событий
+            if event == "payout.succeeded":
+
+                amount = object_data['amount']['value']
+
+                user = get_user_by_telegram_id(db, telegram_id)
+                new_payout = Payout(
+                    telegram_id=telegram_id,
+                    card_synonym=user.card_synonym,
+                    amount=amount,
+                    transaction_id=transaction_id
+                )
+                notify_url = f"{MAHIN_URL}/notify_user"
+                notification_data = {
+                    "telegram_id": telegram_id,
+                    "message": f"Выплата на сумму {amount} произведена успешно"
+                }
+                try:
+                    response = requests.post(notify_url, json=notification_data)
+                    response.raise_for_status()
+                    logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
+
+                    # После успешного уведомления обновляем статус выплаты
+                    mark_payout_as_notified(db, transaction_id)
+                    return JSONResponse(status_code=200)
+                except requests.RequestException as e:
+                    logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+            
+            elif event == "payout.canceled" and telegram_id:
+                # Выплата отменена
+                print("Выплата отменена.")
+                logging.info(f"status {status}, и мы внутри")
+                cancellation_details = object_data.get("cancellation_details")
+                reason = cancellation_details["reason"]
+                user = get_user_by_telegram_id(db, telegram_id)
+                logging.info(f"юзера тоже получили {user}")
+                notify_url = f"{MAHIN_URL}/notify_user"
+                notification_data = {
+                    "telegram_id": telegram_id,
+                    "message": payout_responces[reason]
+                }
+                try:
+                    response = requests.post(notify_url, json=notification_data)
+                    response.raise_for_status()
+                    logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
+
+                    # После успешного уведомления обновляем статус выплаты
+                    mark_payout_as_notified(db, transaction_id)
+                    return JSONResponse(status_code=200)
+                except requests.RequestException as e:
+                    logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
+                    raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+
+            else:
+                # Неизвестное событие
+                print(f"Неизвестное событие: {event}")
+            db.commit()
         # Возвращаем подтверждение получения уведомления
         return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
     except HTTPException as e:
@@ -788,19 +860,15 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
         logging.error("Unexpected error: %s", e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/getMyMoneyPage/{telegram_id}")
+@app.get("/getMyMoneyPage/")
 async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
     try:
         logging.info("💰 моней")
-        logging.info(f"{telegram_id} telegram_id")
-        if telegram_id == 999:
-            logging.info(f"equals")
-            user = get_user_by_telegram_id(db, telegram_id)
-            logging.info(f"user have")
-            template = template_env.get_template("getMyMoney.html")
-            account_id = YOOKASSA_AGENT_ID
-            rendered_html = template.render(account_id=account_id)
-            return HTMLResponse(content=rendered_html)
+        logging.info(f"equals")
+        template = template_env.get_template("getMyMoney.html")
+        account_id = YOOKASSA_AGENT_ID
+        rendered_html = template.render(account_id=account_id)
+        return HTMLResponse(content=rendered_html)   
         
     except HTTPException as he:
         logging.error("HTTP Exception: %s", he.detail)
@@ -818,28 +886,22 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
         data = await request.json()
         card_synonym = data.get("card_synonym")
         secret_key = data.get("secret_key")
+        amount = data.get("amount")
 
         if secret_key == SECRET_KEY:
             logging.info("💰 Выплата пользователю")
             user = get_user_by_telegram_id(db, "999")
             logging.info(f"Найден пользователь: {user}")
             setup_payout_config()
-            payout_request = Payout(
-                telegram_id="999", 
-                amount=99999999999999,
-                card_synonym=card_synonym
-            )
-            db.add(payout_request)
-            db.commit()
             payout = YooPay.create({
                 "amount": {
-                    "value": f"{9999999999999999}",
+                    "value": f"{amount}",
                     "currency": "RUB"
                 },
                 "payout_token": f"{card_synonym}",
                 "description": "Выплата мне",
                 "metadata": {
-                    "telegramId": "999"
+                    "author": "me"
                 }
             })
 

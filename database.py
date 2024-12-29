@@ -35,6 +35,7 @@ class User(Base):
     telegram_id = Column(String, unique=True, nullable=False)
     paid = Column(Boolean, default=False)
     card_synonym = Column(String, unique=True, nullable=True)
+    invite_link = Column(String, nullable=True)
 
     payments = relationship("Payment", back_populates="user")  # Убедитесь, что имя таблицы и свойства совпадают
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
