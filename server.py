@@ -28,7 +28,7 @@ from config import (
     SECRET_CODE,
     DISABLE_SECRET_CODE_CHECK
 )
-from yookassa import Payout as YooPay, Payment, Configuration
+from yookassa import Payout as YooPay, Payment, Configuration, Settings
 import logging
 import uvicorn
 from database import (
@@ -867,6 +867,12 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
         logging.info(f"equals")
         template = template_env.get_template("getMyMoney.html")
         account_id = YOOKASSA_AGENT_ID
+
+        # Получение настроек аккаунта
+        me = Settings.get_account_settings()
+
+        # Вывод баланса выплат
+        print(me.payout_balance)
         rendered_html = template.render(account_id=account_id)
         return HTMLResponse(content=rendered_html)   
         
