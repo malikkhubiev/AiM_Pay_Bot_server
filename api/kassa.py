@@ -115,19 +115,15 @@ async def payment_notification(request: Request):
         logging.info(f"status {status}, и мы внутри")
         user = await get_user_by_telegram_id(user_telegram_id)
         logging.info(f"юзера тоже получили {user}")
-        payment = await get_payment(payment_id)
+        payment = await get_payment(user_telegram_id)
         if payment:
             logging.info(f"payment {payment}")
         else:
             logging.info(f"payment нет")
 
         if not(payment):
-            logging.info(f"Такой платёж мы видим в первый раз и это хорошо")
-            try:
-                logging.info(f"Делаем платёж")
-                await create_payment_db(user_telegram_id, payment_id)
-            except IntegrityError:
-                logging.info("Ошибка при добавлении платежа в базу данных")
+            logging.info(f"Такой платёж мы видим в первый раз и это хорошо. Делаем платёж")
+            await create_payment_db(user_telegram_id, payment_id)
             user.paid = True
             logging.info(f"Ищём реферрала")
             referrer = await get_referrer(user_telegram_id)
@@ -138,7 +134,7 @@ async def payment_notification(request: Request):
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user and referrer_user.card_synonym:
                     logging.info(f"referrer_user есть")
-                    payout = Payment.create({
+                    payout = Payout.create({
                         "amount": {
                             "value": f"{REFERRAL_AMOUNT}",
                             "currency": "RUB"
@@ -152,7 +148,7 @@ async def payment_notification(request: Request):
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {"telegram_id": user_telegram_id}
             send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
-            response = await send_request(send_invite_link_url, notification_data)
+            await send_request(send_invite_link_url, notification_data)
             await mark_payout_as_notified(payment_id)
             return JSONResponse(status_code=200)
         
@@ -167,7 +163,7 @@ async def payment_notification(request: Request):
             "telegram_id": user_telegram_id,
             "message": payment_responces[reason]
         }
-        response = await send_request(notify_url, notification_data)
+        await send_request(notify_url, notification_data)
         await mark_payout_as_notified(payment_id)
         return JSONResponse(status_code=200)
         
