@@ -1,22 +1,16 @@
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
+from sqlalchemy import create_engine, func, and_, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session, relationship
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
-from typing import Generator
+import databases
+from sqlalchemy.future import select
+from typing import Optional, List, Union
 
 # Создание базы данных и её подключение
-DATABASE_URL = "sqlite:///bot_database.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+DATABASE_URL = "sqlite+aiosqlite:///bot_database.db"
+database = databases.Database(DATABASE_URL)
 
-# Функция для получения сессии базы данных
-def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+Base = declarative_base()
 
 class TempUser(Base):
     __tablename__ = 'tempusers'
@@ -87,79 +81,137 @@ class Binding(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  
     unique_str = Column(String, unique=True, nullable=False)
 
-# Создание всех таблиц в базе данных
+engine = create_engine(DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"))
 Base.metadata.create_all(bind=engine)
 
-def add_initial_user():
-    session = SessionLocal()
-    try:
-        # Проверка, существует ли пользователь с заданным telegram_id
-        existing_user = session.query(User).filter_by(telegram_id="999").first()
-        if not existing_user:
-            new_user = User(
-                id=1000000,
-                username="Malik_The_Author",
-                telegram_id="999"
-            )
-            session.add(new_user)
-            session.commit()
-    finally:
-        session.close()
+# Асинхронные функции с типами
+async def create_user(telegram_id: str, username: str):
+    query = User.__table__.insert().values(telegram_id=telegram_id, username=username)
+    async with database.transaction():  # Используем async with для выполнения транзакции
+        await database.execute(query)
 
-add_initial_user()
+async def get_user(telegram_id: str):
+    query = select(User).filter_by(telegram_id=telegram_id)
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query)
 
-def mark_payout_as_notified(session: Session, payout_id: int):
-    """Обновление статуса выплаты как уведомленной"""
-    payout = session.query(Payout).filter_by(id=payout_id).first()
-    if payout:
-        payout.notified = True
-        session.commit()
+async def get_all_referred(telegram_id: str):
+    query = select(Referral).filter_by(referrer_id=telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        return await database.fetch_all(query)
 
-# Функция для удаления старых записей
-def create_temp_user(telegram_id, username, referrer_id=None):
-    with SessionLocal() as session:  # Создаём сессию для работы с базой
-        try:
-            new_temp_user = TempUser(
-                telegram_id=telegram_id,
-                username=username,
-                referrer_id=referrer_id
-            )
-            session.add(new_temp_user)
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            raise ValueError(f"Ошибка при создании временного пользователя: {e}")
+async def get_referrer(telegram_id: str):
+    query = select(Referral).filter_by(referred_id=telegram_id)
+    async with database.transaction():  # Используем async with
+        return await database.fetch_one(query)
 
-def get_temp_user(telegram_id):
-    try:
-        with SessionLocal() as session:  # Создаём сессию для работы с базой
-            temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()  
-            return temp_user
-    except Exception as e:
-        session.rollback()
-        raise ValueError(f"Ошибка при получении временного пользователя: {e}")
+async def get_referred(telegram_id: str):
+    query = select(Referral).filter_by(referrer_id=telegram_id)
+    async with database.transaction():  # Используем async with
+        return await database.fetch_one(query)
+    
+async def get_referred_user(referred_id: int):
+    query = select(User).filter_by(telegram_id=referred_id)
+    result = await database.fetch_one(query)
+    return result
 
-# Функция для удаления старых записей
-def update_temp_user(telegram_id, username=None):
-    try:
-        with SessionLocal() as session:  # Создаём сессию для работы с базой
-            temp_user = session.query(TempUser).filter_by(telegram_id=telegram_id).first()
-            temp_user.createdAt = datetime.now(timezone.utc)
+async def create_referral(telegram_id: str, referrer_id: int):
+    query = Referral.__table__.insert().values(referrer_id=referrer_id, referred_id=telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(query)
+
+async def mark_payout_as_notified(payout_id: int):
+    query = select(Payout).filter_by(id=payout_id)
+    async with database.transaction():  # Используем async with
+        payout = await database.fetch_one(query)
+        if payout:
+            update_query = Payout.__table__.update().where(Payout.id == payout_id).values(notified=True)
+            await database.execute(update_query)
+
+async def create_temp_user(telegram_id: str, username: str, referrer_id: Optional[int] = None):
+    query = TempUser.__table__.insert().values(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(query)
+
+async def get_temp_user(telegram_id: str):
+    query = select(TempUser).filter_by(telegram_id=telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        return await database.fetch_one(query)
+
+async def update_temp_user(telegram_id: str, username: Optional[str] = None):
+    query = select(TempUser).filter_by(telegram_id=telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        temp_user = await database.fetch_one(query)
+        if temp_user:
+            update_data = {'created_at': datetime.now(timezone.utc)}
             if username:
-                temp_user.username = username
-            session.commit()
-    except Exception as e:
-        session.rollback()
-        raise ValueError(f"Ошибка при получении временного пользователя: {e}")
+                update_data['username'] = username
+            update_query = TempUser.__table__.update().where(TempUser.telegram_id == telegram_id).values(update_data)
+            await database.execute(update_query)
 
-# Функция для удаления старых записей
-def delete_expired_records():
-    try:
-        with SessionLocal() as session:  # Создаём сессию для работы с базой
-            expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
-            expired_records_count = session.query(TempUser).filter(TempUser.created_at < expiration_date).delete()
-            session.commit()
-            return expired_records_count
-    except Exception as e:
-        session.rollback()
-        raise ValueError(f"Ошибка при получении временного пользователя: {e}")
+async def save_invite_link_db(telegram_id: str, invite_link: str):
+    update_data = {'invite_link': invite_link}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def delete_expired_records():
+    expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
+    query = select(TempUser).filter(TempUser.created_at < expiration_date)
+    async with database.transaction():  # Используем async with для транзакции
+        expired_users = await database.fetch_all(query)
+        expired_records_count = 0
+        for user in expired_users:
+            delete_query = TempUser.__table__.delete().where(TempUser.id == user['id'])
+            await database.execute(delete_query)
+            expired_records_count += 1
+        return expired_records_count
+
+async def get_all_paid_money(telegram_id: str):
+    query = select(func.sum(Payout.amount)).filter(Payout.telegram_id == telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        result = await database.fetch_one(query)
+        return result[0] or 0.0
+
+async def get_referral_count(telegram_id: str):
+    query = select(func.count(Referral.id)).filter(Referral.referrer_id == telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        result = await database.fetch_one(query)
+        return result[0] or 0
+
+async def get_paid_count(telegram_id: str):
+    query = select(func.count(Referral.id)).join(User, Referral.referred_id == User.telegram_id)\
+        .filter(Referral.referrer_id == telegram_id, User.paid == True)
+    async with database.transaction():  # Используем async with для транзакции
+        result = await database.fetch_one(query)
+        return result[0] or 0
+
+async def create_payment_db(telegram_id: str, payment_id: str):
+    query = Payment.__table__.insert().values(transaction_id=payment_id, telegram_id=telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(query)
+
+async def get_payment(payment_id: str):
+    query = select(Payment).filter_by(transaction_id=payment_id)
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query)
+
+async def create_payout(telegram_id: str, card_synonym: str, amount: int, transaction_id: str):
+    query = Payout.__table__.insert().values(card_synonym=card_synonym, telegram_id=telegram_id, amount=amount, transaction_id=transaction_id)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(query)
+
+async def create_binding_and_delete_if_exists(telegram_id: str, unique_str: str):
+    query = select(Binding).filter_by(telegram_id=telegram_id)
+    async with database.transaction():  # Используем async with для транзакции
+        existing_binding = await database.fetch_one(query)
+        if existing_binding:
+            delete_query = Binding.__table__.delete().where(Binding.id == existing_binding['id'])
+            await database.execute(delete_query)
+        insert_query = Binding.__table__.insert().values(telegram_id=telegram_id, unique_str=unique_str)
+        await database.execute(insert_query)
+
+async def get_binding_by_unique_str(unique_str: str):
+    query = select(Binding).filter(Binding.unique_str == unique_str)
+    async with database.transaction():  # Используем async with для транзакции
+        return await database.fetch_one(query)

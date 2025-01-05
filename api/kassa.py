@@ -4,8 +4,8 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from time import time
 from sqlalchemy.exc import IntegrityError
-from yookassa import Payout as YooPay, Settings, Configuration
-import requests
+from yookassa import Payout, Settings, Payment
+import httpx
 from config import (
     COURSE_AMOUNT,
     REFERRAL_AMOUNT,
@@ -15,22 +15,22 @@ from config import (
     SECRET_KEY
 )
 from jinja2 import Environment, FileSystemLoader
-from yookassa import Payout as YooPay, Payment
 import logging
 from database import (
-    Binding,
-    Payment as PaymentTable,
-    Referral,
-    Payout,
-    get_db,
+    get_binding_by_unique_str,
+    create_binding_and_delete_if_exists,
+    get_payment,
+    create_payout,
+    create_payment_db,
     mark_payout_as_notified,
+    get_referrer
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
 
 @app.post("/create_payment")
 @exception_handler
-async def create_payment(request: Request, db: Session = Depends(get_db)): 
+async def create_payment(request: Request): 
     verify_secret_code(request)
 
     data = await request.json()
@@ -81,7 +81,7 @@ async def create_payment(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/payment_notification")
 @exception_handler
-async def payment_notification(request: Request, db: Session = Depends(get_db)):
+async def payment_notification(request: Request):
     """Обработка уведомления о платеже от YooKassa."""
     # Проверяем IP для уведомлений от Yookassa
     check_yookassa_ip(request)
@@ -113,9 +113,9 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
 
     if status == "succeeded" and user_telegram_id:
         logging.info(f"status {status}, и мы внутри")
-        user = get_user_by_telegram_id(db, user_telegram_id)
+        user = await get_user_by_telegram_id(user_telegram_id)
         logging.info(f"юзера тоже получили {user}")
-        payment = db.query(PaymentTable).filter_by(transaction_id=payment_id).first()
+        payment = await get_payment(payment_id)
         if payment:
             logging.info(f"payment {payment}")
         else:
@@ -125,25 +125,20 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
             logging.info(f"Такой платёж мы видим в первый раз и это хорошо")
             try:
                 logging.info(f"Делаем платёж")
-                new_payment = PaymentTable(
-                    transaction_id=payment_id,
-                    telegram_id=user_telegram_id
-                )
-                db.add(new_payment)
+                await create_payment_db(user_telegram_id, payment_id)
             except IntegrityError:
-                db.rollback()
                 logging.info("Ошибка при добавлении платежа в базу данных")
             user.paid = True
             logging.info(f"Ищём реферрала")
-            referrer = db.query(Referral).filter_by(referred_id=user.telegram_id).first()
+            referrer = get_referrer(user_telegram_id)
             logging.info(f"referrer {referrer}")
             if referrer:
                 logging.info(f"referrer {referrer} есть")
-                referrer_user = get_user_by_telegram_id(db, referrer.referrer_id, to_throw=False)
+                referrer_user = await get_user_by_telegram_id(referrer.referrer_id, to_throw=False)
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user and referrer_user.card_synonym:
                     logging.info(f"referrer_user есть")
-                    payout = YooPay.create({
+                    payout = Payment.create({
                         "amount": {
                             "value": f"{REFERRAL_AMOUNT}",
                             "currency": "RUB"
@@ -154,48 +149,33 @@ async def payment_notification(request: Request, db: Session = Depends(get_db)):
                             "telegramId": f"{referrer.telegram_id}"
                         }
                     })
-
-            db.commit()
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {"telegram_id": user_telegram_id}
-            try:
-                # После успешного уведомления обновляем статус выплаты
-                send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
-                response = requests.post(send_invite_link_url, json=notification_data)
-                response.raise_for_status()
-                mark_payout_as_notified(db, payment_id)
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
-                return JSONResponse(status_code=200)
-            except requests.RequestException as e:
-                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+            send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+            response = await send_request(send_invite_link_url, notification_data)
+            await mark_payout_as_notified(payment_id)
+            return JSONResponse(status_code=200)
+        
     if status == "canceled" and user_telegram_id:
         logging.info(f"status {status}, и мы внутри")
         cancellation_details = payment_data.get("cancellation_details")
         reason = cancellation_details["reason"]
-        user = get_user_by_telegram_id(db, user_telegram_id)
+        user = await get_user_by_telegram_id(user_telegram_id)
         logging.info(f"юзера тоже получили {user}")
         notify_url = f"{MAHIN_URL}/notify_user"
         notification_data = {
             "telegram_id": user_telegram_id,
             "message": payment_responces[reason]
         }
-        try:
-            response = requests.post(notify_url, json=notification_data)
-            response.raise_for_status()
-            logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", user_telegram_id)
-
-            # После успешного уведомления обновляем статус выплаты
-            mark_payout_as_notified(db, payment_id)
-            return JSONResponse(status_code=200)
-        except requests.RequestException as e:
-            logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-            raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+        response = await send_request(notify_url, notification_data)
+        await mark_payout_as_notified(payment_id)
+        return JSONResponse(status_code=200)
+        
     raise HTTPException(status_code=400, detail="Payment not processed")
 
 @app.post("/payout_result")
 @exception_handler
-async def payout_result(request: Request, db: Session = Depends(get_db)):
+async def payout_result(request: Request):
     # Проверяем IP для уведомлений от Yookassa
     check_yookassa_ip(request)
     # Получение JSON данных из запроса
@@ -222,29 +202,21 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
 
             amount = object_data['amount']['value']
 
-            user = get_user_by_telegram_id(db, telegram_id)
-            new_payout = Payout(
-                telegram_id=telegram_id,
-                card_synonym=user.card_synonym,
-                amount=amount,
-                transaction_id=transaction_id
+            user = await get_user_by_telegram_id(telegram_id)
+            await create_payout(
+                telegram_id,
+                user.card_synonym,
+                amount,
+                transaction_id
             )
             notify_url = f"{MAHIN_URL}/notify_user"
             notification_data = {
                 "telegram_id": telegram_id,
                 "message": f"Выплата на сумму {amount} произведена успешно"
             }
-            try:
-                response = requests.post(notify_url, json=notification_data)
-                response.raise_for_status()
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
-
-                # После успешного уведомления обновляем статус выплаты
-                mark_payout_as_notified(db, transaction_id)
-                return JSONResponse(status_code=200)
-            except requests.RequestException as e:
-                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+            response = await send_request(notify_url, notification_data)
+            await mark_payout_as_notified(transaction_id)
+            return JSONResponse(status_code=200)
         
         elif event == "payout.canceled" and telegram_id:
             # Выплата отменена
@@ -252,35 +224,26 @@ async def payout_result(request: Request, db: Session = Depends(get_db)):
             logging.info(f"status {status}, и мы внутри")
             cancellation_details = object_data.get("cancellation_details")
             reason = cancellation_details["reason"]
-            user = get_user_by_telegram_id(db, telegram_id)
+            user = await get_user_by_telegram_id(telegram_id)
             logging.info(f"юзера тоже получили {user}")
             notify_url = f"{MAHIN_URL}/notify_user"
             notification_data = {
                 "telegram_id": telegram_id,
                 "message": payout_responces[reason]
             }
-            try:
-                response = requests.post(notify_url, json=notification_data)
-                response.raise_for_status()
-                logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", telegram_id)
-
-                # После успешного уведомления обновляем статус выплаты
-                mark_payout_as_notified(db, transaction_id)
-                return JSONResponse(status_code=200)
-            except requests.RequestException as e:
-                logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+            response = await send_request(notify_url, notification_data)
+            await mark_payout_as_notified(transaction_id)
+            return JSONResponse(status_code=200)
 
         else:
             # Неизвестное событие
             print(f"Неизвестное событие: {event}")
-        db.commit()
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
 
 @app.post("/bind_card")
 @exception_handler
-async def bind_card(request: Request, db: Session = Depends(get_db)):
+async def bind_card(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -293,24 +256,14 @@ async def bind_card(request: Request, db: Session = Depends(get_db)):
         return {"status": "error", "message": check["message"]}
 
     # Находим пользователя
-    user = get_user_by_telegram_id(db, telegram_id)
+    user = await get_user_by_telegram_id(telegram_id)
 
     if not(user.paid):
         return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
 
     unique_str = f"{telegram_id}{int(time() * 1000)}"
 
-    binding = db.query(Binding).filter_by(telegram_id=telegram_id).first()
-    if binding:
-        db.delete(binding)
-        db.commit()
-
-    new_binding = Binding(
-        telegram_id=telegram_id,
-        unique_str=unique_str
-    )
-    db.add(new_binding)
-    db.commit()
+    await create_binding_and_delete_if_exists(telegram_id, unique_str)
 
     url = f"{SERVER_URL}/bind_card_page/{unique_str}"
 
@@ -332,20 +285,19 @@ def render_bind_card_page(unique_str: str):
     
 @app.post("/bind_success")
 @exception_handler
-async def bind_success(request: Request, db: Session = Depends(get_db)):
+async def bind_success(request: Request):
     verify_secret_code(request)
     data = await request.json()
     card_synonym = data.get("card_synonym")
     unique_str = data.get("unique_str")
 
-    binding = db.query(Binding).filter(unique_str == unique_str).first()
+    binding = await get_binding_by_unique_str(unique_str)
     if not binding:
         raise HTTPException(status_code=404, detail="Запрос на привязку карты не был осуществлён")
 
-    user = get_user_by_telegram_id(db, binding.telegram_id)
+    user = await get_user_by_telegram_id(binding.telegram_id)
     logging.info(f"card_synonym {card_synonym}")
     user.card_synonym = card_synonym
-    db.commit()
 
     # Уведомление пользователя
     notify_url = f"{MAHIN_URL}/notify_user"
@@ -353,18 +305,12 @@ async def bind_success(request: Request, db: Session = Depends(get_db)):
         "telegram_id": binding.telegram_id,
         "message": "Поздравляем! Ваша карта успешно привязана! 🎉"
     }
-    try:
-        response = requests.post(notify_url, json=notification_data)
-        response.raise_for_status()
-        logging.info("Пользователь с Telegram ID %s успешно уведомлен через бота.", binding.telegram_id)
-
-    except requests.RequestException as e:
-        logging.error("Ошибка при отправке уведомления пользователю через бота: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to notify user through bot")
+    response = await send_request(notify_url, notification_data)
+    return JSONResponse(status_code=200)
 
 @app.get("/getMyMoneyPage/")
 @exception_handler
-async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
+async def getMyMoneyPage(telegram_id: str):
     logging.info("💰 моней")
     logging.info(f"equals")
     template = template_env.get_template("getMyMoney.html")
@@ -380,7 +326,7 @@ async def getMyMoneyPage(telegram_id: int, db: Session = Depends(get_db)):
         
 @app.post("/getMyMoney")
 @exception_handler
-async def getMyMoney(request: Request, db: Session = Depends(get_db)):
+async def getMyMoney(request: Request):
     logging.info(f"внутри поста")
 
     verify_secret_code(request)
@@ -391,10 +337,10 @@ async def getMyMoney(request: Request, db: Session = Depends(get_db)):
 
     if secret_key == SECRET_KEY:
         logging.info("💰 Выплата пользователю")
-        user = get_user_by_telegram_id(db, "999")
+        user = await get_user_by_telegram_id("999")
         logging.info(f"Найден пользователь: {user}")
         setup_payout_config()
-        payout = YooPay.create({
+        payout = Payment.create({
             "amount": {
                 "value": f"{amount}",
                 "currency": "RUB"

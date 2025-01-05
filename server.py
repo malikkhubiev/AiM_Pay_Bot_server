@@ -5,7 +5,7 @@ from config import (
 )
 import uvicorn
 from database import (
-    get_db,
+    database,
     delete_expired_records,
 )
 from api.base import *
@@ -27,8 +27,10 @@ scheduler.add_job(delete_expired_records, 'interval', hours=24)
 # Database session dependency
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
-    request.state.db = get_db()
+    await database.connect()
+    request.state.db = database
     response = await call_next(request)
+    await database.disconnect()
     return response
 
 @app.api_route("/", methods=["GET", "HEAD"])

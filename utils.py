@@ -1,11 +1,11 @@
 from responses import *
 from fastapi import HTTPException, Request, status
 import ipaddress
-from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from functools import wraps
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
+import httpx
 import logging
 from config import (
     YOOKASSA_SECRET_KEY,
@@ -18,7 +18,7 @@ from config import (
 from yookassa import Configuration
 import logging
 from database import (
-    User
+    get_user
 )
 
 load_dotenv()
@@ -107,12 +107,40 @@ def check_parameters(**kwargs):
         return {"result": False, "message": f"Не указаны следующие необходимые параметры: {', '.join(missing_params)}"}
     return {"result": True}
 
-def get_user_by_telegram_id(db: Session, telegram_id: str, to_throw: bool = True):
+async def get_user_by_telegram_id(telegram_id: str, to_throw: bool = True):
     logging.info(f"in get_user_by_telegram_id telegram_id = {telegram_id}")
-    user = db.query(User).filter_by(telegram_id=telegram_id).first()
+    user = await get_user(telegram_id)
     if not(user):
         if to_throw:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            raise HTTPException(status_code=404, message="Пользователь не найден")
         else:
             return None
     return user
+
+async def send_request(url: str, data: dict, method: str = "POST") -> dict:
+    """Универсальная функция для отправки HTTP-запросов с обработкой ошибок."""
+    try:
+        async with httpx.AsyncClient() as client:
+            if method.upper() == "POST":
+                response = await client.post(url, json=data)
+            elif method.upper() == "GET":
+                response = await client.get(url, params=data)
+            else:
+                raise ValueError(f"Unsupported method: {method}")
+
+            response.raise_for_status()  # Проверка на ошибки HTTP
+
+            logging.info(f"Запрос на {url} успешно отправлен.")
+            return response.json()  # Возвращаем данные ответа в формате JSON
+
+    except httpx.RequestError as e:
+        logging.error(f"Ошибка при отправке запроса: {e}")
+        raise HTTPException(status_code=500, message="Request failed")
+
+    except httpx.HTTPStatusError as e:
+        logging.error(f"Ошибка HTTP при отправке запроса: {e}")
+        raise HTTPException(status_code=500, message=f"HTTP error: {e.response.status_code}")
+
+    except Exception as e:
+        logging.error(f"Неизвестная ошибка: {e}")
+        raise HTTPException(status_code=500, message="An unknown error occurred")

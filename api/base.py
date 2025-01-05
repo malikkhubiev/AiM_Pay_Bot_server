@@ -1,35 +1,42 @@
 from loader import *
 from utils import *
+import os
+from databases import Database
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 from config import (
-    BOT_USERNAME
+    BOT_USERNAME,
+    DATABASE_URL
 )
 import logging
 from database import (
-    User,
-    Referral,
-    Payout,
-    get_db,
     get_temp_user,
+    save_invite_link_db,
+    create_user,
+    create_referral,
     update_temp_user,
-    create_temp_user
+    get_referred_user,
+    create_temp_user,
+    get_all_paid_money,
+    get_referral_count,
+    get_paid_count,
+    get_referrer,
+    get_all_referred
 )
 
 @app.post("/check_user")
 @exception_handler
-async def check_user(request: Request, db: Session = Depends(get_db)):
+async def check_user(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
     to_throw = data.get("to_throw", True)
-    user = get_user_by_telegram_id(db, telegram_id, to_throw)
+    user = await get_user_by_telegram_id(telegram_id, to_throw)
     return {"status": "success", "user": user}
 
 @app.post("/save_invite_link")
 @exception_handler
-async def save_invite_link(request: Request, db: Session = Depends(get_db)):
+async def save_invite_link(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -43,15 +50,12 @@ async def save_invite_link(request: Request, db: Session = Depends(get_db)):
         return {"status": "error", "message": check["message"]}
 
     logging.info(f"checknuli")
-    user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
-    logging.info(f"user = {user}")
-    user.invite_link = invite_link
-    db.commit()
+    await save_invite_link_db(telegram_id, invite_link)
     return {"status": "success"}
 
 @app.post("/start")
 @exception_handler
-async def start(request: Request, db: Session = Depends(get_db)):
+async def start(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -76,7 +80,7 @@ async def start(request: Request, db: Session = Depends(get_db)):
         "to_show": None,
         "type": None
     }
-    user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user есть {user}")
     if user:
         return_data["response_message"] = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
@@ -90,38 +94,34 @@ async def start(request: Request, db: Session = Depends(get_db)):
         return_data["type"] = "temp_user"
         logging.info(f"Юзера нет")
         return_data["response_message"] = f"Добро пожаловать, {username}!"
-        temp_user = get_temp_user(telegram_id=telegram_id)
+        temp_user = await get_temp_user(telegram_id=telegram_id)
         if temp_user:
             logging.info(f"Есть только временный юзер. Обновляем")
-            update_temp_user(telegram_id=telegram_id, username=username)
+            await update_temp_user(telegram_id=telegram_id, username=username)
         else:
             logging.info(f"Делаем временный юзер")
             logging.info(f"telegram_id {telegram_id}")
             logging.info(f"username {username}")
             logging.info(f"referrer_id {referrer_id}")
-            create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
+            await create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
     if referrer_id and referrer_id != telegram_id:
         logging.info(f"Есть реферрал и сам себя не привёл")
-        existing_referrer = db.query(Referral).filter_by(referred_id=telegram_id).first()
+        existing_referrer = await get_referrer(telegram_id)
         if existing_referrer:
             logging.info(f"Реферал уже был")
             existing_referrer.referrer_id = referrer_id
         else:
             logging.info(f"Реферала ещё не было")
-            referrer_user = get_user_by_telegram_id(db, referrer_id, to_throw=False)
+            referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
             if referrer_user and referrer_user.paid:
                 logging.info(f"Пользователь который привёл есть и он оплатил курс")
-                new_referrer = Referral(
-                    referrer_id=referrer_id,
-                    referred_id=telegram_id
-                )
+                await create_referral(telegram_id, referrer_id)
                 logging.info(f"Сделали реферала в бд")
-                db.add(new_referrer) 
     return JSONResponse(return_data)
 
 @app.post("/getting_started")
 @exception_handler
-async def getting_started(request: Request, db: Session = Depends(get_db)):
+async def getting_started(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -134,10 +134,10 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         return {"status": "error", "message": check["message"]}
 
     logging.info(f"checknuli")
-    user = get_user_by_telegram_id(db, telegram_id, to_throw=False)
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user = {user}")
 
-    temp_user = get_temp_user(telegram_id)
+    temp_user = await get_temp_user(telegram_id)
     logging.info(f"temp_user {temp_user}")
     if temp_user:
         logging.info(f"Есть временный юзер")
@@ -145,25 +145,16 @@ async def getting_started(request: Request, db: Session = Depends(get_db)):
         referrer_id = temp_user.referrer_id
         logging.info(f"У него есть username {username}")
         logging.info(f"У него есть referrer_id {referrer_id}")
-        new_user = User(
-            telegram_id=telegram_id,
-            username=username,
-        )
-        new_referrer = Referral(
-            referrer_id=referrer_id,
-            referred_id=telegram_id
-        )
-        db.add(new_user)
-        db.add(new_referrer)
+        await create_user(telegram_id, username)
+        await create_referral(telegram_id, referrer_id)
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
     
-        db.commit()  # Фиксируем изменения для всех операций
         return JSONResponse({"status": "success"})
 
 @app.post("/generate_overview_report")
 @exception_handler
-async def generate_overview_report(request: Request, db: Session = Depends(get_db)):
+async def generate_overview_report(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -173,34 +164,12 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
         return {"status": "error", "message": check["message"]}
     
     # Находим пользователя
-    user = get_user_by_telegram_id(db, telegram_id)
-
-    # Вывод логов, потом убрать
-    r = db.query(Referral).filter_by(referrer_id=user.telegram_id).first()
-
-    if r is None:
-        logging.info(f"Реферал для пользователя с ID {user.telegram_id} не найден.")
-    else:
-        logging.info(f"referrer_id {r.referrer_id}")
-        logging.info(f"referred_id {r.referred_id}")
-        
-        referred_user = get_user_by_telegram_id(db, r.referred_id)
-        if referred_user:
-            logging.info(f"user referred {referred_user.username}")
-        else:
-            logging.info(f"Пользователь с ID {r.referred_id} не найден.")
+    user = await get_user_by_telegram_id(telegram_id)
 
     # Calculate total paid money
-    all_paid_money = db.query(func.sum(Payout.amount))\
-        .filter(and_(Payout.telegram_id == telegram_id))\
-        .scalar() or 0.0
-
-    referral_count = db.query(func.count(Referral.id))\
-        .filter(Referral.referrer_id == user.telegram_id).scalar()
-
-    paid_count = db.query(func.count(Referral.id))\
-        .join(User, Referral.referred_id == User.telegram_id)\
-        .filter(Referral.referrer_id == user.telegram_id, User.paid == True).scalar()
+    all_paid_money = await get_all_paid_money(telegram_id)
+    referral_count = await get_referral_count(telegram_id)
+    paid_count = await get_paid_count(telegram_id)
 
     paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
 
@@ -220,7 +189,7 @@ async def generate_overview_report(request: Request, db: Session = Depends(get_d
 
 @app.post("/generate_clients_report")
 @exception_handler
-async def generate_clients_report(request: Request, db: Session = Depends(get_db)):
+async def generate_clients_report(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -232,24 +201,24 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
     
     logging.info(f"Чекнули")
     # Находим пользователя
-    user = get_user_by_telegram_id(db, telegram_id)
+    user = await get_user_by_telegram_id(telegram_id)
     logging.info(f"user есть")
 
-    referral_details = db.query(Referral).filter_by(referrer_id=user.telegram_id).all()
+    referred_details = await get_all_referred(user.telegram_id)
 
     logging.info(f"detales есть")
-    logging.info(f"{referral_details} referral_details")
+    logging.info(f"{referred_details} referred_details")
     # Extract referral data and calculate statistics
     invited_list = []
     logging.info(f"invited_list {invited_list}")
 
-    if referral_details:
-        logging.info(f" referral {referral_details}")
-        for referral in referral_details:  # referral_details — список объектов Referral
+    if referred_details:
+        logging.info(f" referral {referred_details}")
+        for referral in referred_details:
             logging.info(f"referral есть и вот он: {referral}")
             attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
             logging.info(f"Referral attributes: {attributes}")
-            referred_user = db.query(User).filter_by(telegram_id=referral.referred_id).first()
+            referred_user = await get_referred_user(referral.referred_id)
             logging.info(f"referred_user {referred_user}")
             if referred_user:
                 logging.info(f"referred_user точно есть")
@@ -275,7 +244,7 @@ async def generate_clients_report(request: Request, db: Session = Depends(get_db
 
 @app.post("/get_referral_link")
 @exception_handler
-async def get_referral_link(request: Request, db: Session = Depends(get_db)):
+async def get_referral_link(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -284,7 +253,7 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
     if not(check["result"]):
         return {"status": "error", "message": check["message"]}
     
-    user = get_user_by_telegram_id(db, telegram_id)
+    user = await get_user_by_telegram_id(telegram_id)
     if not(user.paid):
         return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
     if not(user.card_synonym):
@@ -292,3 +261,20 @@ async def get_referral_link(request: Request, db: Session = Depends(get_db)):
     
     referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
     return {"status": "success", "referral_link": referral_link}
+
+@app.post("/get_invite_link")
+@exception_handler
+async def get_invite_link(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id)
+    if not(user.invite_link):
+        return {"status": "error", "message": "Вы не можете получить пригласительную ссылку, не оплатив курс"}
+    
+    return {"status": "success", "invite_link": user.invite_link}
