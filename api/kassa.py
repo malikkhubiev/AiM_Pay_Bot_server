@@ -130,7 +130,7 @@ async def payment_notification(request: Request):
                 logging.info("Ошибка при добавлении платежа в базу данных")
             user.paid = True
             logging.info(f"Ищём реферрала")
-            referrer = get_referrer(user_telegram_id)
+            referrer = await get_referrer(user_telegram_id)
             logging.info(f"referrer {referrer}")
             if referrer:
                 logging.info(f"referrer {referrer} есть")
