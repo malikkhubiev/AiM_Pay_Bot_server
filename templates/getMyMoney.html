@@ -7,20 +7,29 @@
     <title>Bind Card</title>
 </head>
 <body>
-    <form>
+    <form id="payout-form">
+        <label for="secret_key">Secret Key:</label>
         <input id="secret_key" name="secret_key" type="text" required>
+        <label for="amount">Amount:</label>
         <input id="amount" name="amount" type="text" required>
+        <button type="submit" id="submit-btn">Submit</button>
     </form>
-    <div id="payout-form"></div>
+    <div id="payout-form-container"></div>
+
     <script>
-        const secret_key = document.getElementById("secret_key")
-        const amount = document.getElementById("amount")
+        // Получение значений формы
+        const secret_key = document.getElementById("secret_key");
+        const amount = document.getElementById("amount");
+
+        // Инициализация виджета
         const payoutsData = new window.PayoutsData({
             type: 'payout',
-            account_id: '{{ account_id }}',
+            account_id: '{{ account_id }}',  // Убедитесь, что этот тег корректно заменяется сервером
             success_callback: function(data) {
                 console.log("Success:", data);
-                console.log("Success:", data.payout_token);
+                console.log("Payout Token:", data.payout_token);
+
+                // Отправка данных на сервер
                 fetch('/getMyMoney', {
                     method: "POST",
                     headers: {
@@ -31,9 +40,13 @@
                         "secret_key": secret_key.value,
                         "amount": amount.value
                     })
-                }).then(response => response.json())
+                })
+                .then(response => response.json())
                 .then(result => alert(result["message"]))
-                .catch(error => console.error(error))
+                .catch(error => {
+                    console.error("Error during fetch:", error);
+                    alert("Произошла ошибка при обработке данных.");
+                });
             },
             error_callback: function(error) {
                 console.log("Error:", error);
@@ -47,8 +60,23 @@
             }
         });
 
-        payoutsData.render('payout-form').then(() => {
+        // Загрузка и рендеринг формы
+        payoutsData.render('payout-form-container').then(() => {
             console.log("Форма загружена");
+        });
+
+        // Обработка отправки формы
+        document.getElementById("submit-btn").addEventListener("click", function(event) {
+            event.preventDefault();
+
+            // Валидация данных формы перед отправкой
+            if (!secret_key.value || !amount.value) {
+                alert("Пожалуйста, заполните все поля.");
+                return;
+            }
+
+            // Отправка формы (если необходимо)
+            payoutsData.render('payout-form-container');
         });
     </script>
 </body>
