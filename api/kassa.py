@@ -123,6 +123,11 @@ async def payment_notification(request: Request):
             logging.info(f"Такой платёж мы видим в первый раз и это хорошо. Делаем платёж")
             await create_payment_db(user_telegram_id, payment_id)
             await update_user_paid(user_telegram_id)
+
+            user = await get_user(user_telegram_id)
+            logging.info(f"user {user}")
+            logging.info(f"user.paid {user.paid}")
+
             logging.info(f"Ищём реферрала")
             referrer = await get_referrer(user_telegram_id)
             logging.info(f"referrer {referrer}")
@@ -148,7 +153,7 @@ async def payment_notification(request: Request):
             send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
             await send_request(send_invite_link_url, notification_data)
             await mark_payout_as_notified(payment_id)
-            return JSONResponse(status_code=200)
+            return JSONResponse({"status": "success"})
         
     if status == "canceled" and user_telegram_id:
         logging.info(f"status {status}, и мы внутри")
@@ -163,7 +168,7 @@ async def payment_notification(request: Request):
         }
         await send_request(notify_url, notification_data)
         await mark_payout_as_notified(payment_id)
-        return JSONResponse(status_code=200)
+        return JSONResponse({"status": "success"})
         
     raise HTTPException(status_code=400, detail="Payment not processed")
 
@@ -180,7 +185,7 @@ async def payout_result(request: Request):
     metadata = object_data.get("metadata", {})
 
     if metadata.get("author") == "me":
-        return JSONResponse(status_code=200)
+        return JSONResponse({"status": "success"})
     else:
         logging.info(data)
 
@@ -208,9 +213,9 @@ async def payout_result(request: Request):
                 "telegram_id": telegram_id,
                 "message": f"Выплата на сумму {amount} произведена успешно"
             }
-            response = await send_request(notify_url, notification_data)
+            await send_request(notify_url, notification_data)
             await mark_payout_as_notified(transaction_id)
-            return JSONResponse(status_code=200)
+            return JSONResponse({"status": "success"})
         
         elif event == "payout.canceled" and telegram_id:
             # Выплата отменена
@@ -227,7 +232,7 @@ async def payout_result(request: Request):
             }
             response = await send_request(notify_url, notification_data)
             await mark_payout_as_notified(transaction_id)
-            return JSONResponse(status_code=200)
+            return JSONResponse({"status": "success"})
 
         else:
             # Неизвестное событие
@@ -299,8 +304,8 @@ async def bind_success(request: Request):
         "telegram_id": binding.telegram_id,
         "message": "Поздравляем! Ваша карта успешно привязана! 🎉"
     }
-    response = await send_request(notify_url, notification_data)
-    return JSONResponse(status_code=200)
+    await send_request(notify_url, notification_data)
+    return JSONResponse({"status": "success"})
 
 @app.get("/getMyMoneyPage/")
 @exception_handler
