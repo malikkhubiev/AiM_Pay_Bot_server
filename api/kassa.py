@@ -14,6 +14,7 @@ from config import (
 from jinja2 import Environment, FileSystemLoader
 import logging
 from database import (
+    update_user_card_synonym,
     get_binding_by_unique_str,
     create_binding_and_delete_if_exists,
     get_payment,
@@ -294,9 +295,9 @@ async def bind_success(request: Request):
     if not binding:
         raise HTTPException(status_code=404, detail="Запрос на привязку карты не был осуществлён")
 
-    user = await get_user_by_telegram_id(binding.telegram_id)
+    await get_user_by_telegram_id(binding.telegram_id)
     logging.info(f"card_synonym {card_synonym}")
-    user.card_synonym = card_synonym
+    await update_user_card_synonym(binding.telegram_id, card_synonym)
 
     # Уведомление пользователя
     notify_url = f"{MAHIN_URL}/notify_user"
