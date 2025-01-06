@@ -353,4 +353,6 @@ async def getMyMoney(request: Request):
 
 @app.get("/success")
 async def success_payment(request: Request):
-    return HTMLResponse("<h1 style='text-align: center'>Операция прошла успешно. Вы можете возвращаться в бота</h1>")
+    template = template_env.get_template("success.html")
+    rendered_html = template.render()
+    return HTMLResponse(content=rendered_html)
