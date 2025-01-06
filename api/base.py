@@ -213,21 +213,24 @@ async def generate_clients_report(request: Request):
     logging.info(f"invited_list {invited_list}")
 
     if referred_details:
-        logging.info(f" referral {referred_details}")
+        logging.info("Referral details found.")  # Логируем только факт наличия рефералов
         for referral in referred_details:
-            logging.info(f"referral есть и вот он: {referral}")
+            logging.debug(f"Processing referral: {referral}")  # Логируем только сам процесс обработки
             attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
-            logging.info(f"Referral attributes: {attributes}")
+            logging.debug(f"Referral attributes: {attributes}")  # Логируем атрибуты реферала, если это нужно
             referred_user = await get_referred_user(referral.referred_id)
-            logging.info(f"referred_user {referred_user}")
+            
             if referred_user:
-                logging.info(f"referred_user точно есть")
+                logging.info(f"Referred user found: {referred_user.telegram_id}")  # Информация о пользователе, если он найден
                 invited_list.append({
                     "telegram_id": referred_user.telegram_id,
                     "username": referred_user.username,
                     "paid": referred_user.paid
                 })
-                logging.info(f"invited_list {invited_list}")
+                logging.debug(f"Invited list updated: {invited_list}")  # Логируем только обновление списка, если нужно
+            else:
+                logging.warning(f"Referred user with ID {referral.referred_id} not found.")  # Логируем предупреждение, если пользователь не найден
+
 
     logging.info(f"invited_list {invited_list} когда вышли")
 
