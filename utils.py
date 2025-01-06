@@ -25,6 +25,7 @@ load_dotenv()
 
 # Настроим логирование
 logging.basicConfig(level=logging.DEBUG)
+logging.getLogger('aiosqlite').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 def exception_handler(func):
