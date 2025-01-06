@@ -146,7 +146,7 @@ async def payment_notification(request: Request):
                         "payout_token": f"{referrer_user.card_synonym}",
                         "description": "Выплата рефералу",
                         "metadata": {
-                            "telegramId": f"{referrer.telegram_id}"
+                            "telegramId": f"{referrer_user.telegram_id}"
                         }
                     })
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
