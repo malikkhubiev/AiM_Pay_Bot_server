@@ -1,12 +1,10 @@
 from loader import *
 from utils import *
-import os
 from databases import Database
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from config import (
     BOT_USERNAME,
-    DATABASE_URL
 )
 import logging
 from database import (
