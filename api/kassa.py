@@ -1,11 +1,8 @@
 from loader import *
 from utils import *
 from fastapi.responses import JSONResponse, HTMLResponse
-from sqlalchemy.orm import Session
 from time import time
-from sqlalchemy.exc import IntegrityError
 from yookassa import Payout, Settings, Payment
-import httpx
 from config import (
     COURSE_AMOUNT,
     REFERRAL_AMOUNT,
