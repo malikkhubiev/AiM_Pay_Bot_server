@@ -20,6 +20,7 @@ from database import (
     create_payout,
     create_payment_db,
     mark_payout_as_notified,
+    update_user_paid,
     get_referrer
 )
 
@@ -121,7 +122,7 @@ async def payment_notification(request: Request):
         if not(payment):
             logging.info(f"Такой платёж мы видим в первый раз и это хорошо. Делаем платёж")
             await create_payment_db(user_telegram_id, payment_id)
-            user.paid = True
+            await update_user_paid(user_telegram_id)
             logging.info(f"Ищём реферрала")
             referrer = await get_referrer(user_telegram_id)
             logging.info(f"referrer {referrer}")

@@ -155,6 +155,12 @@ async def save_invite_link_db(telegram_id: str, invite_link: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
+async def update_user_paid(telegram_id: str):
+    update_data = {'paid': True}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
 async def delete_expired_records():
     expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
     query = select(TempUser).filter(TempUser.created_at < expiration_date)
