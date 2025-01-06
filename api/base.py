@@ -256,8 +256,6 @@ async def get_referral_link(request: Request):
     user = await get_user_by_telegram_id(telegram_id)
     logging.info(f"user {user}")
     logging.info(f"paid {user.paid}")
-    if not(user.paid):
-        return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
     if not(user.card_synonym):
         return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не привязав карту"}
     
