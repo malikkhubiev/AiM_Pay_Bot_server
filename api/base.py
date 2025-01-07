@@ -135,6 +135,9 @@ async def getting_started(request: Request):
     user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user = {user}")
 
+    if user:
+        return {"status": "error", "message": "Вы уже зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
+
     temp_user = await get_temp_user(telegram_id)
     logging.info(f"temp_user {temp_user}")
     if temp_user:
@@ -163,6 +166,9 @@ async def generate_overview_report(request: Request):
     
     # Находим пользователя
     user = await get_user_by_telegram_id(telegram_id)
+
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
 
     # Calculate total paid money
     all_paid_money = await get_all_paid_money(telegram_id)
@@ -200,6 +206,10 @@ async def generate_clients_report(request: Request):
     logging.info(f"Чекнули")
     # Находим пользователя
     user = await get_user_by_telegram_id(telegram_id)
+    
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
+
     logging.info(f"user есть")
 
     referred_details = await get_all_referred(user.telegram_id)
@@ -257,6 +267,8 @@ async def get_referral_link(request: Request):
     user = await get_user_by_telegram_id(telegram_id)
     logging.info(f"user {user}")
     logging.info(f"paid {user.paid}")
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
     if not(user.card_synonym):
         return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не привязав карту"}
     
@@ -275,7 +287,10 @@ async def get_invite_link(request: Request):
         return {"status": "error", "message": check["message"]}
     
     user = await get_user_by_telegram_id(telegram_id)
-    if not(user.invite_link):
+
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
+    if not(user.paid):
         return {"status": "error", "message": "Вы не можете получить пригласительную ссылку, не оплатив курс"}
     
     return {"status": "success", "invite_link": user.invite_link}

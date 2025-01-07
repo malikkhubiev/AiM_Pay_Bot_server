@@ -1,5 +1,6 @@
 from loader import *
 from utils import *
+import uuid
 from fastapi.responses import JSONResponse, HTMLResponse
 from time import time
 from yookassa import Payout, Settings, Payment
@@ -22,7 +23,8 @@ from database import (
     create_payment_db,
     mark_payout_as_notified,
     update_user_paid,
-    get_referrer
+    get_referrer,
+    update_payment_status
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -43,7 +45,30 @@ async def create_payment(request: Request):
         return {"status": "error", "message": check["message"]}
     
     logging.info(f"чекнули и делаем платёж")
+
+    user = await get_user_by_telegram_id(telegram_id)
     
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
+    if user.paid:
+        return {"status": "error", "message": "Вы уже оплатили курс и являетесь его полноценым участником. Введите команду /start, затем получите пригласительную ссылку, если вдруг потеряли группу среди чатов"}
+
+    existing_payment = await get_payment(telegram_id)
+
+    idempotence_key = ""
+
+    if not(existing_payment):
+        idempotence_key = str(uuid.uuid4())
+
+        payment = await create_payment_db(
+            telegram_id=telegram_id,
+            payment_id=None,
+            idempotence_key=idempotence_key,
+            status="pending"
+        )
+    else:
+        idempotence_key = existing_payment.idempotence_key
+
     payment_data = {
         "amount": {
             "value": f"{amount:.2f}",
@@ -63,7 +88,7 @@ async def create_payment(request: Request):
     try:
         logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
         setup_payment_config()
-        payment = Payment.create(payment_data)  # Создание платежа через yookassa SDK
+        payment = Payment.create(payment_data, idempotence_key=idempotence_key)  # Создание платежа через yookassa SDK
         confirmation_url = payment.confirmation.confirmation_url
         if confirmation_url:
             logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
@@ -124,6 +149,7 @@ async def payment_notification(request: Request):
             logging.info(f"Такой платёж мы видим в первый раз и это хорошо. Делаем платёж")
             await create_payment_db(user_telegram_id, payment_id)
             await update_user_paid(user_telegram_id)
+            await update_payment_status(user_telegram_id)
 
             user = await get_user(user_telegram_id)
             logging.info(f"user {user}")
@@ -155,7 +181,9 @@ async def payment_notification(request: Request):
             await send_request(send_invite_link_url, notification_data)
             await mark_payout_as_notified(payment_id)
             return JSONResponse({"status": "success"})
-        
+    
+        return JSONResponse({"status": "success"})
+    
     if status == "canceled" and user_telegram_id:
         logging.info(f"status {status}, и мы внутри")
         cancellation_details = payment_data.get("cancellation_details")
@@ -258,6 +286,8 @@ async def bind_card(request: Request):
     # Находим пользователя
     user = await get_user_by_telegram_id(telegram_id)
 
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
     if not(user.paid):
         return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
 

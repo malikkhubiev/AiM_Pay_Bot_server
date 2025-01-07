@@ -41,7 +41,9 @@ class Payment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(String, ForeignKey('users.telegram_id'), nullable=False)  # Ссылка на пользователя
-    transaction_id = Column(String, nullable=False, unique=True)  # Идентификатор транзакции
+    transaction_id = Column(String, default=None)  # Идентификатор транзакции
+    idempotence_key = Column(String, nullable=False, unique=True)
+    status = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
 
     user = relationship("User", back_populates="payments")  # Связь с пользователем
@@ -161,6 +163,12 @@ async def update_user_paid(telegram_id: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
+async def update_payment_status(telegram_id: str):
+    update_data = {'status': "success"}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
 async def update_user_card_synonym(telegram_id: str, card_synonym: str):
     update_data = {'card_synonym': card_synonym}
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
@@ -198,8 +206,18 @@ async def get_paid_count(telegram_id: str):
         result = await database.fetch_one(query)
         return result[0] or 0
 
-async def create_payment_db(telegram_id: str, payment_id: str):
-    query = Payment.__table__.insert().values(transaction_id=payment_id, telegram_id=telegram_id)
+async def create_payment_db(
+        telegram_id: str,
+        payment_id: str,
+        idempotence_key: str,
+        status: str
+    ):
+    query = Payment.__table__.insert().values(
+        transaction_id=payment_id,
+        telegram_id=telegram_id,
+        idempotence_key=idempotence_key,
+        status=status
+    )
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(query)
 
