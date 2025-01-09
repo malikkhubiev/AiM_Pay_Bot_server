@@ -186,6 +186,8 @@ async def generate_overview_report(request: Request):
         "total_payout": all_paid_money
     }
 
+    logging.info(report)
+
     return JSONResponse({
         "status": "success",
         "report": report
