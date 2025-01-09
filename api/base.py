@@ -12,6 +12,7 @@ from database import (
     save_invite_link_db,
     create_user,
     create_referral,
+    get_pending_referrer,
     update_temp_user,
     get_referred_user,
     create_temp_user,
@@ -105,15 +106,15 @@ async def start(request: Request):
             await create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
     if (referrer_id and referrer_id != telegram_id) and (temp_user or not(user.paid)):
         logging.info(f"Есть реферрал и сам себя не привёл")
-        existing_referrer = await get_referrer(telegram_id)
+        existing_referrer = await get_pending_referrer(telegram_id)
         if existing_referrer:
             logging.info(f"Реферал уже был")
-            existing_referrer.referrer_id = referrer_id
+            await update_referrer(telegram_id, referrer_id)
         else:
             logging.info(f"Реферала ещё не было")
             referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
-            if referrer_user and referrer_user.paid:
-                logging.info(f"Пользователь который привёл есть и он оплатил курс")
+            if referrer_user:
+                logging.info(f"Пользователь который привёл есть")
                 await create_referral(telegram_id, referrer_id)
                 logging.info(f"Сделали реферала в бд")
     return JSONResponse(return_data)
@@ -148,8 +149,6 @@ async def getting_started(request: Request):
         logging.info(f"У него есть username {username}")
         logging.info(f"У него есть referrer_id {referrer_id}")
         await create_user(telegram_id, username)
-        if referrer_id:
-            await create_referral(telegram_id, referrer_id)
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
     
