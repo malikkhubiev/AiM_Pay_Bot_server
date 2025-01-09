@@ -16,15 +16,14 @@ from jinja2 import Environment, FileSystemLoader
 import logging
 from database import (
     update_user_card_synonym,
+    update_payment_done,
     get_binding_by_unique_str,
     create_binding_and_delete_if_exists,
     get_pending_payment,
     create_payout,
     create_payment_db,
     mark_payout_as_notified,
-    update_user_paid,
     get_referrer,
-    update_payment_status
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -147,8 +146,7 @@ async def payment_notification(request: Request):
 
         if payment:
             logging.info(f"Есть платёж в режиме ожидания. Завершаем операцию")
-            await update_user_paid(user_telegram_id)
-            await update_payment_status(user_telegram_id)
+            await update_payment_done(user_telegram_id, payment_id)
 
             user = await get_user(user_telegram_id)
             logging.info(f"user {user}")

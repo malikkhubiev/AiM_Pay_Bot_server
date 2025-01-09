@@ -157,17 +157,14 @@ async def save_invite_link_db(telegram_id: str, invite_link: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
-async def update_user_paid(telegram_id: str):
-    update_data = {'paid': True}
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+async def update_payment_done(telegram_id: str, transaction_id: str):
+    user_update_data = {'paid': True}
+    user_update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(user_update_data)
+    payment_update_data = {"status": "success", "transaction_id": transaction_id}
+    payment_update_query = Payment.__table__.update().where(Payment.telegram_id == telegram_id).values(payment_update_data)
     async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
-async def update_payment_status(telegram_id: str):
-    update_data = {'status': "success"}
-    update_query = Payment.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
+        await database.execute(user_update_query)
+        await database.execute(payment_update_query)
 
 async def update_user_card_synonym(telegram_id: str, card_synonym: str):
     update_data = {'card_synonym': card_synonym}
