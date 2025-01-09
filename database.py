@@ -140,6 +140,12 @@ async def get_temp_user(telegram_id: str):
     async with database.transaction():  # Используем async with для транзакции
         return await database.fetch_one(query)
 
+async def update_referrer(telegram_id: str, referrer_id: str):
+    update_data = {'referrer_id': referrer_id}
+    update_query = Referral.__table__.update().where(Referral.referred_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
 async def update_temp_user(telegram_id: str, username: Optional[str] = None):
     query = select(TempUser).filter_by(telegram_id=telegram_id)
     async with database.transaction():  # Используем async with для транзакции
