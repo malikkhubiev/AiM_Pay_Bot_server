@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, func, and_, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
+from sqlalchemy import insert, create_engine, func, and_, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
