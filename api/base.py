@@ -160,42 +160,7 @@ async def getting_started(request: Request):
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
     
         return JSONResponse({"status": "success"})
-
-@app.post("/generate_overview_report")
-@exception_handler
-async def generate_overview_report(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
     
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
-    
-    # Находим пользователя
-    user = await get_user_by_telegram_id(telegram_id)
-
-    if not(user):
-        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
-
-    # Calculate total paid money
-    all_paid_money = await get_all_paid_money(telegram_id)
-    paid_count = await get_paid_count(telegram_id)
-
-    # Generate the report
-    report = {
-        "username": user.username,
-        "paid_count": paid_count,
-        "total_payout": all_paid_money
-    }
-
-    logging.info(report)
-
-    return JSONResponse({
-        "status": "success",
-        "report": report
-    })
-
 @app.post("/generate_clients_report")
 @exception_handler
 async def generate_clients_report(request: Request):
@@ -248,9 +213,15 @@ async def generate_clients_report(request: Request):
 
     logging.info(f"invited_list {invited_list} когда вышли")
 
+    # Calculate total paid money
+    all_paid_money = await get_all_paid_money(telegram_id)
+    paid_count = await get_paid_count(telegram_id)
+
     # Generate the report
     report = {
         "username": user.username,
+        "paid_count": paid_count,
+        "total_payout": all_paid_money,
         "invited_list": invited_list
     }
 
