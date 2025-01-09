@@ -88,7 +88,7 @@ async def create_payment(request: Request):
     try:
         logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
         setup_payment_config()
-        payment = Payment.create(payment_data, idempotence_key=idempotence_key)  # Создание платежа через yookassa SDK
+        payment = Payment.create(payment_data, idempotence_key)
         confirmation_url = payment.confirmation.confirmation_url
         if confirmation_url:
             logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
