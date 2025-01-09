@@ -110,7 +110,7 @@ async def start(request: Request):
     logging.info(f"user {user}")
     logging.info(f"not(user.paid) {not(user.paid)}")
     
-    if (referrer_id and referrer_id != telegram_id) and (temp_user or (user and not(user.paid))):
+    if referrer_id and referrer_id != telegram_id and (temp_user or (user and not(user.paid))):
         logging.info(f"Есть реферрал и сам себя не привёл")
         existing_referrer = await get_pending_referrer(telegram_id)
         if existing_referrer:
