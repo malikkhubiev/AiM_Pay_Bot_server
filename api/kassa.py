@@ -18,7 +18,7 @@ from database import (
     update_user_card_synonym,
     get_binding_by_unique_str,
     create_binding_and_delete_if_exists,
-    get_payment,
+    get_pending_payment,
     create_payout,
     create_payment_db,
     mark_payout_as_notified,
@@ -53,7 +53,7 @@ async def create_payment(request: Request):
     if user.paid:
         return {"status": "error", "message": "Вы уже оплатили курс и являетесь его полноценым участником. Введите команду /start, затем получите пригласительную ссылку, если вдруг потеряли группу среди чатов"}
 
-    existing_payment = await get_payment(telegram_id)
+    existing_payment = await get_pending_payment(telegram_id)
 
     idempotence_key = ""
 
@@ -139,14 +139,14 @@ async def payment_notification(request: Request):
         logging.info(f"status {status}, и мы внутри")
         user = await get_user_by_telegram_id(user_telegram_id)
         logging.info(f"юзера тоже получили {user}")
-        payment = await get_payment(user_telegram_id)
+        payment = await get_pending_payment(user_telegram_id)
         if payment:
             logging.info(f"payment {payment}")
         else:
             logging.info(f"payment нет")
 
-        if not(payment):
-            logging.info(f"Такой платёж мы видим в первый раз и это хорошо. Делаем платёж")
+        if payment:
+            logging.info(f"Есть платёж в режиме ожидания. Завершаем операцию")
             await create_payment_db(user_telegram_id, payment_id)
             await update_user_paid(user_telegram_id)
             await update_payment_status(user_telegram_id)

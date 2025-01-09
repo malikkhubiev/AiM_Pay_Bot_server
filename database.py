@@ -221,8 +221,8 @@ async def create_payment_db(
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(query)
 
-async def get_payment(telegram_id: str):
-    query = select(Payment).filter_by(telegram_id=telegram_id)
+async def get_pending_payment(telegram_id: str):
+    query = select(Payment).filter_by(telegram_id=telegram_id, status="pending")
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
 
