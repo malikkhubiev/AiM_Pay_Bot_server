@@ -108,7 +108,8 @@ async def start(request: Request):
     logging.info(f"referrer_id != telegram_id {referrer_id != telegram_id}")
     logging.info(f"temp_user {temp_user}")
     logging.info(f"user {user}")
-    logging.info(f"not(user.paid) {not(user.paid)}")
+    if user:
+        logging.info(f"not(user.paid) {not(user.paid)}")
     
     if referrer_id and referrer_id != telegram_id and (temp_user or (user and not(user.paid))):
         logging.info(f"Есть реферрал и сам себя не привёл")
