@@ -72,8 +72,6 @@ class Payout(Base):
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
-    referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига
-
     user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
     referral = relationship("Referral", back_populates="payout") # Не знаю нафига
 
@@ -198,19 +196,13 @@ async def delete_expired_records():
 
 async def get_all_paid_money(telegram_id: str):
     query = select(func.sum(Payout.amount)).filter(Payout.telegram_id == telegram_id)
-    async with database.transaction():  # Используем async with для транзакции
+    async with database.transaction():
         result = await database.fetch_one(query)
-        return result[0] or 0.0
-
-async def get_referral_count(telegram_id: str):
-    query = select(func.count(Referral.id)).filter(Referral.referrer_id == telegram_id)
-    async with database.transaction():  # Используем async with для транзакции
-        result = await database.fetch_one(query)
-        return result[0] or 0
+        return result[0] if result[0] is not None else 0.0
 
 async def get_paid_count(telegram_id: str):
     query = select(func.count(Referral.id)).join(User, Referral.referred_id == User.telegram_id)\
-        .filter(Referral.referrer_id == telegram_id, User.paid == True)
+        .filter(Referral.referrer_id == telegram_id, Referral.status=="success", User.paid == True)
     async with database.transaction():  # Используем async with для транзакции
         result = await database.fetch_one(query)
         return result[0] or 0
