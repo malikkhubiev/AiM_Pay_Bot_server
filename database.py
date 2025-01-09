@@ -124,7 +124,7 @@ async def get_referred_user(referred_id: int):
     return result
 
 async def create_referral(telegram_id: str, referrer_id: int):
-    query = Referral.__table__.insert().values(referrer_id=referrer_id, referred_id=telegram_id)
+    query = Referral.__table__.insert().values(referrer_id=referrer_id, referred_id=telegram_id, status="pending")
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(query)
 
