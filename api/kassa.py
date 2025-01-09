@@ -285,8 +285,6 @@ async def bind_card(request: Request):
 
     if not(user):
         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
-    if not(user.paid):
-        return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не оплатив курс"}
 
     unique_str = f"{telegram_id}{int(time() * 1000)}"
 
