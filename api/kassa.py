@@ -24,6 +24,7 @@ from database import (
     create_payment_db,
     mark_payout_as_notified,
     get_referrer,
+    update_referral_success
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -159,7 +160,8 @@ async def payment_notification(request: Request):
                 logging.info(f"referrer {referrer} есть")
                 referrer_user = await get_user_by_telegram_id(referrer.referrer_id, to_throw=False)
                 logging.info(f"referrer_user {referrer_user}")
-                if referrer_user and referrer_user.card_synonym:
+                if referrer_user:
+                    await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
                     # payout = Payout.create({
                     #     "amount": {
