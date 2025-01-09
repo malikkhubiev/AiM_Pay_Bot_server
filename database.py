@@ -97,7 +97,7 @@ async def get_user(telegram_id: str):
         return await database.fetch_one(query)
 
 async def get_all_referred(telegram_id: str):
-    query = select(Referral).filter_by(referrer_id=telegram_id)
+    query = select(Referral).filter_by(referrer_id=telegram_id, status="success")
     async with database.transaction():  # Используем async with для транзакции
         return await database.fetch_all(query)
 
