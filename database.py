@@ -137,9 +137,10 @@ async def mark_payout_as_notified(payout_id: int):
             await database.execute(update_query)
 
 async def create_temp_user(telegram_id: str, username: str, referrer_id: Optional[int] = None):
-    query = TempUser.__table__.insert().values(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
+    query = insert(TempUser).values(telegram_id=telegram_id, username=username, referrer_id=referrer_id).returning(TempUser)
     async with database.transaction():  # Используем async with для транзакции
-        await database.execute(query)
+        result = await database.fetch_one(query)  # Выполняем запрос и получаем одну запись
+        return result  # Возвращаем результат, который является созданной записью
 
 async def get_temp_user(telegram_id: str):
     query = select(TempUser).filter_by(telegram_id=telegram_id)
