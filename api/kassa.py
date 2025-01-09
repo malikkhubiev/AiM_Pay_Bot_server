@@ -163,17 +163,17 @@ async def payment_notification(request: Request):
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user and referrer_user.card_synonym:
                     logging.info(f"referrer_user есть")
-                    payout = Payout.create({
-                        "amount": {
-                            "value": f"{REFERRAL_AMOUNT}",
-                            "currency": "RUB"
-                        },
-                        "payout_token": f"{referrer_user.card_synonym}",
-                        "description": "Выплата рефералу",
-                        "metadata": {
-                            "telegramId": f"{referrer_user.telegram_id}"
-                        }
-                    })
+                    # payout = Payout.create({
+                    #     "amount": {
+                    #         "value": f"{REFERRAL_AMOUNT}",
+                    #         "currency": "RUB"
+                    #     },
+                    #     "payout_token": f"{referrer_user.card_synonym}",
+                    #     "description": "Выплата рефералу",
+                    #     "metadata": {
+                    #         "telegramId": f"{referrer_user.telegram_id}"
+                    #     }
+                    # })
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {"telegram_id": user_telegram_id}
             send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
