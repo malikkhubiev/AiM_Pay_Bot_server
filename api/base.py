@@ -80,6 +80,7 @@ async def start(request: Request):
     }
     user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user есть {user}")
+    temp_user = None
     if user:
         return_data["response_message"] = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
         return_data["type"] = "user"
@@ -102,7 +103,7 @@ async def start(request: Request):
             logging.info(f"username {username}")
             logging.info(f"referrer_id {referrer_id}")
             await create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
-    if referrer_id and referrer_id != telegram_id:
+    if (referrer_id and referrer_id != telegram_id) and (temp_user or not(user.paid)):
         logging.info(f"Есть реферрал и сам себя не привёл")
         existing_referrer = await get_referrer(telegram_id)
         if existing_referrer:
@@ -147,7 +148,8 @@ async def getting_started(request: Request):
         logging.info(f"У него есть username {username}")
         logging.info(f"У него есть referrer_id {referrer_id}")
         await create_user(telegram_id, username)
-        await create_referral(telegram_id, referrer_id)
+        if referrer_id:
+            await create_referral(telegram_id, referrer_id)
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
     
