@@ -103,6 +103,13 @@ async def start(request: Request):
             logging.info(f"username {username}")
             logging.info(f"referrer_id {referrer_id}")
             await create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
+    
+    logging.info(f"referrer_id {referrer_id}")
+    logging.info(f"referrer_id != telegram_id {referrer_id != telegram_id}")
+    logging.info(f"temp_user {temp_user}")
+    logging.info(f"user {user}")
+    logging.info(f"not(user.paid) {not(user.paid)}")
+    
     if (referrer_id and referrer_id != telegram_id) and (temp_user or (user and not(user.paid))):
         logging.info(f"Есть реферрал и сам себя не привёл")
         existing_referrer = await get_pending_referrer(telegram_id)
