@@ -54,6 +54,7 @@ class Referral(Base):
     id = Column(Integer, primary_key=True, index=True)
     referrer_id = Column(String, ForeignKey('users.telegram_id'))  # Кто пригласил
     referred_id = Column(String, ForeignKey('users.telegram_id'), unique=True)  # Кто был приглашён
+    status = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
@@ -104,6 +105,11 @@ async def get_all_referred(telegram_id: str):
 
 async def get_referrer(telegram_id: str):
     query = select(Referral).filter_by(referred_id=telegram_id)
+    async with database.transaction():  # Используем async with
+        return await database.fetch_one(query)
+
+async def get_pending_referrer(telegram_id: str):
+    query = select(Referral).filter_by(referred_id=telegram_id, status="pending")
     async with database.transaction():  # Используем async with
         return await database.fetch_one(query)
 
