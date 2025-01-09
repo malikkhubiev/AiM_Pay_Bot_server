@@ -147,7 +147,6 @@ async def payment_notification(request: Request):
 
         if payment:
             logging.info(f"Есть платёж в режиме ожидания. Завершаем операцию")
-            await create_payment_db(user_telegram_id, payment_id)
             await update_user_paid(user_telegram_id)
             await update_payment_status(user_telegram_id)
 
