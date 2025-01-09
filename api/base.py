@@ -228,6 +228,9 @@ async def generate_clients_report(request: Request):
             logging.debug(f"Processing referral: {referral}")  # Логируем только сам процесс обработки
             attributes = {column.key: getattr(referral, column.key) for column in referral.__mapper__.column_attrs}
             logging.debug(f"Referral attributes: {attributes}")  # Логируем атрибуты реферала, если это нужно
+            
+            attributes = vars(referral)
+            
             referred_user = await get_referred_user(referral.referred_id)
             
             if referred_user:
