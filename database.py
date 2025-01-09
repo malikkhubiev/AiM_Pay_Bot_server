@@ -165,7 +165,7 @@ async def update_user_paid(telegram_id: str):
 
 async def update_payment_status(telegram_id: str):
     update_data = {'status': "success"}
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    update_query = Payment.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
