@@ -173,17 +173,12 @@ async def generate_overview_report(request: Request):
 
     # Calculate total paid money
     all_paid_money = await get_all_paid_money(telegram_id)
-    referral_count = await get_referral_count(telegram_id)
     paid_count = await get_paid_count(telegram_id)
-
-    paid_percentage = (paid_count / referral_count * 100) if referral_count > 0 else 0.0
 
     # Generate the report
     report = {
         "username": user.username,
-        "referral_count": referral_count,
         "paid_count": paid_count,
-        "paid_percentage": paid_percentage,
         "total_payout": all_paid_money
     }
 
