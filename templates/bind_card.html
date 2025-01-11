@@ -73,7 +73,8 @@
         payoutsData.render('payout-form').then(() => {
             console.log("Форма загружена");
         }).catch(error => {
-            console.error("Ошибка загрузки формы:", error);
+            console.log(error);
+            console.log("Ошибка загрузки формы:", error);
             alert("Не удалось загрузить платежную форму. Попробуйте позже.");
         });
     </script>

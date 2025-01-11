@@ -18,7 +18,7 @@ from database import (
     create_temp_user,
     get_all_paid_money,
     get_paid_count,
-    get_referrer,
+    update_referrer,
     get_all_referred
 )
 

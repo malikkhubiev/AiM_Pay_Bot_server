@@ -21,6 +21,7 @@ from database import (
     create_binding_and_delete_if_exists,
     get_pending_payment,
     create_payout,
+    update_payment_idempotence_key,
     create_payment_db,
     mark_payout_as_notified,
     get_referrer,
@@ -189,6 +190,11 @@ async def payment_notification(request: Request):
         reason = cancellation_details["reason"]
         user = await get_user_by_telegram_id(user_telegram_id)
         logging.info(f"юзера тоже получили {user}")
+        
+        if reason in ["expired_on_confirmation", "internal_timeout"]:
+            idempotence_key = str(uuid.uuid4())
+            update_payment_idempotence_key(user_telegram_id, idempotence_key)
+        
         notify_url = f"{MAHIN_URL}/notify_user"
         notification_data = {
             "telegram_id": user_telegram_id,

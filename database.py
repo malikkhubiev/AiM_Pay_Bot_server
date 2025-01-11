@@ -188,6 +188,12 @@ async def update_payment_done(telegram_id: str, transaction_id: str):
         await database.execute(user_update_query)
         await database.execute(payment_update_query)
 
+async def update_payment_idempotence_key(telegram_id: str, idempotence_key: str):
+    update_data = {'idempotence_key': idempotence_key}
+    update_query = Payment.__table__.update().where(Payment.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
 async def update_user_card_synonym(telegram_id: str, card_synonym: str):
     update_data = {'card_synonym': card_synonym}
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
