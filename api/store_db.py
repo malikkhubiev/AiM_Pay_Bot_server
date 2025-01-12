@@ -1,112 +1,50 @@
-import os
 import sqlite3
-from fastapi import FastAPI, HTTPException, Query
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
-from dotenv import load_dotenv
-from loader import *
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+import os
+import httpx
+from config import (
+    FILE_ID,
+)
 
-# Загрузка переменных окружения
-load_dotenv()
+app = FastAPI()
 
-DB_NAME = "./bot_database.db"
-SQL_DUMP_FILE = "bot_database_dump.sql"
-LOCAL_DOWNLOAD_FILE = "bot_downloaded_dump.sql"
+# Папка для сохранения экспортированных файлов
+EXPORT_FOLDER = 'exports'
+os.makedirs(EXPORT_FOLDER, exist_ok=True)
+destination = "exports/downloaded_file.sql"
 
-# Функция для авторизации в Google
-def authenticate_drive():
-    """
-    Настроенная авторизация через PyDrive2 с использованием сохранённых токенов.
-    При необходимости обновляется токен доступа.
-    """
-    gauth = GoogleAuth()
+@app.post("/download_file_from_drive")
+async def download_file_from_drive(destination: str):
+    # Формируем URL для скачивания файла
+    url = f"https://drive.google.com/uc?id={FILE_ID}"
 
-    # Загружаем данные из переменных окружения
-    gauth.credentials = {
-        'client_id': os.getenv('CLIENT_ID'),
-        'client_secret': os.getenv('CLIENT_SECRET'),
-        'access_token': os.getenv('ACCESS_TOKEN'),
-        'refresh_token': os.getenv('REFRESH_TOKEN'),
-    }
+    # Отправляем асинхронный GET-запрос с использованием httpx
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
 
-    if gauth.access_token_expired:
-        # Если токен устарел, обновляем его
-        gauth.Refresh()
+    # Проверяем успешность запроса
+    if response.status_code == 200:
+        with open(destination, "wb") as f:
+            f.write(response.content)
+        return {"message": "Файл успешно скачан."}
+    else:
+        raise HTTPException(status_code=response.status_code, detail=f"Ошибка: {response.status_code}")
 
-    if not gauth.credentials:
-        # Если нет учетных данных, нужно пройти первичную авторизацию
-        gauth.LocalWebserverAuth()  # Это откроет браузер для авторизации
-        gauth.SaveCredentialsFile("credentials.json")  # Сохраняем токен для дальнейшего использования
-
-    return GoogleDrive(gauth)
-
-# Эндпоинт для экспорта базы данных в SQL файл
-@app.post("/export-db/")
+@app.get("/export_db")
 async def export_db():
-    """
-    Экспортирует SQLite базу данных в SQL файл.
-    """
     try:
-        conn = sqlite3.connect(DB_NAME)
-        with open(SQL_DUMP_FILE, "w", encoding="utf-8") as f:
+        # Путь к вашей базе данных
+        db_path = '../bot_database.db'
+        export_path = os.path.join(EXPORT_FOLDER, 'bot_database_dump.sql')
+
+        # Открываем соединение с базой данных
+        conn = sqlite3.connect(db_path)
+        with open(export_path, 'w') as f:
             for line in conn.iterdump():
                 f.write(f"{line}\n")
         conn.close()
-        return {"message": f"База данных сохранена в файл {SQL_DUMP_FILE}."}
+
+        return FileResponse(export_path, media_type='application/sql', filename='bot_database_dump.sql')
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при экспорте базы данных: {str(e)}")
-
-# Эндпоинт для загрузки файла в Google Drive
-@app.post("/upload-to-drive/")
-async def upload_to_drive(folder_id: str = Query(None, description="ID папки Google Drive (опционально)")):
-    """
-    Загружает SQL файл в Google Drive.
-    """
-    try:
-        if not os.path.exists(SQL_DUMP_FILE):
-            raise HTTPException(status_code=400, detail="Файл SQL дампа не найден. Сначала выполните экспорт базы данных.")
-
-        drive = authenticate_drive()
-
-        # Создаём файл в Google Drive
-        file_metadata = {'parents': [{'id': folder_id}]} if folder_id else {}
-        file = drive.CreateFile(file_metadata)
-        file.SetContentFile(SQL_DUMP_FILE)  # Указываем путь к SQL дампу
-        file.Upload()
-
-        return {
-            "message": f"Файл {SQL_DUMP_FILE} загружен в Google Drive.",
-            "file_id": file["id"],
-            "file_link": f"https://drive.google.com/file/d/{file['id']}/view?usp=sharing",
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при загрузке файла в Google Drive: {str(e)}")
-
-# Эндпоинт для скачивания файла с Google Drive и восстановления базы данных
-@app.post("/import-from-drive/")
-async def import_from_drive(file_id: str):
-    """
-    Скачивает SQL файл из Google Drive и восстанавливает базу данных.
-    """
-    try:
-        drive = authenticate_drive()
-
-        # Находим файл в Google Drive по ID
-        file = drive.CreateFile({'id': file_id})
-        file.GetContentFile(LOCAL_DOWNLOAD_FILE)  # Скачиваем файл
-
-        # Восстанавливаем базу данных из SQL дампа
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        with open(LOCAL_DOWNLOAD_FILE, "r", encoding="utf-8") as f:
-            sql_script = f.read()
-            cursor.executescript(sql_script)
-        conn.commit()
-        conn.close()
-
-        # Удаляем локальный файл после восстановления базы
-        os.remove(LOCAL_DOWNLOAD_FILE)
-
-        return {"message": "База данных успешно восстановлена из SQL дампа."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при импорте базы данных: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при экспорте базы данных: {e}")
