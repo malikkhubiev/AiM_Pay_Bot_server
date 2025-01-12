@@ -1,8 +1,6 @@
 from loader import *
 from utils import *
-from databases import Database
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 from config import (
     BOT_USERNAME,
 )
