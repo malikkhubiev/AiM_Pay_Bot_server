@@ -75,7 +75,7 @@
         }
     </style>
     <button id="reload_button">Ввести данные другой карты</button>
-    <h2 id="heading">Неправильный номер банковской карты: невозможно определить код страны, в которой выпущена карта. Ввести данные еще раз или выберите другую карту.</h2>
+    <h2 id="heading"></h2>
     <div id="payout-form"></div>
     <script>
         const h2 = document.getElementById("heading")
@@ -128,7 +128,7 @@
             },
         });
 
-        reload_button.onClick = () => {
+        button.onclick = () => {
             location.reload();
         }
 
