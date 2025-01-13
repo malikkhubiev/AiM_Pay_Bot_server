@@ -119,9 +119,9 @@
             error_callback: function(error) {
                 if (error == "card_country_code_error") {
                     h2.textContent = "Нельзя сделать выплату на банковскую карту, выпущенную в этой стране. Введите пожалуйста данные другой карты."
-                }else if (error == "card_country_code_error") {
+                }else if (error == "card_unknown_country_code_error") {
                     h2.textContent = "Неправильный номер банковской карты: невозможно определить код страны, в которой выпущена карта. Ввести пожалуйста данные еще раз или выберите другую карту."
-                }else if (error == "internal_service_error") {
+                }else{
                     h2.textContent = "Привязка карты не осуществлена по неопределённой причине. Введите пожалуйста данные еще раз или выберите другую карту."
                 }
                 h2.style.display = "block"
