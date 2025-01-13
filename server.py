@@ -13,10 +13,19 @@ from api.docs import *
 from api.kassa import *
 from api.store_db import *
 from utils import *
+import os
 
 # Логируем, чтобы проверить, что переменные установлены
 logger.info("Account ID: %s", Configuration.account_id)
 logger.info("Secret Key: %s", "SET" if Configuration.secret_key else "NOT SET")
+
+def list_files(directory):
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            logging.info(os.path.join(root, file))
+
+# Выводим все файлы и папки начиная с текущей директории
+list_files(os.getcwd())
 
 # Инициализация планировщика задач
 scheduler = BackgroundScheduler()
