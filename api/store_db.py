@@ -38,8 +38,11 @@ async def download_file_from_drive(destination: str):
 async def export_db():
     logging.info("Просят скачать db файл")
     try:
+        current_dir = os.getcwd()
+        logging.info(f"Текущая рабочая директория: {current_dir}")
         # Путь к вашей базе данных
-        db_path = '../bot_database.db'
+        db_path = os.path.join(current_dir, '..', 'bot_database.db')
+        logging.info(f"Путь к базе данных: {db_path}")
         if not os.path.exists(db_path):
             raise HTTPException(status_code=404, detail="База данных не найдена.")
         
