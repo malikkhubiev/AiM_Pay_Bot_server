@@ -1,13 +1,12 @@
 import sqlite3
-from fastapi import FastAPI, HTTPException
+from loader import *
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 import os
 import httpx
 from config import (
     FILE_ID,
 )
-
-app = FastAPI()
 
 # Папка для сохранения экспортированных файлов
 EXPORT_FOLDER = 'exports'
