@@ -76,7 +76,7 @@ async def create_payment(request: Request):
             "currency": "RUB"
         },
         "confirmation": {
-            "type": "embedded", # redirect
+            "type": "redirect",
             "return_url": f"{SERVER_URL}/success"
         },
         "capture": True,

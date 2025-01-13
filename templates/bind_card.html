@@ -8,11 +8,14 @@
 </head>
 <body>
     <style>
-        html, body{
-            width: 100vw;
-            height: 100vh;
+        *{
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+        html, body{
+            overflow-x: hidden;
+            width: 100%;
             background-color: #000;
             display: flex;
             justify-content: center;
@@ -20,15 +23,63 @@
             align-items: center;
             text-align: center;
         }
+        body{
+            padding: 100px 0;
+        }
         .logo{
             width: 250px;
         }
         .MuiTypography-root.MuiTypography-bodyL.MuiTypography-colorPrimary{
             color: #fff;
         }
+        #heading{
+            width: 80%;
+            margin: 0;
+            margin-top: 70px;
+            margin-bottom: 70px;
+            font-family: Century Gothic;
+            font-size: 30px;
+            color: #fff;
+        }
+        #reload_button{
+            margin-top: 30px;
+            padding: 20px 50px;
+            background-color: #fff;
+            border-radius: 10px;
+            color: #000;
+            font-family: Century Gothic;
+            transition: 0.5s;
+            cursor: pointer;
+            font-size: 25px;
+            border: 2px solid #fff;
+        }
+        #reload_button:hover{
+            background-color: transparent;
+            color: #fff;
+        }
+        @media (max-width: 767px) {
+            body{
+                padding: 30px 0;
+            }
+            #heading{
+                width: 90%;
+                font-size: 25px;
+                margin-top: 40px;
+                margin-bottom: 40px;
+            }
+            #reload_button{
+                margin-top: 0;
+                padding: 20px 30px;
+                font-size: 20px;
+            }
+        }
     </style>
+    <button id="reload_button">Ввести данные другой карты</button>
+    <h2 id="heading">Неправильный номер банковской карты: невозможно определить код страны, в которой выпущена карта. Ввести данные еще раз или выберите другую карту.</h2>
     <div id="payout-form"></div>
     <script>
+        const h2 = document.getElementById("heading")
+        const reload_button = document.getElementById("reload_button")
         // Инициализация виджета PayoutsData
         const payoutsData = new window.PayoutsData({
             type: 'payout',
@@ -61,15 +112,25 @@
                 .catch(error => {
                     console.log(error);
                     console.error("Ошибка при отправке данных:", error);
-                    alert("Ошибка на сервере. Попробуйте позже.");
                 });
             },
             error_callback: function(error) {
-                console.log(error);
+                if (error == "card_country_code_error") {
+                    h2.textContent = "Нельзя сделать выплату на банковскую карту, выпущенную в этой стране. Введите пожалуйста данные другой карты."
+                }else if (error == "card_country_code_error") {
+                    h2.textContent = "Неправильный номер банковской карты: невозможно определить код страны, в которой выпущена карта. Ввести пожалуйста данные еще раз или выберите другую карту."
+                }else if (error == "internal_service_error") {
+                    h2.textContent = "Привязка карты не осуществлена по неопределённой причине. Введите пожалуйста данные еще раз или выберите другую карту."
+                }
+                h2.style.display = "block"
+                reload_button.style.display = "inline-block"
                 console.error("Ошибка привязки карты:", error);
-                alert("Ошибка при привязке карты! Проверьте данные или повторите попытку позже.");
             },
         });
+
+        reload_button.onClick = () => {
+            location.reload();
+        }
 
         // Рендеринг формы
         payoutsData.render('payout-form').then(() => {
