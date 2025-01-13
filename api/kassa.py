@@ -25,7 +25,13 @@ from database import (
     create_payment_db,
     mark_payout_as_notified,
     get_referrer,
-    update_referral_success
+    update_referral_success,
+    get_users_with_positive_balance,
+    create_pending_payout,
+    update_payout_transaction,
+    update_payout_status,
+    update_user_balance,
+    get_payout,
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -164,17 +170,9 @@ async def payment_notification(request: Request):
                 if referrer_user:
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    # payout = Payout.create({
-                    #     "amount": {
-                    #         "value": f"{REFERRAL_AMOUNT}",
-                    #         "currency": "RUB"
-                    #     },
-                    #     "payout_token": f"{referrer_user.card_synonym}",
-                    #     "description": "Выплата рефералу",
-                    #     "metadata": {
-                    #         "telegramId": f"{referrer_user.telegram_id}"
-                    #     }
-                    # })
+                    update_user_balance(referrer_user.telegram_id, 2000)
+                    logging.info(f"баланс для {referrer_user.telegram_id} обновили")
+
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {"telegram_id": user_telegram_id}
             send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
@@ -206,6 +204,45 @@ async def payment_notification(request: Request):
         
     raise HTTPException(status_code=400, detail="Payment not processed")
 
+@app.post("/create_payout")
+@exception_handler 
+async def create_payout(request: Request): 
+    verify_secret_code(request)
+    # Получаем всех пользователей с балансом > 0
+    users_with_balance = await get_users_with_positive_balance() 
+
+    for user in users_with_balance: 
+        payout_amount = user['balance']  # Получаем баланс пользователя 
+
+        # Создаем запись в Payout с статусом 'pending' 
+        await create_pending_payout(
+            user['telegram_id'],
+            user['card_synonym'],
+            payout_amount
+        )
+
+        # Создаем запрос на выплату через YooKassa 
+        payout = Payout.create({ 
+            "amount": { 
+                "value": f"{payout_amount}",  # Сумма выплаты 
+                "currency": "RUB" 
+            }, 
+            "payout_token": f"{user['card_synonym']}",  # Карта пользователя 
+            "description": "Выплата рефералу", 
+            "metadata": { 
+                "telegramId": f"{user['telegram_id']}"  # Дополнительная информация 
+            } 
+        }) 
+
+        # Обновляем запись в базе, добавляем transaction_id 
+        transaction_id = payout['id'] 
+
+        await update_payout_transaction(user['telegram_id'], transaction_id) 
+
+        logging.info(f"Выплата пользователю {user['telegram_id']} успешно инициирована.") 
+
+    return {"message": "Выплаты успешно инициированы."} 
+
 @app.post("/payout_result")
 @exception_handler
 async def payout_result(request: Request):
@@ -218,59 +255,56 @@ async def payout_result(request: Request):
     transaction_id = object_data.get("id", {})
     metadata = object_data.get("metadata", {})
 
-    if metadata.get("author") == "me":
+    logging.info(data)
+
+    payout_record = await get_payout(transaction_id)
+    if not payout_record: 
+        raise HTTPException(status_code=404, detail="Запись о выплате не найдена") 
+
+    # Извлечение telegramId из метаданных
+    telegram_id = metadata.get("telegramId")
+
+    # Логирование события
+    print(f"Получено уведомление: {event}")
+    print(f"Данные объекта: {object_data}")
+
+    # Обработка событий
+    if event == "payout.succeeded":
+
+        amount = object_data['amount']['value']
+        update_payout_status(transaction_id, "success")
+        update_user_balance(telegram_id, 0)
+
+        notify_url = f"{MAHIN_URL}/notify_user"
+        notification_data = {
+            "telegram_id": telegram_id,
+            "message": f"Выплата на сумму {amount} произведена успешно"
+        }
+        await send_request(notify_url, notification_data)
+        await mark_payout_as_notified(transaction_id)
         return JSONResponse({"status": "success"})
+    
+    elif event == "payout.canceled" and telegram_id:
+        # Выплата отменена
+        print("Выплата отменена.")
+        update_payout_status(transaction_id, "canceled")
+        logging.info(f"status {status}, и мы внутри")
+        cancellation_details = object_data.get("cancellation_details")
+        reason = cancellation_details["reason"]
+        user = await get_user_by_telegram_id(telegram_id)
+        logging.info(f"юзера тоже получили {user}")
+        notify_url = f"{MAHIN_URL}/notify_user"
+        notification_data = {
+            "telegram_id": telegram_id,
+            "message": payout_responces[reason]
+        }
+        await send_request(notify_url, notification_data)
+        await mark_payout_as_notified(transaction_id)
+        return JSONResponse({"status": "success"})
+
     else:
-        logging.info(data)
-
-        # Извлечение telegramId из метаданных
-        telegram_id = metadata.get("telegramId")
-
-        # Логирование события
-        print(f"Получено уведомление: {event}")
-        print(f"Данные объекта: {object_data}")
-
-        # Обработка событий
-        if event == "payout.succeeded":
-
-            amount = object_data['amount']['value']
-
-            user = await get_user_by_telegram_id(telegram_id)
-            await create_payout(
-                telegram_id,
-                user.card_synonym,
-                amount,
-                transaction_id
-            )
-            notify_url = f"{MAHIN_URL}/notify_user"
-            notification_data = {
-                "telegram_id": telegram_id,
-                "message": f"Выплата на сумму {amount} произведена успешно"
-            }
-            await send_request(notify_url, notification_data)
-            await mark_payout_as_notified(transaction_id)
-            return JSONResponse({"status": "success"})
-        
-        elif event == "payout.canceled" and telegram_id:
-            # Выплата отменена
-            print("Выплата отменена.")
-            logging.info(f"status {status}, и мы внутри")
-            cancellation_details = object_data.get("cancellation_details")
-            reason = cancellation_details["reason"]
-            user = await get_user_by_telegram_id(telegram_id)
-            logging.info(f"юзера тоже получили {user}")
-            notify_url = f"{MAHIN_URL}/notify_user"
-            notification_data = {
-                "telegram_id": telegram_id,
-                "message": payout_responces[reason]
-            }
-            response = await send_request(notify_url, notification_data)
-            await mark_payout_as_notified(transaction_id)
-            return JSONResponse({"status": "success"})
-
-        else:
-            # Неизвестное событие
-            print(f"Неизвестное событие: {event}")
+        # Неизвестное событие
+        print(f"Неизвестное событие: {event}")
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
 

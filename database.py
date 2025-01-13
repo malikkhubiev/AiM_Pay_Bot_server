@@ -28,6 +28,7 @@ class User(Base):
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
     paid = Column(Boolean, default=False)
+    balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
     invite_link = Column(String, nullable=True)
 
@@ -68,6 +69,7 @@ class Payout(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
     card_synonym = Column(String, nullable=False)
     amount = Column(Float)
+    status = Column(String, nullable=False)
     notified = Column(Boolean, default=False)
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
@@ -93,10 +95,30 @@ async def create_user(telegram_id: str, username: str):
     async with database.transaction():  # Используем async with для выполнения транзакции
         await database.execute(query)
 
+async def create_pending_payout(telegram_id: str, card_synonym: str, payout_amount: str):
+    query = """ 
+        INSERT INTO payouts (telegram_id, card_synonym, amount, status, created_at) 
+        VALUES (:telegram_id, :card_synonym, :amount, :status, :created_at) 
+    """
+    values = { 
+        "telegram_id": telegram_id, 
+        "card_synonym": card_synonym,
+        "amount": payout_amount, 
+        "status": "pending", 
+        "created_at": datetime.now(timezone.utc)
+    } 
+    async with database.transaction():  # Используем async with для выполнения транзакции
+        await database.execute(query, values)
+
 async def get_user(telegram_id: str):
     query = select(User).filter_by(telegram_id=telegram_id)
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
+
+async def get_users_with_positive_balance():
+    query = "SELECT * FROM users WHERE balance > 0" 
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_all(query) 
 
 async def get_all_referred(telegram_id: str):
     query = select(Referral).filter_by(referrer_id=telegram_id, status="success")
@@ -153,10 +175,45 @@ async def update_referrer(telegram_id: str, referrer_id: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
+async def update_payout_transaction(telegram_id: str, transaction_id: str):
+    query = """ 
+        UPDATE payouts 
+        SET transaction_id = :transaction_id 
+        WHERE telegram_id = :telegram_id AND status = 'pending' 
+    """ 
+    update_data = {
+        "transaction_id": transaction_id,
+        "telegram_id": telegram_id
+    }
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(query, update_data) 
+
+async def update_payout_status(transaction_id: str, status: str):
+    query = """ 
+        UPDATE payouts 
+        SET status = :status 
+        WHERE transaction_id = :transaction_id 
+    """ 
+    update_data = {
+        "transaction_id": transaction_id,
+        "status": status,
+    }
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(query, update_data) 
+
 async def update_referral_success(telegram_id: str, referrer_id: str):
     update_data = {'status': "success"}
     update_query = Referral.__table__.update().where(
         Referral.referred_id == telegram_id, Referral.referrer_id == referrer_id
+    ).values(update_data)
+    
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def update_user_balance(telegram_id: str, balance: int):
+    update_data = {'balance': balance}
+    update_query = User.__table__.update().where(
+        User.telegram_id == telegram_id
     ).values(update_data)
     
     async with database.transaction():  # Используем async with для транзакции
@@ -244,6 +301,11 @@ async def get_pending_payment(telegram_id: str):
     query = select(Payment).filter_by(telegram_id=telegram_id, status="pending")
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
+
+async def get_payout(transaction_id: str):
+    query = "SELECT * FROM payouts WHERE transaction_id = :transaction_id"
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query, {"transaction_id": transaction_id}) 
 
 async def create_payout(telegram_id: str, card_synonym: str, amount: int, transaction_id: str):
     query = Payout.__table__.insert().values(card_synonym=card_synonym, telegram_id=telegram_id, amount=amount, transaction_id=transaction_id)
