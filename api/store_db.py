@@ -36,19 +36,24 @@ async def download_file_from_drive(destination: str):
 
 @app.get("/export_db")
 async def export_db():
-    logging.info(f"Просят db шку")
+    logging.info("Просят скачать db файл")
     try:
         # Путь к вашей базе данных
         db_path = '../bot_database.db'
-        export_path = os.path.join(EXPORT_FOLDER, 'bot_database_dump.sql')
-        logging.info(f"Взяли path {export_path}")
-        # Открываем соединение с базой данных
-        conn = sqlite3.connect(db_path)
-        with open(export_path, 'w') as f:
-            for line in conn.iterdump():
-                f.write(f"{line}\n")
-        conn.close()
-        logging.info(f"Ждём отправки")
-        return FileResponse(export_path, media_type='application/sql', filename='bot_database_dump.sql')
+        if not os.path.exists(db_path):
+            raise HTTPException(status_code=404, detail="База данных не найдена.")
+        
+        # Путь к файлу для скачивания
+        export_path = os.path.join(EXPORT_FOLDER, 'bot_database.db')
+        
+        # Копируем файл в папку экспортов
+        with open(db_path, 'rb') as f_in:
+            with open(export_path, 'wb') as f_out:
+                f_out.write(f_in.read())
+        
+        logging.info(f"Отправка файла: {export_path}")
+        # Возвращаем файл как ответ
+        return FileResponse(export_path, media_type='application/octet-stream', filename='bot_database.db')
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при экспорте базы данных: {e}")
