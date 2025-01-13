@@ -220,7 +220,7 @@ async def create_payout(request: Request):
             user['card_synonym'],
             payout_amount
         )
-
+        setup_payout_config()
         # Создаем запрос на выплату через YooKassa 
         payout = Payout.create({ 
             "amount": { 
