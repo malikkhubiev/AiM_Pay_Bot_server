@@ -118,7 +118,7 @@ async def start(request: Request):
         else:
             logging.info(f"Реферала ещё не было")
             referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
-            if referrer_user:
+            if referrer_user and referrer_user.card_synonym:
                 logging.info(f"Пользователь который привёл есть")
                 await create_referral(telegram_id, referrer_id)
                 logging.info(f"Сделали реферала в бд")
