@@ -21,6 +21,9 @@ logger.info("Secret Key: %s", "SET" if Configuration.secret_key else "NOT SET")
 
 def list_files(directory):
     for root, dirs, files in os.walk(directory):
+        # Исключаем папки .git и .venv
+        dirs[:] = [d for d in dirs if d not in {'.git', '.venv'}]
+        
         for file in files:
             logging.info(os.path.join(root, file))
 
