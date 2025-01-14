@@ -87,7 +87,7 @@ def verify_secret_code(request: Request):
     else:
         secret_code = request.headers.get("X-Secret-Code")
         if secret_code != SECRET_CODE:
-            raise HTTPException(status_code=403, detail="Forbidden: Invalid secret code")
+            raise HTTPException(status_code=403, detail="Вам запрещён доступ к серверу")
         return True
 
 def switch_configuration(account_id, secret_key):
