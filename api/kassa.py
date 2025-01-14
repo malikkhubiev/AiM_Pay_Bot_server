@@ -32,6 +32,7 @@ from database import (
     update_payout_status,
     update_user_balance,
     get_payout,
+    get_pending_payout
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -212,14 +213,25 @@ async def create_payout(request: Request):
     users_with_balance = await get_users_with_positive_balance() 
 
     for user in users_with_balance: 
+        telegram_id = user['telegram_id']
         payout_amount = user['balance']  # Получаем баланс пользователя 
 
-        # Создаем запись в Payout с статусом 'pending' 
-        await create_pending_payout(
-            user['telegram_id'],
-            user['card_synonym'],
-            payout_amount
-        )
+        existing_payout = await get_pending_payout(telegram_id)
+
+        idempotence_key = ""
+
+        if not(existing_payout):
+            idempotence_key = str(uuid.uuid4())
+
+            await create_pending_payout(
+                telegram_id,
+                user['card_synonym'],
+                idempotence_key,
+                payout_amount
+            )
+        else:
+            idempotence_key = existing_payout.idempotence_key
+
         setup_payout_config()
         # Создаем запрос на выплату через YooKassa 
         payout = Payout.create({ 

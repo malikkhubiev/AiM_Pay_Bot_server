@@ -68,6 +68,7 @@ class Payout(Base):
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
     card_synonym = Column(String, nullable=False)
+    idempotence_key = Column(String, nullable=False, unique=True)
     amount = Column(Float)
     status = Column(String, nullable=False)
     notified = Column(Boolean, default=False)
@@ -95,14 +96,20 @@ async def create_user(telegram_id: str, username: str):
     async with database.transaction():  # Используем async with для выполнения транзакции
         await database.execute(query)
 
-async def create_pending_payout(telegram_id: str, card_synonym: str, payout_amount: str):
+async def create_pending_payout(
+        telegram_id: str,
+        card_synonym: str,
+        idempotence_key: str,
+        payout_amount: str
+    ):
     query = """ 
-        INSERT INTO payouts (telegram_id, card_synonym, amount, status, created_at) 
+        INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status, created_at) 
         VALUES (:telegram_id, :card_synonym, :amount, :status, :created_at) 
     """
     values = { 
         "telegram_id": telegram_id, 
         "card_synonym": card_synonym,
+        "idempotence_key": idempotence_key,
         "amount": payout_amount, 
         "status": "pending", 
         "created_at": datetime.now(timezone.utc)
@@ -306,6 +313,11 @@ async def get_payout(transaction_id: str):
     query = "SELECT * FROM payouts WHERE transaction_id = :transaction_id"
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query, {"transaction_id": transaction_id}) 
+
+async def get_pending_payout(telegram_id: str):
+    query = "SELECT * FROM payouts WHERE telegram_id = :telegram_id AND status = pending"
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query, {"telegram_id": telegram_id}) 
 
 async def create_payout(telegram_id: str, card_synonym: str, amount: int, transaction_id: str):
     query = Payout.__table__.insert().values(card_synonym=card_synonym, telegram_id=telegram_id, amount=amount, transaction_id=transaction_id)
