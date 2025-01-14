@@ -28,33 +28,26 @@ async def init_db():
         url = f"https://drive.google.com/uc?id={FILE_ID}"
         logging.info(f"Готов url {url}")
 
-        logging.info(f"Отправляем запрос для проверки файла на Google Drive")
-        # Отправляем запрос для проверки файла на Google Drive
+        # Отправляем запрос для скачивания файла с разрешением редиректов
         async with httpx.AsyncClient() as client:
-            response = await client.head(url, allow_redirects=True)
-        
-        logging.info(f"response {response}")
-        logging.info(f"response.status_code {response.status_code}")
+            download_response = await client.get(url, allow_redirects=True)
 
-        if response.status_code == 200:
+        logging.info(f"response.status_code {download_response.status_code}")
+
+        # Проверяем статус ответа
+        if download_response.status_code == 200:
             logging.info("Файл найден на Google Drive, начинаем скачивание.")
-            async with httpx.AsyncClient() as client:
-                download_response = await client.get(url, allow_redirects=True)
-            
-            if download_response.status_code == 200:
-                with open(db_path, "wb") as f:
-                    f.write(download_response.content)
-                logging.info("Файл успешно скачан.")
-            else:
-                logging.error("Ошибка скачивания, но файл найден. Делаем бд")
-                initialize_database()
+            with open(db_path, "wb") as f:
+                f.write(download_response.content)
+            logging.info("Файл успешно скачан.")
         else:
-            logging.info("Файл на Google Drive не найден. Создаем новую базу данных.")
+            logging.error(f"Ошибка скачивания. Статус: {download_response.status_code}")
+            # Если не удалось скачать файл, создаём базу данных
             initialize_database()
 
     except Exception as e:
         logging.error(f"Ошибка при импорте базы данных: {e}")
-
+        
 @app.get("/export_db")
 async def export_db():
     logging.info("Просят скачать db файл")
