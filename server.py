@@ -24,7 +24,7 @@ scheduler.start()
 
 # Запускаем задачу каждую ночь
 # scheduler.add_job(delete_expired_records, 'interval', hours=24)
-scheduler.add_job(delete_expired_records, 'interval', min=1)
+scheduler.add_job(delete_expired_records, 'interval', minutes=1)
 
 # Database session dependency
 @app.middleware("http")
