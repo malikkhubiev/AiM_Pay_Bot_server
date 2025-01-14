@@ -267,7 +267,8 @@ async def update_user_card_synonym(telegram_id: str, card_synonym: str):
         await database.execute(update_query)
 
 async def delete_expired_records():
-    expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
+    expiration_date = datetime.now(timezone.utc) - timedelta(seconds=30)
+    # expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
     query = select(TempUser).filter(TempUser.created_at < expiration_date)
     async with database.transaction():  # Используем async with для транзакции
         expired_users = await database.fetch_all(query)
