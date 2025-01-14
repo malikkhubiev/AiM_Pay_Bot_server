@@ -34,6 +34,10 @@ async def db_session_middleware(request: Request, call_next):
     await database.disconnect()
     return response
 
+@app.on_event("startup")
+async def initialize_database():
+    await init_db()
+
 @app.api_route("/", methods=["GET", "HEAD"])
 async def super(request: Request):
     return JSONResponse(content={"message": "Супер"}, status_code=200, headers={"Content-Type": "application/json; charset=utf-8"})
@@ -41,4 +45,3 @@ async def super(request: Request):
 async def run_fastapi():
     port = int(PORT)  # Порт будет извлечен из окружения или 8000 по умолчанию
     uvicorn.run(app, host="0.0.0.0", port=port)
-    await init_db()
