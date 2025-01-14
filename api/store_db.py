@@ -15,8 +15,7 @@ os.makedirs(EXPORT_FOLDER, exist_ok=True)
 current_dir = os.getcwd()
 db_path = os.path.join(current_dir, 'bot_database.db')
 
-@app.post("/import_db")
-async def import_db():
+async def init_db():
     """
     Импорт базы данных:
     - Если файл существует на Google Drive, он скачивается.

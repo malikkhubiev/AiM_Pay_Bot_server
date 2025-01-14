@@ -18,6 +18,8 @@ from utils import *
 logger.info("Account ID: %s", Configuration.account_id)
 logger.info("Secret Key: %s", "SET" if Configuration.secret_key else "NOT SET")
 
+init_db()
+
 # Инициализация планировщика задач
 scheduler = BackgroundScheduler()
 scheduler.start()
