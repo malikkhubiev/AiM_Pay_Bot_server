@@ -4,7 +4,8 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
 import databases
 from sqlalchemy.future import select
-from typing import Optional, List, Union
+from typing import Optional
+import logging
 
 # Создание базы данных и её подключение
 DATABASE_URL = "sqlite+aiosqlite:///bot_database.db"
@@ -268,15 +269,19 @@ async def update_user_card_synonym(telegram_id: str, card_synonym: str):
 
 async def delete_expired_records():
     expiration_date = datetime.now(timezone.utc) - timedelta(seconds=30)
+    logging.info(f"expiration_date = {expiration_date}")
     # expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
     query = select(TempUser).filter(TempUser.created_at < expiration_date)
+    logging.info(f"query = {query}")
     async with database.transaction():  # Используем async with для транзакции
         expired_users = await database.fetch_all(query)
+        logging.info(f"expired_users = {expired_users}")
         expired_records_count = 0
         for user in expired_users:
-            delete_query = TempUser.__table__.delete().where(TempUser.id == user['id'])
+            delete_query = TempUser.__table__.delete().where(TempUser.telegram_id == user['telegram_id'])
             await database.execute(delete_query)
             expired_records_count += 1
+        logging.info(f"expired_records_count = {expired_records_count}")
         return expired_records_count
 
 async def get_all_paid_money(telegram_id: str):
