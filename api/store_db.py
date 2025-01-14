@@ -28,6 +28,7 @@ async def init_db():
         url = f"https://drive.google.com/uc?id={FILE_ID}"
         logging.info(f"Готов url {url}")
 
+        logging.info(f"Отправляем запрос для проверки файла на Google Drive")
         # Отправляем запрос для проверки файла на Google Drive
         async with httpx.AsyncClient() as client:
             response = await client.head(url)
