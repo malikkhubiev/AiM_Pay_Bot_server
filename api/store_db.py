@@ -41,20 +41,15 @@ async def init_db():
                 with open(db_path, "wb") as f:
                     f.write(download_response.content)
                 logging.info("Файл успешно скачан.")
-                return {"message": "Файл успешно скачан и готов к использованию."}
             else:
-                raise HTTPException(
-                    status_code=download_response.status_code, 
-                    detail="Не удалось скачать файл."
-                )
+                logging.error("Ошибка скачивания, но файл найден. Делаем бд")
+                initialize_database()
         else:
             logging.info("Файл на Google Drive не найден. Создаем новую базу данных.")
             initialize_database()
-            return {"message": "Файл не найден. Создана новая база данных."}
 
     except Exception as e:
         logging.error(f"Ошибка при импорте базы данных: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка при импорте базы данных: {e}")
 
 @app.get("/export_db")
 async def export_db():

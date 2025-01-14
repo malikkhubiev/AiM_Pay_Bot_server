@@ -18,8 +18,6 @@ from utils import *
 logger.info("Account ID: %s", Configuration.account_id)
 logger.info("Secret Key: %s", "SET" if Configuration.secret_key else "NOT SET")
 
-init_db()
-
 # Инициализация планировщика задач
 scheduler = BackgroundScheduler()
 scheduler.start()
@@ -43,3 +41,4 @@ async def super(request: Request):
 async def run_fastapi():
     port = int(PORT)  # Порт будет извлечен из окружения или 8000 по умолчанию
     uvicorn.run(app, host="0.0.0.0", port=port)
+    await init_db()
