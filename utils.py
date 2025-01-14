@@ -32,6 +32,7 @@ def exception_handler(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
         try:
+            logging.info("inside wrapper of exception handler")
             return await func(*args, **kwargs)
         except HTTPException as e:
             logging.error(f"HTTP error: {e.detail}")

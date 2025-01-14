@@ -24,10 +24,14 @@ from database import (
 @exception_handler
 async def check_user(request: Request):
     verify_secret_code(request)
+    logging.info("in check user")
     data = await request.json()
     telegram_id = data.get("telegram_id")
     to_throw = data.get("to_throw", True)
+    logging.info(f"telegramId {telegram_id}")
+    logging.info(f"to_throw {to_throw}")
     user = await get_user_by_telegram_id(telegram_id, to_throw)
+    logging.info(f"user {user}")
     return {"status": "success", "user": user}
 
 @app.post("/save_invite_link")
