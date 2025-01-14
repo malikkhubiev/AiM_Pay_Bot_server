@@ -225,7 +225,7 @@ async def generate_clients_report(request: Request):
         "paid_count": paid_count,
         "total_payout": all_paid_money,
         "invited_list": invited_list,
-        "balance": user.balance
+        "balance": user.balance or 0
     }
 
     return JSONResponse({
