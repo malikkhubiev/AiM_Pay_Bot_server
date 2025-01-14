@@ -31,7 +31,7 @@ async def init_db():
         logging.info(f"Отправляем запрос для проверки файла на Google Drive")
         # Отправляем запрос для проверки файла на Google Drive
         async with httpx.AsyncClient() as client:
-            response = await client.head(url)
+            response = await client.head(url, allow_redirects=True)
         
         logging.info(f"response {response}")
         logging.info(f"response.status_code {response.status_code}")
@@ -39,7 +39,7 @@ async def init_db():
         if response.status_code == 200:
             logging.info("Файл найден на Google Drive, начинаем скачивание.")
             async with httpx.AsyncClient() as client:
-                download_response = await client.get(url)
+                download_response = await client.get(url, allow_redirects=True)
             
             if download_response.status_code == 200:
                 with open(db_path, "wb") as f:
