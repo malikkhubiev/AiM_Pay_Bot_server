@@ -26,11 +26,12 @@ async def init_db():
     try:
         # Формируем URL для скачивания файла
         url = f"https://drive.google.com/uc?id={FILE_ID}"
-        logging.info(f"Готов url {url}")
+        logging.info(f"Готов URL: {url}")
 
-        # Отправляем запрос для скачивания файла с разрешением редиректов
-        async with httpx.AsyncClient() as client:
-            download_response = await client.get(url, allow_redirects=True)
+        # Создаём клиент с разрешением редиректов
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            # Отправляем запрос для скачивания файла
+            download_response = await client.get(url)
 
         logging.info(f"response.status_code {download_response.status_code}")
 
@@ -47,7 +48,7 @@ async def init_db():
 
     except Exception as e:
         logging.error(f"Ошибка при импорте базы данных: {e}")
-        
+
 @app.get("/export_db")
 async def export_db():
     logging.info("Просят скачать db файл")
