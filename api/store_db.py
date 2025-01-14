@@ -1,4 +1,3 @@
-import sqlite3
 from loader import *
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
@@ -8,40 +7,60 @@ from config import (
     FILE_ID,
 )
 import logging
+from database import initialize_database
 
 # Папка для сохранения экспортированных файлов
 EXPORT_FOLDER = 'exports'
 os.makedirs(EXPORT_FOLDER, exist_ok=True)
-destination = "exports/downloaded_file.sql"
+current_dir = os.getcwd()
+db_path = os.path.join(current_dir, 'bot_database.db')
 
-@app.post("/download_file_from_drive")
-async def download_file_from_drive(destination: str):
-    logging.info(f"Берём db из драйва")
-    # Формируем URL для скачивания файла
-    url = f"https://drive.google.com/uc?id={FILE_ID}"
+@app.post("/import_db")
+async def import_db():
+    """
+    Импорт базы данных:
+    - Если файл существует на Google Drive, он скачивается.
+    - Если файла нет, создается новая база данных.
+    """
+    logging.info("Начинаем процесс импорта базы данных.")
+    
+    try:
+        # Формируем URL для скачивания файла
+        url = f"https://drive.google.com/uc?id={FILE_ID}"
+        logging.info(f"Готов url {url}")
 
-    logging.info(f"Готов url {url}")
-    # Отправляем асинхронный GET-запрос с использованием httpx
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
+        # Отправляем запрос для проверки файла на Google Drive
+        async with httpx.AsyncClient() as client:
+            response = await client.head(url)
 
-    logging.info(response)
-    # Проверяем успешность запроса
-    if response.status_code == 200:
-        with open(destination, "wb") as f:
-            f.write(response.content)
-        return {"message": "Файл успешно скачан."}
-    else:
-        raise HTTPException(status_code=response.status_code, detail=f"Ошибка: {response.status_code}")
+        if response.status_code == 200:
+            logging.info("Файл найден на Google Drive, начинаем скачивание.")
+            async with httpx.AsyncClient() as client:
+                download_response = await client.get(url)
+            
+            if download_response.status_code == 200:
+                with open(db_path, "wb") as f:
+                    f.write(download_response.content)
+                logging.info("Файл успешно скачан.")
+                return {"message": "Файл успешно скачан и готов к использованию."}
+            else:
+                raise HTTPException(
+                    status_code=download_response.status_code, 
+                    detail="Не удалось скачать файл."
+                )
+        else:
+            logging.info("Файл на Google Drive не найден. Создаем новую базу данных.")
+            initialize_database()
+            return {"message": "Файл не найден. Создана новая база данных."}
+
+    except Exception as e:
+        logging.error(f"Ошибка при импорте базы данных: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка при импорте базы данных: {e}")
 
 @app.get("/export_db")
 async def export_db():
     logging.info("Просят скачать db файл")
     try:
-        current_dir = os.getcwd()
-        logging.info(f"Текущая рабочая директория: {current_dir}")
-        # Путь к вашей базе данных
-        db_path = os.path.join(current_dir, 'bot_database.db')
         logging.info(f"Путь к базе данных: {db_path}")
         if not os.path.exists(db_path):
             raise HTTPException(status_code=404, detail="База данных не найдена.")

@@ -88,7 +88,9 @@ class Binding(Base):
     unique_str = Column(String, unique=True, nullable=False)
 
 engine = create_engine(DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"))
-Base.metadata.create_all(bind=engine)
+def initialize_database():
+    """Создает базу данных, если она еще не создана."""
+    Base.metadata.create_all(bind=engine)
 
 # Асинхронные функции с типами
 async def create_user(telegram_id: str, username: str):
