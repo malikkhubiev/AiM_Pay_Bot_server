@@ -217,11 +217,14 @@ async def create_payout(request: Request):
         payout_amount = user['balance']  # Получаем баланс пользователя 
 
         existing_payout = await get_pending_payout(telegram_id)
+        logging.info(f"existing_payout получили {existing_payout}")
 
         idempotence_key = ""
 
         if not(existing_payout):
+            logging.info(f"existing_payout не бывает")
             idempotence_key = str(uuid.uuid4())
+            logging.info(f"сделали ключик {idempotence_key}")
 
             await create_pending_payout(
                 telegram_id,
@@ -232,6 +235,7 @@ async def create_payout(request: Request):
         else:
             idempotence_key = existing_payout.idempotence_key
 
+        logging.info(f"С бд поработали, делаем выплату")
         setup_payout_config()
         # Создаем запрос на выплату через YooKassa 
         payout = Payout.create({ 
@@ -248,9 +252,11 @@ async def create_payout(request: Request):
 
         # Обновляем запись в базе, добавляем transaction_id 
         transaction_id = payout['id'] 
+        logging.info(f"transaction_id {transaction_id}")
 
         await update_payout_transaction(user['telegram_id'], transaction_id) 
-
+        logging.info(f"transaction_id в бд засунули")
+        
         logging.info(f"Выплата пользователю {user['telegram_id']} успешно инициирована.") 
 
     return {"message": "Выплаты успешно инициированы."} 
