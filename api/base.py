@@ -34,24 +34,24 @@ async def check_user(request: Request):
     logging.info(f"user {user}")
     return {"status": "success", "user": user}
 
-@app.post("/save_invite_link")
-@exception_handler
-async def save_invite_link(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    invite_link = data.get("invite_link")
+# @app.post("/save_invite_link")
+# @exception_handler
+# async def save_invite_link(request: Request):
+#     verify_secret_code(request)
+#     data = await request.json()
+#     telegram_id = data.get("telegram_id")
+#     invite_link = data.get("invite_link")
 
-    logging.info(f"Получены данные: telegram_id={telegram_id}, invite_link={invite_link}")
+#     logging.info(f"Получены данные: telegram_id={telegram_id}, invite_link={invite_link}")
 
-    check = check_parameters(telegram_id=telegram_id, invite_link=invite_link)
-    logging.info(f"check = {check}")
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
+#     check = check_parameters(telegram_id=telegram_id, invite_link=invite_link)
+#     logging.info(f"check = {check}")
+#     if not(check["result"]):
+#         return {"status": "error", "message": check["message"]}
 
-    logging.info(f"checknuli")
-    await save_invite_link_db(telegram_id, invite_link)
-    return {"status": "success"}
+#     logging.info(f"checknuli")
+#     await save_invite_link_db(telegram_id, invite_link)
+#     return {"status": "success"}
 
 @app.post("/start")
 @exception_handler
@@ -256,22 +256,22 @@ async def get_referral_link(request: Request):
     referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
     return {"status": "success", "referral_link": referral_link}
 
-@app.post("/get_invite_link")
-@exception_handler
-async def get_invite_link(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
+# @app.post("/get_invite_link")
+# @exception_handler
+# async def get_invite_link(request: Request):
+#     verify_secret_code(request)
+#     data = await request.json()
+#     telegram_id = data.get("telegram_id")
     
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
+#     check = check_parameters(telegram_id=telegram_id)
+#     if not(check["result"]):
+#         return {"status": "error", "message": check["message"]}
     
-    user = await get_user_by_telegram_id(telegram_id)
+#     user = await get_user_by_telegram_id(telegram_id)
 
-    if not(user):
-        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
-    if not(user.paid):
-        return {"status": "error", "message": "Вы не можете получить пригласительную ссылку, не оплатив курс"}
+#     if not(user):
+#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
+#     if not(user.paid):
+#         return {"status": "error", "message": "Вы не можете получить пригласительную ссылку, не оплатив курс"}
     
-    return {"status": "success", "invite_link": user.invite_link}
+#     return {"status": "success", "invite_link": user.invite_link}
