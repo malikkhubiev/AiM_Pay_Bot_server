@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone, timedelta
 import databases
-from sqlalchemy.future import select
+from sqlalchemy import select
 from typing import Optional
 import logging
 
@@ -271,7 +271,7 @@ async def delete_expired_records():
     expiration_date = datetime.now(timezone.utc) - timedelta(seconds=30)
     logging.info(f"expiration_date = {expiration_date}")
     # expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
-    query = select(TempUser).filter(TempUser.created_at < expiration_date)
+    query = select(TempUser).where(TempUser.created_at < expiration_date)
     logging.info(f"query = {query}")
     async with database.transaction():  # Используем async with для транзакции
         expired_users = await database.fetch_all(query)

@@ -98,6 +98,7 @@ async def start(request: Request):
         temp_user = await get_temp_user(telegram_id=telegram_id)
         if temp_user:
             logging.info(f"Есть только временный юзер. Обновляем")
+            logging.info(f"Его зовут {temp_user.username}")
             await update_temp_user(telegram_id=telegram_id, username=username)
             logging.info(f"created_at {temp_user.created_at}")
         else:
