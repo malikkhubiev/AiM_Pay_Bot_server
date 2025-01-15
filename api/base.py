@@ -102,7 +102,6 @@ async def start(request: Request):
             logging.info(f"created_at {temp_user.created_at}")
         else:
             logging.info(f"Делаем временный юзер")
-            logging.info(f"created_at {temp_user.created_at}")
             logging.info(f"telegram_id {telegram_id}")
             logging.info(f"username {username}")
             logging.info(f"referrer_id {referrer_id}")
