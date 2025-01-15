@@ -322,7 +322,7 @@ async def get_payout(transaction_id: str):
         return await database.fetch_one(query, {"transaction_id": transaction_id}) 
 
 async def get_pending_payout(telegram_id: str):
-    query = "SELECT * FROM payouts WHERE telegram_id = :telegram_id AND status = pending"
+    query = "SELECT * FROM payouts WHERE telegram_id = :telegram_id AND status = 'pending'"
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query, {"telegram_id": telegram_id}) 
 
