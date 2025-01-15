@@ -207,8 +207,7 @@ async def generate_clients_report(request: Request):
                 logging.info(f"Referred user found: {referred_user.telegram_id}")  # Информация о пользователе, если он найден
                 invited_list.append({
                     "telegram_id": referred_user.telegram_id,
-                    "username": referred_user.username,
-                    "paid": referred_user.paid
+                    "username": referred_user.username
                 })
                 logging.debug(f"Invited list updated: {invited_list}")  # Логируем только обновление списка, если нужно
             else:
