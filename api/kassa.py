@@ -290,8 +290,8 @@ async def payout_result(request: Request):
     if event == "payout.succeeded":
 
         amount = object_data['amount']['value']
-        update_payout_status(transaction_id, "success")
-        update_user_balance(telegram_id, 0)
+        await update_payout_status(transaction_id, "success")
+        await update_user_balance(telegram_id, 0)
 
         notify_url = f"{MAHIN_URL}/notify_user"
         notification_data = {
