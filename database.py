@@ -107,7 +107,7 @@ async def create_pending_payout(
     ):
     query = """ 
         INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status, created_at) 
-        VALUES (:telegram_id, :card_synonym, :amount, :status, :created_at) 
+        VALUES (:telegram_id, :card_synonym, :idempotence_key, :amount, :status, :created_at) 
     """
     values = { 
         "telegram_id": telegram_id, 
