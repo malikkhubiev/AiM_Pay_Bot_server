@@ -171,7 +171,7 @@ async def payment_notification(request: Request):
                 if referrer_user:
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    update_user_balance(referrer_user.telegram_id, 2000)
+                    await update_user_balance(referrer_user.telegram_id, 2000)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
 
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
@@ -192,7 +192,7 @@ async def payment_notification(request: Request):
         
         if reason in ["expired_on_confirmation", "internal_timeout"]:
             idempotence_key = str(uuid.uuid4())
-            update_payment_idempotence_key(user_telegram_id, idempotence_key)
+            await update_payment_idempotence_key(user_telegram_id, idempotence_key)
         
         notify_url = f"{MAHIN_URL}/notify_user"
         notification_data = {
