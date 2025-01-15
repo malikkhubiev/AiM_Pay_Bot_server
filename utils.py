@@ -106,7 +106,8 @@ def setup_payout_config():
 def check_parameters(**kwargs):
     missing_params = [param for param, value in kwargs.items() if value is None]
     if missing_params:
-        return {"result": False, "message": f"Не указаны следующие необходимые параметры: {', '.join(missing_params)}"}
+        logging.info(f"Не указаны следующие необходимые параметры: {', '.join(missing_params)}")
+        return {"result": False, "message": "Введите команду /start и используйте кнопки для навигации"}
     return {"result": True}
 
 async def get_user_by_telegram_id(telegram_id: str, to_throw: bool = True):

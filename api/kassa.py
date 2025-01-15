@@ -109,7 +109,7 @@ async def create_payment(request: Request):
             raise HTTPException(status_code=400, detail="No confirmation URL found")
     except Exception as e:
         logger.error("Ошибка при создании платежа: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
+        return {"status": "error", "message": "Ошибка при создании платежа. Попробуйте ещё раз"}
 
 @app.post("/payment_notification")
 @exception_handler
