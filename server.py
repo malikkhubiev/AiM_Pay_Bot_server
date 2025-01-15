@@ -16,8 +16,8 @@ logger.info("Secret Key: %s", "SET" if Configuration.secret_key else "NOT SET")
 # Инициализация планировщика задач
 scheduler = AsyncIOScheduler()
 
-# Запускаем задачу на удаление устаревших записей каждую минуту
-scheduler.add_job(delete_expired_records, 'interval', minutes=1)
+# Запускаем задачу на удаление устаревших записей каждые сутки
+scheduler.add_job(delete_expired_records, 'interval', hours=24)
 
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
