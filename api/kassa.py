@@ -326,6 +326,30 @@ async def payout_result(request: Request):
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
 
+@app.get("/payout_balance")
+async def render_bind_card_page():
+    users_with_balance = await get_users_with_positive_balance()
+
+    total_balance = 0
+
+    for user in users_with_balance:
+        payout_amount = user['balance']
+        total_balance += payout_amount
+    
+    total_extra = total_balance * 0.028
+    num_of_users = len(users_with_balance)
+    num_of_users_plus_30 = num_of_users*30
+
+    result = total_balance + total_extra + num_of_users_plus_30
+
+    return JSONResponse({
+        "Общий баланс": total_balance,
+        "Общий процент": total_extra,
+        "Число пользователей": num_of_users,
+        "Общая сумма +30 рублей за каждого пользователя": num_of_users_plus_30,
+        "Итого": result
+    })
+
 @app.post("/bind_card")
 @exception_handler
 async def bind_card(request: Request):
