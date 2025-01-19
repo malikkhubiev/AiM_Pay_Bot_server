@@ -326,7 +326,7 @@ async def payout_result(request: Request):
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
     
-@app.get("/payout_balance")
+@app.post("/payout_balance")
 async def get_payout_balance(request: Request):
     verify_secret_code(request)
     logging.info("inside_payout_balance")
