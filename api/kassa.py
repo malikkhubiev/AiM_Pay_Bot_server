@@ -329,19 +329,34 @@ async def payout_result(request: Request):
 @app.get("/payout_balance")
 async def get_payout_balance(request: Request):
     verify_secret_code(request)
+    logging.info("inside_payout_balance")
     users_with_balance = await get_users_with_positive_balance()
 
+    logging.info(f"users_with_balance {users_with_balance}")
     total_balance = 0
+    users = []
 
     for user in users_with_balance:
         payout_amount = user['balance']
         total_balance += payout_amount
+        users.append({
+            "id": user["telegram_id"],
+            "name": user["name"]
+        })
+        
+    logging.info(f"users {users}")
     
     total_extra = total_balance * 0.028
+    logging.info(f"total_extra {total_extra}")
+
     num_of_users = len(users_with_balance)
+    logging.info(f"num_of_users {num_of_users}")
+
     num_of_users_plus_30 = num_of_users*30
+    logging.info(f"num_of_users_plus_30 {num_of_users_plus_30}")
 
     result = total_balance + total_extra + num_of_users_plus_30
+    logging.info(f"result {result}")
 
     return JSONResponse({
         "status": "success",
@@ -350,7 +365,8 @@ async def get_payout_balance(request: Request):
             "total_extra": total_extra,
             "num_of_users": num_of_users,
             "num_of_users_plus_30": num_of_users_plus_30,
-            "result": result
+            "result": result,
+            "users": users
         }
     })
 
