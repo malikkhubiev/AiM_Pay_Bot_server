@@ -326,6 +326,34 @@ async def payout_result(request: Request):
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
 
+@app.get("/payout_balance")
+async def get_payout_balance(request: Request):
+    verify_secret_code(request)
+    users_with_balance = await get_users_with_positive_balance()
+
+    total_balance = 0
+
+    for user in users_with_balance:
+        payout_amount = user['balance']
+        total_balance += payout_amount
+    
+    total_extra = total_balance * 0.028
+    num_of_users = len(users_with_balance)
+    num_of_users_plus_30 = num_of_users*30
+
+    result = total_balance + total_extra + num_of_users_plus_30
+
+    return JSONResponse({
+        "status": "success",
+        "data": {
+            "total_balance": total_balance,
+            "total_extra": total_extra,
+            "num_of_users": num_of_users,
+            "num_of_users_plus_30": num_of_users_plus_30,
+            "result": result
+        }
+    })
+
 @app.post("/bind_card")
 @exception_handler
 async def bind_card(request: Request):
@@ -392,50 +420,6 @@ async def bind_success(request: Request):
     }
     await send_request(notify_url, notification_data)
     return JSONResponse({"status": "success"})
-
-@app.get("/getMyMoneyPage/")
-@exception_handler
-async def getMyMoneyPage(telegram_id: str):
-    logging.info("💰 моней")
-    logging.info(f"equals")
-    template = template_env.get_template("getMyMoney.html")
-    account_id = YOOKASSA_AGENT_ID
-
-    # Получение настроек аккаунта
-    me = Settings.get_account_settings()
-
-    # Вывод баланса выплат
-    print(me.payout_balance)
-    rendered_html = template.render(account_id=account_id)
-    return HTMLResponse(content=rendered_html)   
-        
-@app.post("/getMyMoney")
-@exception_handler
-async def getMyMoney(request: Request):
-    logging.info(f"внутри поста")
-
-    verify_secret_code(request)
-    data = await request.json()
-    card_synonym = data.get("card_synonym")
-    secret_key = data.get("secret_key")
-    amount = data.get("amount")
-
-    if secret_key == SECRET_KEY:
-        logging.info("💰 Выплата пользователю")
-        user = await get_user_by_telegram_id("999")
-        logging.info(f"Найден пользователь: {user}")
-        setup_payout_config()
-        payout = Payment.create({
-            "amount": {
-                "value": f"{amount}",
-                "currency": "RUB"
-            },
-            "payout_token": f"{card_synonym}",
-            "description": "Выплата мне",
-            "metadata": {
-                "author": "me"
-            }
-        })
 
 @app.get("/success")
 async def success_payment(request: Request):
