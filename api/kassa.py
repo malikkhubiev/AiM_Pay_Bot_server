@@ -415,7 +415,6 @@ def render_bind_card_page(unique_str: str):
 @app.post("/bind_success")
 @exception_handler
 async def bind_success(request: Request):
-    verify_secret_code(request)
     data = await request.json()
     card_synonym = data.get("card_synonym")
     unique_str = data.get("unique_str")
