@@ -341,7 +341,7 @@ async def get_payout_balance(request: Request):
         total_balance += payout_amount
         users.append({
             "id": user["telegram_id"],
-            "name": user["name"],
+            "username": user["username"],
             "balance": payout_amount
         })
         
