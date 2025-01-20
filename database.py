@@ -126,9 +126,9 @@ async def get_user(telegram_id: str):
         return await database.fetch_one(query)
 
 async def get_users_with_positive_balance():
-    query = "SELECT * FROM users WHERE balance > 0" 
+    query = "SELECT * FROM users WHERE balance > 0 ORDER BY balance DESC"  # Добавляем сортировку
     async with database.transaction():  # Здесь используем async with
-        return await database.fetch_all(query) 
+        return await database.fetch_all(query)
 
 async def get_all_referred(telegram_id: str):
     query = select(Referral).filter_by(referrer_id=telegram_id, status="success")
