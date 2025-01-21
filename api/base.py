@@ -178,7 +178,7 @@ async def getting_started(request: Request):
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
 
-        promo_user = await get_promo_user(user.telegram_id)
+        promo_user = await get_promo_user(telegram_id)
         number_of_promo = await get_promo_user_count() 
         if not(promo_user) and number_of_promo <= 1000:
             return_data["with_promo"] = True
@@ -203,8 +203,8 @@ async def register_user_with_promo(request: Request):
     user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user = {user}")
 
-    if user:
-        return {"status": "error", "message": "Вы уже зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
 
     await add_promo_user(telegram_id)
     notification_data = {"telegram_id": telegram_id}
