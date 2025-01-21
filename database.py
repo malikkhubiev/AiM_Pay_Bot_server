@@ -21,12 +21,12 @@ class TempUser(Base):
     telegram_id = Column(String, unique=True, nullable=False)
     referrer_id = Column(String, nullable=True)  # Кто пригласил
     created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
-
+    
 class PromoUser(Base):
     __tablename__ = 'promousers'
 
     id = Column(Integer, primary_key=True)
-    telegram_id = Column(String, unique=True, nullable=False)
+    telegram_id = Column(String, ForeignKey('users.telegram_id'), unique=True, nullable=False)  # Внешний ключ
 
     user = relationship("User", back_populates="promousers")  # Связь с пользователем
 
@@ -43,7 +43,8 @@ class User(Base):
 
     payments = relationship("Payment", back_populates="user")  # Убедитесь, что имя таблицы и свойства совпадают
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
-    
+    promousers = relationship("PromoUser", back_populates="user")  # Связь с таблицей PromoUser
+
     created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
 
 class Payment(Base):
