@@ -3,6 +3,7 @@ from utils import *
 from fastapi.responses import JSONResponse
 from config import (
     BOT_USERNAME,
+    MAHIN_URL,
 )
 import logging
 from database import (
@@ -17,7 +18,10 @@ from database import (
     get_all_paid_money,
     get_paid_count,
     update_referrer,
-    get_all_referred
+    get_all_referred,
+    get_promo_user,
+    get_promo_user_count,
+    add_promo_user
 )
 
 @app.post("/check_user")
@@ -78,6 +82,7 @@ async def start(request: Request):
         "status": "success",
         "response_message": "Привет",
         "to_show": None,
+        "with_promo": None,
         "type": None
     }
     user = await get_user_by_telegram_id(telegram_id, to_throw=False)
@@ -90,6 +95,12 @@ async def start(request: Request):
         if not(user.paid):
             logging.info(f"user не платил")
             return_data["to_show"] = "pay_course"
+        
+        promo_user = await get_promo_user(user.telegram_id)
+        number_of_promo = await get_promo_user_count() 
+        if not(promo_user) and number_of_promo <= 1000:
+            return_data["with_promo"] = True
+
         return JSONResponse(return_data)
     else:
         return_data["type"] = "temp_user"
@@ -154,6 +165,10 @@ async def getting_started(request: Request):
     temp_user = await get_temp_user(telegram_id)
     logging.info(f"temp_user {temp_user}")
     if temp_user:
+        return_data = {
+            "status": "success",
+            "with_promo": None
+        }
         logging.info(f"Есть временный юзер")
         username = temp_user.username
         referrer_id = temp_user.referrer_id
@@ -162,8 +177,41 @@ async def getting_started(request: Request):
         await create_user(telegram_id, username)
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
         logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
-    
-        return JSONResponse({"status": "success"})
+
+        promo_user = await get_promo_user(user.telegram_id)
+        number_of_promo = await get_promo_user_count() 
+        if not(promo_user) and number_of_promo <= 1000:
+            return_data["with_promo"] = True
+
+        return JSONResponse(return_data)
+
+@app.post("/register_user_with_promo")
+@exception_handler
+async def register_user_with_promo(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+
+    logging.info(f"Получены данные: telegram_id={telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    logging.info(f"check = {check}")
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+
+    logging.info(f"checknuli")
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    logging.info(f"user = {user}")
+
+    if user:
+        return {"status": "error", "message": "Вы уже зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
+
+    await add_promo_user(telegram_id)
+    notification_data = {"telegram_id": telegram_id}
+    send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+    await send_request(send_invite_link_url, notification_data)
+
+    return JSONResponse({"status": "success"})
     
 @app.post("/generate_clients_report")
 @exception_handler
