@@ -22,6 +22,14 @@ class TempUser(Base):
     referrer_id = Column(String, nullable=True)  # Кто пригласил
     created_at = Column(DateTime, default=datetime.now(timezone.utc))  # Дата создания
 
+class PromoUser(Base):
+    __tablename__ = 'promousers'
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(String, unique=True, nullable=False)
+
+    user = relationship("User", back_populates="promousers")  # Связь с пользователем
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -154,6 +162,22 @@ async def get_referred_user(referred_id: int):
     query = select(User).filter_by(telegram_id=referred_id)
     result = await database.fetch_one(query)
     return result
+    
+async def get_promo_user(referred_id: int):
+    query = select(PromoUser).filter_by(telegram_id=referred_id)
+    result = await database.fetch_one(query)
+    return result
+
+async def get_promo_user_count():
+    query = "SELECT COUNT(*) FROM promousers"
+    async with database.transaction():
+        return await database.fetch_val(query)
+
+async def add_promo_user(telegram_id: str):
+    query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"
+    values = {"telegram_id": telegram_id}
+    async with database.transaction():
+        await database.execute(query, values)
 
 async def create_referral(telegram_id: str, referrer_id: int):
     query = Referral.__table__.insert().values(referrer_id=referrer_id, referred_id=telegram_id, status="pending")
