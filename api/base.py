@@ -4,11 +4,15 @@ from fastapi.responses import JSONResponse
 from config import (
     BOT_USERNAME,
     MAHIN_URL,
+    REFERRAL_AMOUNT,
 )
 import logging
 from database import (
     get_temp_user,
+    get_referral_statistics,
     save_invite_link_db,
+    get_promo_users_count,
+    get_payments_frequency,
     create_user,
     create_referral,
     get_pending_referrer,
@@ -304,6 +308,80 @@ async def get_referral_link(request: Request):
     referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
     return {"status": "success", "referral_link": referral_link}
 
+@app.post("/payout_balance")
+async def get_payout_balance(request: Request):
+    verify_secret_code(request)
+    logging.info("inside_payout_balance")
+    referral_statistics = await get_referral_statistics()
+
+    logging.info(f"referral_statistics {referral_statistics}")
+    total_balance = 0
+    users = []
+
+    for user in referral_statistics:
+        payout_amount = user['paid_referrals'] * float(REFERRAL_AMOUNT)
+        total_balance += payout_amount
+        users.append({
+            "id": user["telegram_id"],
+            "name": user["name"],
+            "balance": payout_amount
+        })
+
+    logging.info(f"users {users}")
+    
+    total_extra = total_balance * 0.028
+    logging.info(f"total_extra {total_extra}")
+
+    num_of_users = len(referral_statistics)
+    logging.info(f"num_of_users {num_of_users}")
+
+    num_of_users_plus_30 = num_of_users*30
+    logging.info(f"num_of_users_plus_30 {num_of_users_plus_30}")
+
+    result = total_balance + total_extra + num_of_users_plus_30
+    logging.info(f"result {result}")
+
+    return JSONResponse({
+        "status": "success",
+        "data": {
+            "total_balance": total_balance,
+            "total_extra": total_extra,
+            "num_of_users": num_of_users,
+            "num_of_users_plus_30": num_of_users_plus_30,
+            "result": result,
+            "users": users
+        }
+    })
+
+@app.post("/get_promo_users_frequency")
+async def get_promo_users_frequency(request: Request):
+    logging.info("inside get_promo_users_frequency")
+
+    verify_secret_code(request)
+    
+    promo_users_count = await get_promo_users_count()
+
+    return JSONResponse({
+        "status": "success",
+        "data": {
+            "promo_users_count": promo_users_count
+        }
+    })
+
+@app.post("/get_payments_frequency")
+async def get_payments_frequency(request: Request):
+    logging.info("inside get_payments_frequency")
+
+    verify_secret_code(request)
+    
+    payments_frequency = await get_payments_frequency()
+
+    return JSONResponse({
+        "status": "success",
+        "data": {
+            "payments_frequency": payments_frequency
+        }
+    })
 # @app.post("/get_invite_link")
 # @exception_handler
 # async def get_invite_link(request: Request):
