@@ -302,8 +302,8 @@ async def get_referral_link(request: Request):
     logging.info(f"paid {user.paid}")
     if not(user):
         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
-    if not(user.card_synonym):
-        return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не привязав карту"}
+    #if not(user.card_synonym):
+    #    return {"status": "error", "message": "Вы не можете стать партнёром по реферальной программе, не привязав карту"}
     
     referral_link = f"https://t.me/{BOT_USERNAME}?start={telegram_id}"
     return {"status": "success", "referral_link": referral_link}
