@@ -178,49 +178,48 @@ async def get_promo_user_count():
 async def get_promo_users_count():
     """ Получает количество промокодеров, сгруппированных по датам. """
     query = (
-        select([
+        select(
             func.date(PromoUser.created_at).label("date"),
             func.count().label("promo_users_count")
-        ])
+        )
         .group_by(func.date(PromoUser.created_at))
         .order_by(func.date(PromoUser.created_at))
     )
-
     async with database.transaction():
         return await database.fetch_all(query)
+
 
 async def get_payments_frequency():
     """ Получает количество оплат, сгруппированных по датам. """
     query = (
-        select([
+        select(
             func.date(Payment.created_at).label("date"),
             func.count().label("payments_count")
-        ])
+        )
         .group_by(func.date(Payment.created_at))
         .order_by(func.date(Payment.created_at))
     )
-
     async with database.transaction():
         return await database.fetch_all(query)
+
 
 async def get_referral_statistics():
     """ Получает список пользователей с их приглашёнными, которые оплатили курс. """
     query = (
-        select([
+        select(
             User.telegram_id.label("telegram_id"),
             User.username.label("name"),
             func.count(Referral.referred_id).label("paid_referrals")
-        ])
+        )
         .join(Referral, Referral.referrer_id == User.telegram_id)
         .join(Payment, Payment.telegram_id == Referral.referred_id)
         .where(Payment.status == "paid")  # Учитываем только оплаченные заказы
         .group_by(User.telegram_id, User.username)
         .order_by(func.count(Referral.referred_id).desc())  # Сортировка по убыванию оплаченных рефералов
     )
-
     async with database.transaction():
         result = await database.fetch_all(query)
-
+    
     return [
         {"telegram_id": row["telegram_id"], "name": row["name"], "paid_referrals": row["paid_referrals"]}
         for row in result
