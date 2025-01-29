@@ -26,7 +26,6 @@ from database import (
     mark_payout_as_notified,
     get_referrer,
     update_referral_success,
-    get_users_with_positive_balance,
     create_pending_payout,
     update_payout_transaction,
     update_payout_status,
@@ -325,51 +324,6 @@ async def payout_result(request: Request):
         print(f"Неизвестное событие: {event}")
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
-    
-@app.post("/payout_balance")
-async def get_payout_balance(request: Request):
-    verify_secret_code(request)
-    logging.info("inside_payout_balance")
-    users_with_balance = await get_users_with_positive_balance()
-
-    logging.info(f"users_with_balance {users_with_balance}")
-    total_balance = 0
-    users = []
-
-    for user in users_with_balance:
-        payout_amount = user['balance']
-        total_balance += payout_amount
-        users.append({
-            "id": user["telegram_id"],
-            "username": user["username"],
-            "balance": payout_amount
-        })
-        
-    logging.info(f"users {users}")
-    
-    total_extra = total_balance * 0.028
-    logging.info(f"total_extra {total_extra}")
-
-    num_of_users = len(users_with_balance)
-    logging.info(f"num_of_users {num_of_users}")
-
-    num_of_users_plus_30 = num_of_users*30
-    logging.info(f"num_of_users_plus_30 {num_of_users_plus_30}")
-
-    result = total_balance + total_extra + num_of_users_plus_30
-    logging.info(f"result {result}")
-
-    return JSONResponse({
-        "status": "success",
-        "data": {
-            "total_balance": total_balance,
-            "total_extra": total_extra,
-            "num_of_users": num_of_users,
-            "num_of_users_plus_30": num_of_users_plus_30,
-            "result": result,
-            "users": users
-        }
-    })
 
 @app.post("/bind_card")
 @exception_handler
