@@ -208,12 +208,12 @@ async def get_referral_statistics():
     query = (
         select(
             User.telegram_id.label("telegram_id"),
-            User.username.label("name"),
+            User.username.label("username"),
             func.count(Referral.referred_id).label("paid_referrals")
         )
         .join(Referral, Referral.referrer_id == User.telegram_id)
         .join(Payment, Payment.telegram_id == Referral.referred_id)
-        .where(Payment.status == "paid")  # Учитываем только оплаченные заказы
+        .where(Payment.status == "success")  # Учитываем только оплаченные заказы
         .group_by(User.telegram_id, User.username)
         .order_by(func.count(Referral.referred_id).desc())  # Сортировка по убыванию оплаченных рефералов
     )
