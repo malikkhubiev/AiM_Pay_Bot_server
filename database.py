@@ -116,16 +116,15 @@ async def create_pending_payout(
         payout_amount: str
     ):
     query = """ 
-        INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status, created_at) 
-        VALUES (:telegram_id, :card_synonym, :idempotence_key, :amount, :status, :created_at) 
+        INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status) 
+        VALUES (:telegram_id, :card_synonym, :idempotence_key, :amount, :status) 
     """
     values = { 
         "telegram_id": telegram_id, 
         "card_synonym": card_synonym,
         "idempotence_key": idempotence_key,
         "amount": payout_amount, 
-        "status": "pending", 
-        "created_at": datetime.now(timezone.utc)
+        "status": "pending"
     } 
     async with database.transaction():  # Используем async with для выполнения транзакции
         await database.execute(query, values)
