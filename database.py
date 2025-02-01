@@ -20,14 +20,14 @@ class TempUser(Base):
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
     referrer_id = Column(String, nullable=True)  # Кто пригласил
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))  # Дата создания
+    created_at = Column(DateTime, nullable=False, default=func.now())  # Дата создания
     
 class PromoUser(Base):
     __tablename__ = 'promousers'
 
     id = Column(Integer, primary_key=True)
     telegram_id = Column(String, ForeignKey('users.telegram_id'), unique=True, nullable=False)  # Внешний ключ
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))  # Дата создания
+    created_at = Column(DateTime, nullable=False, default=func.now())  # Дата создания
 
     user = relationship("User", back_populates="promousers")  # Связь с пользователем
 
@@ -46,7 +46,7 @@ class User(Base):
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
     promousers = relationship("PromoUser", back_populates="user")  # Связь с таблицей PromoUser
 
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))  # Дата создания
+    created_at = Column(DateTime, nullable=False, default=func.now())  # Дата создания
 
 class Payment(Base):
     __tablename__ = 'payments'
@@ -56,7 +56,7 @@ class Payment(Base):
     transaction_id = Column(String, default=None)  # Идентификатор транзакции
     idempotence_key = Column(String, nullable=False, unique=True)
     status = Column(String, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))  # Дата создания
+    created_at = Column(DateTime, nullable=False, default=func.now())  # Дата создания
 
     user = relationship("User", back_populates="payments")  # Связь с пользователем
 
@@ -67,7 +67,7 @@ class Referral(Base):
     referrer_id = Column(String, ForeignKey('users.telegram_id'))  # Кто пригласил
     referred_id = Column(String, ForeignKey('users.telegram_id'), unique=True)  # Кто был приглашён
     status = Column(String, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=func.now())
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
     referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
@@ -84,7 +84,7 @@ class Payout(Base):
     status = Column(String, nullable=False)
     notified = Column(Boolean, default=False)
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
-    created_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=func.now())
 
     referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига, но без этого не работает
 
