@@ -31,6 +31,7 @@ from database import (
     get_user_referrals_with_successful_payments,
     get_promo_users_by_date
 )
+from datetime import datetime, timezone, timedelta
 
 @app.post("/check_user")
 @exception_handler
@@ -366,6 +367,8 @@ async def get_promo_users_frequency(request: Request):
     logging.info("inside get_promo_users_frequency")
 
     verify_secret_code(request)
+    date = datetime.now(timezone.utc)
+    logging.info(f"date {date}")
     
     promo_users_count = await get_promo_users_count()
     logging.info(f"promo_users_count {promo_users_count}")
@@ -374,7 +377,7 @@ async def get_promo_users_frequency(request: Request):
 
     # Преобразование объекта Record в обычный словарь или список
     if promo_users_count:
-        promo_users_count_value = promo_users_count[0]['count']  # Получаем значение из первой записи
+        promo_users_count_value = promo_users_count[0]['promo_users_count']  # Получаем значение из первой записи
     else:
         promo_users_count_value = 0  # Если пусто, то 0
 
