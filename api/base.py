@@ -12,7 +12,7 @@ from database import (
     get_referral_statistics,
     save_invite_link_db,
     get_promo_users_count,
-    get_payments_frequency,
+    get_payments_frequency_db,
     create_user,
     create_referral,
     get_pending_referrer,
@@ -25,7 +25,11 @@ from database import (
     get_all_referred,
     get_promo_user,
     get_promo_user_count,
-    add_promo_user
+    add_promo_user,
+
+
+    get_user_referrals_with_successful_payments,
+    get_promo_users_by_date
 )
 
 @app.post("/check_user")
@@ -315,6 +319,10 @@ async def get_payout_balance(request: Request):
     referral_statistics = await get_referral_statistics()
 
     logging.info(f"referral_statistics {referral_statistics}")
+
+    qweqwe = await get_user_referrals_with_successful_payments()
+    logging.info(f"qweqwe {qweqwe}")
+
     total_balance = 0
     users = []
 
@@ -323,11 +331,11 @@ async def get_payout_balance(request: Request):
         total_balance += payout_amount
         users.append({
             "id": user["telegram_id"],
-            "name": user["name"],
+            "name": user["username"],
             "balance": payout_amount
         })
 
-    logging.info(f"users {users}")
+    logging.info(f"referral_statistics {referral_statistics}")
     
     total_extra = total_balance * 0.028
     logging.info(f"total_extra {total_extra}")
@@ -360,6 +368,10 @@ async def get_promo_users_frequency(request: Request):
     verify_secret_code(request)
     
     promo_users_count = await get_promo_users_count()
+    logging.info(f"promo_users_count {promo_users_count}")
+
+    qweqwe = await get_promo_users_by_date()
+    logging.info(f"qweqwe {qweqwe}")
 
     return JSONResponse({
         "status": "success",
@@ -374,7 +386,8 @@ async def get_payments_frequency(request: Request):
 
     verify_secret_code(request)
     
-    payments_frequency = await get_payments_frequency()
+    payments_frequency = await get_payments_frequency_db()
+    logging.info(f"payments_frequency {payments_frequency}")
 
     return JSONResponse({
         "status": "success",
