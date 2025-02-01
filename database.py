@@ -189,7 +189,7 @@ async def get_promo_users_count():
         return await database.fetch_all(query)
 
 
-async def get_payments_frequency():
+async def get_payments_frequency_db():
     """ Получает количество оплат, сгруппированных по датам. """
     query = (
         select(
@@ -421,3 +421,42 @@ async def get_binding_by_unique_str(unique_str: str):
     query = select(Binding).filter(Binding.unique_str == unique_str)
     async with database.transaction():  # Используем async with для транзакции
         return await database.fetch_one(query)
+
+
+
+
+async def get_user_referrals_with_successful_payments():
+    query = """
+    SELECT users.telegram_id AS telegram_id, 
+           users.username AS username, 
+           COUNT(referrals.referred_id) AS paid_referrals
+    FROM users
+    JOIN referrals ON referrals.referrer_id = users.telegram_id
+    JOIN payments ON payments.telegram_id = referrals.referred_id
+    WHERE payments.status = 'success'
+    GROUP BY users.telegram_id, users.username
+    ORDER BY paid_referrals DESC
+    """
+    async with database.transaction():  # Используем транзакцию
+        return await database.fetch_all(query)  # Получаем все строки, удовлетворяющие запросу
+    
+async def get_promo_users_by_date():
+    # Сначала проверим, есть ли данные в таблице promousers
+    query_check = "SELECT COUNT(*) FROM promousers"
+    
+    async with database.transaction():
+        count = await database.fetch_val(query_check)  # Получаем количество записей в таблице
+        
+        if count == 0:
+            print("Нет данных в таблице promousers.")
+            return []  # Возвращаем пустой список, если данных нет
+        
+        # Если данные есть, выполняем основной запрос для подсчета промо-пользователей по датам
+        query = """
+        SELECT date(promousers.created_at) AS date, 
+               count(*) AS promo_users_count
+        FROM promousers
+        GROUP BY date(promousers.created_at)
+        ORDER BY date(promousers.created_at)
+        """
+        return await database.fetch_all(query)
