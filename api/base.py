@@ -317,9 +317,6 @@ async def get_payout_balance(request: Request):
 
     logging.info(f"referral_statistics {referral_statistics}")
 
-    qweqwe = await get_user_referrals_with_successful_payments()
-    logging.info(f"qweqwe {qweqwe}")
-
     total_balance = 0
     users = []
 
@@ -369,20 +366,11 @@ async def get_promo_users_frequency(request: Request):
     promo_users_count = await get_promo_users_count()
     logging.info(f"promo_users_count {promo_users_count}")
 
-    qweqwe = await get_promo_users_by_date()
-
     # Преобразование объекта Record в обычный словарь или список
     if promo_users_count:
         promo_users_count_value = promo_users_count[0]['promo_users_count']  # Получаем значение из первой записи
     else:
         promo_users_count_value = 0  # Если пусто, то 0
-
-    if qweqwe:
-        qweqwe_values = [dict(record) for record in qweqwe]  # Преобразуем все записи в список словарей
-    else:
-        qweqwe_values = []
-    
-    logging.info(f"qweqwe_values {qweqwe_values}")
 
     # Формируем ответ
     return JSONResponse({
