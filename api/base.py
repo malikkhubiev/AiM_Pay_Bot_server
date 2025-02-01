@@ -371,12 +371,25 @@ async def get_promo_users_frequency(request: Request):
     logging.info(f"promo_users_count {promo_users_count}")
 
     qweqwe = await get_promo_users_by_date()
-    logging.info(f"qweqwe {qweqwe}")
 
+    # Преобразование объекта Record в обычный словарь или список
+    if promo_users_count:
+        promo_users_count_value = promo_users_count[0]['count']  # Получаем значение из первой записи
+    else:
+        promo_users_count_value = 0  # Если пусто, то 0
+
+    if qweqwe:
+        qweqwe_values = [dict(record) for record in qweqwe]  # Преобразуем все записи в список словарей
+    else:
+        qweqwe_values = []
+    
+    logging.info(f"qweqwe_values {qweqwe_values}")
+
+    # Формируем ответ
     return JSONResponse({
         "status": "success",
         "data": {
-            "promo_users_count": promo_users_count
+            "promo_users_count": promo_users_count_value
         }
     })
 
@@ -389,10 +402,17 @@ async def get_payments_frequency(request: Request):
     payments_frequency = await get_payments_frequency_db()
     logging.info(f"payments_frequency {payments_frequency}")
 
+    # Проверяем, что ответ от базы данных не пустой
+    if payments_frequency:
+        # Преобразуем объект Record в словарь или список, если нужно
+        payments_frequency_values = [dict(record) for record in payments_frequency]
+    else:
+        payments_frequency_values = []
+
     return JSONResponse({
         "status": "success",
         "data": {
-            "payments_frequency": payments_frequency
+            "payments_frequency": payments_frequency_values
         }
     })
 # @app.post("/get_invite_link")
