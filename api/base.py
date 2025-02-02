@@ -333,15 +333,6 @@ async def get_payout_balance(request: Request):
         })
 
     logging.info(f"referral_statistics {referral_statistics}")
-
-    users = await get_all_users()
-    logging.info(f"users {users}")
-
-    referrals = await get_all_referrals()
-    logging.info(f"referrals {referrals}")
-
-    payments = await get_all_payments()
-    logging.info(f"payments {payments}")
     
     total_extra = total_balance * 0.028
     logging.info(f"total_extra {total_extra}")
