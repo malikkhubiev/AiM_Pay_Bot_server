@@ -26,9 +26,6 @@ from database import (
     get_promo_user,
     get_promo_user_count,
     add_promo_user,
-    get_all_users,
-    get_all_referrals,
-    get_all_payments,
 )
 from datetime import datetime, timezone, timedelta
 
