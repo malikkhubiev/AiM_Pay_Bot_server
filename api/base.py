@@ -26,6 +26,9 @@ from database import (
     get_promo_user,
     get_promo_user_count,
     add_promo_user,
+    get_all_users,
+    get_all_referrals,
+    get_all_payments,
 )
 from datetime import datetime, timezone, timedelta
 
@@ -365,6 +368,15 @@ async def get_promo_users_frequency(request: Request):
     
     promo_users_frequency = await get_promo_users_count()
     logging.info(f"promo_users_frequency {promo_users_frequency}")
+
+    users = await get_all_users()
+    logging.info(f"users {users}")
+
+    referrals = await get_all_referrals()
+    logging.info(f"referrals {referrals}")
+
+    payments = await get_all_payments()
+    logging.info(f"payments {payments}")
 
     if promo_users_frequency:
         # Преобразуем объект Record в словарь или список, если нужно
