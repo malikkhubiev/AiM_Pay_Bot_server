@@ -363,20 +363,20 @@ async def get_promo_users_frequency(request: Request):
     date = datetime.now(timezone.utc)
     logging.info(f"date {date}")
     
-    promo_users_count = await get_promo_users_count()
-    logging.info(f"promo_users_count {promo_users_count}")
+    promo_users_frequency = await get_promo_users_count()
+    logging.info(f"promo_users_frequency {promo_users_frequency}")
 
-    # Преобразование объекта Record в обычный словарь или список
-    if promo_users_count:
-        promo_users_count_value = promo_users_count[0]['promo_users_count']  # Получаем значение из первой записи
+    if promo_users_frequency:
+        # Преобразуем объект Record в словарь или список, если нужно
+        promo_users_frequency_values = [dict(record) for record in promo_users_frequency]
     else:
-        promo_users_count_value = 0  # Если пусто, то 0
+        promo_users_frequency_values = []
 
     # Формируем ответ
     return JSONResponse({
         "status": "success",
         "data": {
-            "promo_users_count": promo_users_count_value
+            "promo_users_frequency": promo_users_frequency_values
         }
     })
 
