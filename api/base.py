@@ -143,7 +143,7 @@ async def start(request: Request):
         else:
             logging.info(f"Реферала ещё не было")
             referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
-            if referrer_user and referrer_user.card_synonym:
+            if referrer_user: # and referrer_user.card_synonym: 
                 logging.info(f"Пользователь который привёл есть")
                 await create_referral(telegram_id, referrer_id)
                 logging.info(f"Сделали реферала в бд")
@@ -333,6 +333,15 @@ async def get_payout_balance(request: Request):
         })
 
     logging.info(f"referral_statistics {referral_statistics}")
+
+    users = await get_all_users()
+    logging.info(f"users {users}")
+
+    referrals = await get_all_referrals()
+    logging.info(f"referrals {referrals}")
+
+    payments = await get_all_payments()
+    logging.info(f"payments {payments}")
     
     total_extra = total_balance * 0.028
     logging.info(f"total_extra {total_extra}")
@@ -368,15 +377,6 @@ async def get_promo_users_frequency(request: Request):
     
     promo_users_frequency = await get_promo_users_count()
     logging.info(f"promo_users_frequency {promo_users_frequency}")
-
-    users = await get_all_users()
-    logging.info(f"users {users}")
-
-    referrals = await get_all_referrals()
-    logging.info(f"referrals {referrals}")
-
-    payments = await get_all_payments()
-    logging.info(f"payments {payments}")
 
     if promo_users_frequency:
         # Преобразуем объект Record в словарь или список, если нужно
