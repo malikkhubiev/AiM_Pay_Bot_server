@@ -420,3 +420,49 @@ async def get_binding_by_unique_str(unique_str: str):
     query = select(Binding).filter(Binding.unique_str == unique_str)
     async with database.transaction():  # Используем async with для транзакции
         return await database.fetch_one(query)
+    
+
+
+
+
+
+
+
+
+
+
+async def get_all_users():
+    """Получает все данные из таблицы users."""
+    query = select(User)  # Выбираем все строки из таблицы users
+    async with database.transaction():
+        result = await database.fetch_all(query)
+    
+    # Возвращаем результат как список словарей
+    return [
+        {"id": row["id"], "username": row["username"], "telegram_id": row["telegram_id"], "balance": row["balance"], "created_at": row["created_at"]}
+        for row in result
+    ]
+
+async def get_all_referrals():
+    """Получает все данные из таблицы referrals."""
+    query = select(Referral)  # Выбираем все строки из таблицы referrals
+    async with database.transaction():
+        result = await database.fetch_all(query)
+    
+    # Возвращаем результат как список словарей
+    return [
+        {"id": row["id"], "referrer_id": row["referrer_id"], "referred_id": row["referred_id"], "status": row["status"], "created_at": row["created_at"]}
+        for row in result
+    ]
+
+async def get_all_payments():
+    """Получает все данные из таблицы payments."""
+    query = select(Payment)  # Выбираем все строки из таблицы payments
+    async with database.transaction():
+        result = await database.fetch_all(query)
+    
+    # Возвращаем результат как список словарей
+    return [
+        {"id": row["id"], "telegram_id": row["telegram_id"], "transaction_id": row["transaction_id"], "status": row["status"], "created_at": row["created_at"]}
+        for row in result
+    ]
