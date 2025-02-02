@@ -212,15 +212,15 @@ async def get_referral_statistics():
         )
         .join(Referral, Referral.referrer_id == User.telegram_id)
         .join(Payment, Payment.telegram_id == Referral.referred_id)
-        .where(Payment.status == "success")  # Учитываем только оплаченные заказы
-        .group_by(User.telegram_id, User.username)
-        .order_by(func.count(Referral.referred_id).desc())  # Сортировка по убыванию оплаченных рефералов
+        # .where(Payment.status == "success")  # Учитываем только оплаченные заказы
+        # .group_by(User.telegram_id, User.username)
+        # .order_by(func.count(Referral.referred_id).desc())  # Сортировка по убыванию оплаченных рефералов
     )
     async with database.transaction():
         result = await database.fetch_all(query)
     
     return [
-        {"telegram_id": row["telegram_id"], "name": row["name"], "paid_referrals": row["paid_referrals"]}
+        {"telegram_id": row["telegram_id"], "username": row["username"], "paid_referrals": row["paid_referrals"]}
         for row in result
     ]
 
