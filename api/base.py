@@ -326,7 +326,7 @@ async def get_payout_balance(request: Request):
         users.append({
             "id": user["telegram_id"],
             "name": user["username"],
-            "balance": payout_amount
+            "paid_referrals": user['paid_referrals']
         })
 
     logging.info(f"referral_statistics {referral_statistics}")
