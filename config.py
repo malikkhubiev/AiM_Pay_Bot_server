@@ -9,6 +9,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///bot_database.db")
 
 COURSE_AMOUNT = os.getenv("COURSE_AMOUNT")
 REFERRAL_AMOUNT = os.getenv("REFERRAL_AMOUNT")
+PROMO_NUM_LIMIT = os.getenv("PROMO_NUM_LIMIT")
 
 # YooKassa configuration
 YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID")
