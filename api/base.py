@@ -104,6 +104,7 @@ async def start(request: Request):
         
         promo_user = await get_promo_user(user.telegram_id)
         number_of_promo = await get_promo_user_count() 
+        logging.info(f"promo_num_left = {int(PROMO_NUM_LIMIT) - number_of_promo}")
         if not(promo_user) and number_of_promo <= int(PROMO_NUM_LIMIT):
             return_data["with_promo"] = True
 
@@ -372,11 +373,16 @@ async def get_promo_users_frequency(request: Request):
         promo_users_frequency_values = [dict(record) for record in promo_users_frequency]
     else:
         promo_users_frequency_values = []
+    
+    number_of_promo = await get_promo_user_count() 
+    promo_num_left = int(PROMO_NUM_LIMIT) - number_of_promo
 
     # Формируем ответ
     return JSONResponse({
         "status": "success",
         "data": {
+            "number_of_promo": number_of_promo,
+            "promo_num_left": promo_num_left,
             "promo_users_frequency": promo_users_frequency_values
         }
     })
