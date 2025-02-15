@@ -212,8 +212,9 @@ async def register_user_with_promo(request: Request):
 
     if not(user):
         return {"status": "error", "message": "Вы ещё не зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
-    is_already_promo_user = get_promo_user(user.telegram_id)
-    if is_already_promo_user:
+    is_already_promo_user = get_promo_user(telegram_id)
+    logging.info(f"is_already_promo_user {is_already_promo_user}")
+    if len(is_already_promo_user) == 0:
         return {"status": "error", "message": "Вы уже были зарегистрированы по промокоду"}
 
     number_of_promo = await get_promo_user_count() 
