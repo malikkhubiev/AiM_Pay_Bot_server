@@ -187,7 +187,7 @@ async def getting_started(request: Request):
 
         promo_user = await get_promo_user(telegram_id)
         number_of_promo = await get_promo_user_count() 
-        if not(promo_user) and number_of_promo <= 1000:
+        if not(promo_user) and number_of_promo < int(PROMO_NUM_LIMIT):
             return_data["with_promo"] = True
 
         return JSONResponse(return_data)
