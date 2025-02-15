@@ -212,13 +212,23 @@ async def register_user_with_promo(request: Request):
 
     if not(user):
         return {"status": "error", "message": "Вы ещё не зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
+    is_already_promo_user = get_promo_user(user.telegram_id)
+    if is_already_promo_user:
+        return {"status": "error", "message": "Вы уже были зарегистрированы по промокоду"}
 
-    await add_promo_user(telegram_id)
-    notification_data = {"telegram_id": telegram_id}
-    send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
-    await send_request(send_invite_link_url, notification_data)
+    number_of_promo = await get_promo_user_count() 
+    if number_of_promo <= int(PROMO_NUM_LIMIT):  
+        await add_promo_user(telegram_id)
+        notification_data = {"telegram_id": telegram_id}
+        send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+        await send_request(send_invite_link_url, notification_data)
 
-    return JSONResponse({"status": "success"})
+        return JSONResponse({"status": "success"})
+    else:
+        return JSONResponse({
+            "status": "error",
+            "message": "Лимит пользователей, которые могут зарегистрироваться по промокоду, исчерпан"
+        })
     
 @app.post("/generate_clients_report")
 @exception_handler
