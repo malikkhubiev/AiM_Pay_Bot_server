@@ -105,7 +105,7 @@ async def start(request: Request):
         promo_user = await get_promo_user(user.telegram_id)
         number_of_promo = await get_promo_user_count() 
         logging.info(f"promo_num_left = {int(PROMO_NUM_LIMIT) - number_of_promo}")
-        if not(promo_user) and number_of_promo <= int(PROMO_NUM_LIMIT):
+        if not(promo_user) and number_of_promo < int(PROMO_NUM_LIMIT):
             return_data["with_promo"] = True
 
         return JSONResponse(return_data)
@@ -218,7 +218,7 @@ async def register_user_with_promo(request: Request):
         return {"status": "error", "message": "Вы уже были зарегистрированы по промокоду"}
 
     number_of_promo = await get_promo_user_count() 
-    if number_of_promo <= int(PROMO_NUM_LIMIT):  
+    if number_of_promo < int(PROMO_NUM_LIMIT):  
         await add_promo_user(telegram_id)
         notification_data = {"telegram_id": telegram_id}
         send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
