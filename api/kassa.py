@@ -97,6 +97,8 @@ async def create_payment(request: Request):
         logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
         setup_payment_config()
         payment = Payment.create(payment_data, idempotence_key)
+        logger.info("payment")
+        logger.info(payment)
         confirmation_url = payment.confirmation.confirmation_url
         if confirmation_url:
             logger.info("Платеж успешно создан. Confirmation URL: %s", confirmation_url)
