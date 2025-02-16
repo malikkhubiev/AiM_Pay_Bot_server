@@ -173,9 +173,9 @@ async def payment_notification(request: Request):
                 if referrer_user:
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    new_balance = int(referrer_user.balance + float(REFERRAL_AMOUNT))
-                    logging.info(f"referrer_user.balance {referrer_user.balance}")
-                    logging.info(f"float(REFERRAL_AMOUNT) {float(REFERRAL_AMOUNT)}")
+                    new_balance = int((referrer_user.balance or 0) + int(REFERRAL_AMOUNT))
+                    logging.info(f"referrer_user.balance {referrer_user.balance or 0}")
+                    logging.info(f"float(REFERRAL_AMOUNT) {int(REFERRAL_AMOUNT)}")
                     logging.info(f"new_balance {new_balance}")
                     await update_user_balance(referrer_user.telegram_id, new_balance)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
