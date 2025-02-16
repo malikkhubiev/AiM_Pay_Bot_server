@@ -295,13 +295,12 @@ async def update_referral_success(telegram_id: str, referrer_id: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
-async def update_user_balance(telegram_id: str, balance: int):
-    update_data = {'balance': balance}
+async def update_user_balance(telegram_id: str, amount: int):
     update_query = User.__table__.update().where(
         User.telegram_id == telegram_id
-    ).values(update_data)
+    ).values(balance=User.balance + amount)
     
-    async with database.transaction():  # Используем async with для транзакции
+    async with database.transaction():
         await database.execute(update_query)
 
 async def update_temp_user(telegram_id: str, username: Optional[str] = None):
