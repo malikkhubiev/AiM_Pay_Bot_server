@@ -173,7 +173,8 @@ async def payment_notification(request: Request):
                 if referrer_user:
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    await update_user_balance(referrer_user.telegram_id, 2000)
+                    new_balance = referrer_user.balance + float(REFERRAL_AMOUNT)
+                    await update_user_balance(referrer_user.telegram_id, new_balance)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
 
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
