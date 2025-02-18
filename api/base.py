@@ -11,6 +11,8 @@ import logging
 from database import (
     get_temp_user,
     get_referral_statistics,
+    get_payment_date,
+    get_start_working_date,
     save_invite_link_db,
     get_promo_users_count,
     get_payments_frequency_db,
@@ -270,10 +272,16 @@ async def generate_clients_report(request: Request):
             referred_user = await get_referred_user(referral.referred_id)
             
             if referred_user:
+                payment_date = await get_payment_date(referral.referred_id)
+                start_working_date = await get_start_working_date(referral.referred_id)
+
                 logging.info(f"Referred user found: {referred_user.telegram_id}")  # Информация о пользователе, если он найден
                 invited_list.append({
                     "telegram_id": referred_user.telegram_id,
-                    "username": referred_user.username
+                    "username": referred_user.username,
+                    "payment_date": payment_date,
+                    "start_working_date": start_working_date,
+                    "time_for_pay": payment_date - start_working_date
                 })
                 logging.debug(f"Invited list updated: {invited_list}")  # Логируем только обновление списка, если нужно
             else:
