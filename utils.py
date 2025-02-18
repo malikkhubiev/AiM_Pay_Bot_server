@@ -147,3 +147,23 @@ async def send_request(url: str, data: dict, method: str = "POST") -> dict:
     except Exception as e:
         logging.error(f"Неизвестная ошибка: {e}")
         raise HTTPException(status_code=500, message="An unknown error occurred")
+
+def format_datetime(dt):
+    return dt.strftime("%d.%m.%Y [%H:%M]")
+
+def format_timedelta(td):
+    days = td.days
+    hours, remainder = divmod(td.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    time_str = []
+    if days > 0:
+        time_str.append(f"{days} дней")
+    if hours > 0:
+        time_str.append(f"{hours} часов")
+    if minutes > 0:
+        time_str.append(f"{minutes} минут")
+    if seconds > 0:
+        time_str.append(f"{seconds} секунд")
+    
+    return ", ".join(time_str)
