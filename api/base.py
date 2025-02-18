@@ -272,15 +272,22 @@ async def generate_clients_report(request: Request):
             referred_user = await get_referred_user(referral.referred_id)
             
             if referred_user:
-                payment_date = format_datetime(await get_payment_date(referral.referred_id))
-                start_working_date = format_datetime(await get_start_working_date(referral.referred_id))
+                payment_date = await get_payment_date(referral.referred_id)
+                logging.info(f"payment_date: {payment_date}") 
+                payment_date_formatted = format_datetime(payment_date)
+                logging.info(f"payment_date_formatted: {payment_date_formatted}") 
+
+                start_working_date = await get_start_working_date(referral.referred_id)
+                logging.info(f"start_working_date: {start_working_date}") 
+                start_working_date_formatted = format_datetime(start_working_date)
+                logging.info(f"start_working_date_formatted: {start_working_date_formatted}") 
 
                 logging.info(f"Referred user found: {referred_user.telegram_id}")  # Информация о пользователе, если он найден
                 invited_list.append({
                     "telegram_id": referred_user.telegram_id,
                     "username": referred_user.username,
-                    "payment_date": payment_date,
-                    "start_working_date": start_working_date,
+                    "payment_date": payment_date_formatted,
+                    "start_working_date": start_working_date_formatted,
                     "time_for_pay": format_timedelta(payment_date - start_working_date)
                 })
                 logging.debug(f"Invited list updated: {invited_list}")  # Логируем только обновление списка, если нужно
