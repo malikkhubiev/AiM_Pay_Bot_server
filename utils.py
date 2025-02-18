@@ -157,13 +157,18 @@ def format_timedelta(td):
     minutes, seconds = divmod(remainder, 60)
 
     time_str = []
+
     if days > 0:
-        time_str.append(f"{days} дней")
+        day_label = "день" if days == 1 else "дня" if 2 <= days <= 4 else "дней"
+        time_str.append(f"{days} {day_label}")
     if hours > 0:
-        time_str.append(f"{hours} часов")
+        hour_label = "час" if hours == 1 else "часа" if 2 <= hours <= 4 else "часов"
+        time_str.append(f"{hours} {hour_label}")
     if minutes > 0:
-        time_str.append(f"{minutes} минут")
+        minute_label = "минута" if minutes == 1 else "минуты" if 2 <= minutes <= 4 else "минут"
+        time_str.append(f"{minutes} {minute_label}")
     if seconds > 0:
-        time_str.append(f"{seconds} секунд")
+        second_label = "секунда" if seconds == 1 else "секунды" if 2 <= seconds <= 4 else "секунд"
+        time_str.append(f"{seconds} {second_label}")
     
     return ", ".join(time_str)
