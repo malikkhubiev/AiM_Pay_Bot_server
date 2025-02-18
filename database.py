@@ -161,13 +161,25 @@ async def get_referred(telegram_id: str):
     
 async def get_referred_user(referred_id: int):
     query = select(User).filter_by(telegram_id=referred_id)
-    result = await database.fetch_one(query)
-    return result
+    async with database.transaction():  # Используем async with
+        return await database.fetch_one(query)
+    
+async def get_payment_date(referred_id: int):
+    query = select(Payment.created_at).filter_by(telegram_id=referred_id)
+    async with database.transaction():
+        result = await database.fetch_one(query)
+        return result['created_at'] if result else None
+
+async def get_start_working_date(referred_id: int):
+    query = select(TempUser.created_at).filter_by(telegram_id=referred_id)
+    async with database.transaction():
+        result = await database.fetch_one(query)
+        return result['created_at'] if result else None
     
 async def get_promo_user(referred_id: int):
     query = select(PromoUser).filter_by(telegram_id=referred_id)
-    result = await database.fetch_one(query)
-    return result
+    async with database.transaction():
+        return await database.fetch_one(query)
 
 async def get_promo_user_count():
     query = "SELECT COUNT(*) FROM promousers"
