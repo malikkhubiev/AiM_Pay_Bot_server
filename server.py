@@ -20,11 +20,25 @@ scheduler = AsyncIOScheduler()
 scheduler.add_job(delete_expired_records, 'interval', hours=24)
 
 @app.middleware("http")
-async def db_session_middleware(request: Request, call_next):
+async def combined_middleware(request: Request, call_next):
+    # Подключаем БД перед выполнением запроса
     await database.connect()
     request.state.db = database
+
     response = await call_next(request)
+
+    # Отключаем БД после выполнения запроса
     await database.disconnect()
+
+    # Проверяем, нужно ли удалить файл после ответа
+    if "X-Remove-File" in response.headers:
+        file_path = response.headers["X-Remove-File"]
+        try:
+            os.remove(file_path)
+            logging.info(f"Файл {file_path} успешно удалён")
+        except Exception:
+            logging.error(f"Не удалось удалить файл: {file_path}")
+
     return response
 
 @app.on_event("startup")
