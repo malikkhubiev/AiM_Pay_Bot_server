@@ -1,6 +1,6 @@
 from loader import *
 from utils import *
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from config import (
     BOT_USERNAME,
     MAHIN_URL,
@@ -30,6 +30,7 @@ from database import (
     get_promo_user_count,
     add_promo_user,
 )
+import pandas as pd
 from datetime import datetime, timezone, timedelta
 
 @app.post("/check_user")
@@ -232,13 +233,9 @@ async def register_user_with_promo(request: Request):
             "status": "error",
             "message": "Лимит пользователей, которые могут зарегистрироваться по промокоду, исчерпан"
         })
-    
-@app.post("/generate_clients_report")
-@exception_handler
-async def generate_clients_report(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
+
+
+async def generate_clients_report_list_base(telegram_id):
     logging.info(f"telegram_id {telegram_id}")
     
     check = check_parameters(telegram_id=telegram_id)
@@ -254,11 +251,11 @@ async def generate_clients_report(request: Request):
 
     logging.info(f"user есть")
 
-    referred_details = await get_all_referred(user.telegram_id)
+    referred_details = await get_all_referred(telegram_id)
 
     logging.info(f"detales есть")
     logging.info(f"{referred_details} referred_details")
-    # Extract referral data and calculate statistics
+    
     invited_list = []
     logging.info(f"invited_list {invited_list}")
 
@@ -297,6 +294,65 @@ async def generate_clients_report(request: Request):
 
     logging.info(f"invited_list {invited_list} когда вышли")
 
+    return invited_list
+    
+@app.post("/generate_clients_report_list_as_is")
+@exception_handler
+async def generate_clients_report_list_as_is(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+
+    invited_list = generate_clients_report_list_base(telegram_id)
+
+    return JSONResponse({
+        "status": "success",
+        "invited_list": invited_list
+    })
+    
+@app.post("/generate_clients_report_list_as_file")
+@exception_handler
+async def generate_clients_report_list_as_file(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+
+    invited_list = generate_clients_report_list_base(telegram_id)
+
+    # Создание DataFrame для Excel
+    df = pd.DataFrame(invited_list)
+
+    # Создаем временный файл Excel
+    file_path = f"report_{telegram_id}.xlsx"
+
+    with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
+        df.to_excel(writer, sheet_name="Report", index=False)
+    
+    logging.info(f"Excel-отчет создан: {file_path}")
+
+    return FileResponse(file_path, filename="clients_report.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    
+@app.post("/generate_clients_report")
+@exception_handler
+async def generate_clients_report(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+    
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    logging.info(f"Чекнули")
+    # Находим пользователя
+    user = await get_user_by_telegram_id(telegram_id)
+    
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
+
+    logging.info(f"user есть")
+
     # Calculate total paid money
     all_paid_money = await get_all_paid_money(telegram_id)
     paid_count = await get_paid_count(telegram_id)
@@ -306,7 +362,6 @@ async def generate_clients_report(request: Request):
         "username": user.username,
         "paid_count": paid_count,
         "total_payout": all_paid_money,
-        "invited_list": invited_list,
         "balance": user.balance or 0
     }
 
