@@ -260,37 +260,34 @@ async def generate_clients_report_list_base(telegram_id):
     logging.info(f"invited_list {invited_list}")
 
     if referred_details:
-        logging.info("Referral details found.")  # Логируем только факт наличия рефералов
+        logging.info("Referral details found.")
+        
+        referrals_with_payment = []
+
         for referral in referred_details:
-            logging.debug(f"Processing referral: {referral}")  # Логируем только сам процесс обработки
-            attributes = vars(referral)
-            logging.debug(f"Referral attributes: {attributes}")  # Логируем атрибуты реферала, если это нужно
-            
             referred_user = await get_referred_user(referral.referred_id)
-            
             if referred_user:
                 payment_date = await get_payment_date(referral.referred_id)
-                logging.info(f"payment_date: {payment_date}") 
-                payment_date_formatted = format_datetime(payment_date)
-                logging.info(f"payment_date_formatted: {payment_date_formatted}") 
-
                 start_working_date = await get_start_working_date(referral.referred_id)
-                logging.info(f"start_working_date: {start_working_date}") 
-                start_working_date_formatted = format_datetime(start_working_date)
-                logging.info(f"start_working_date_formatted: {start_working_date_formatted}") 
-
-                logging.info(f"Referred user found: {referred_user.telegram_id}")  # Информация о пользователе, если он найден
-                invited_list.append({
+                
+                payment_date_formatted = format_datetime(payment_date) if payment_date else None
+                start_working_date_formatted = format_datetime(start_working_date) if start_working_date else None
+                
+                referral_data = {
                     "telegram_id": referred_user.telegram_id,
                     "username": referred_user.username,
                     "payment_date": payment_date_formatted,
                     "start_working_date": start_working_date_formatted,
-                    "time_for_pay": format_timedelta(payment_date - start_working_date)
-                })
-                logging.debug(f"Invited list updated: {invited_list}")  # Логируем только обновление списка, если нужно
-            else:
-                logging.warning(f"Referred user with ID {referral.referred_id} not found.")  # Логируем предупреждение, если пользователь не найден
+                    "time_for_pay": format_timedelta(payment_date - start_working_date) if payment_date and start_working_date else ""
+                }
+                
+                referrals_with_payment.append((payment_date, referral_data))
 
+        # Сортируем список по убыванию даты платежа (самые последние оплаты в начале)
+        sorted_referrals = sorted(referrals_with_payment, key=lambda x: x[0] or datetime.min, reverse=True)
+        
+        # Формируем окончательный список
+        invited_list = [referral_data for _, referral_data in sorted_referrals]
 
     logging.info(f"invited_list {invited_list} когда вышли")
 
@@ -303,7 +300,7 @@ async def generate_clients_report_list_as_is(request: Request):
     data = await request.json()
     telegram_id = data.get("telegram_id")
 
-    invited_list = generate_clients_report_list_base(telegram_id)
+    invited_list = await generate_clients_report_list_base(telegram_id)
 
     return JSONResponse({
         "status": "success",
@@ -317,7 +314,7 @@ async def generate_clients_report_list_as_file(request: Request):
     data = await request.json()
     telegram_id = data.get("telegram_id")
 
-    invited_list = generate_clients_report_list_base(telegram_id)
+    invited_list = await generate_clients_report_list_base(telegram_id)
 
     # Создание DataFrame для Excel
     df = pd.DataFrame(invited_list)
