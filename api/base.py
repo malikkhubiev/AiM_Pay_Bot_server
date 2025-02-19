@@ -332,12 +332,22 @@ async def generate_clients_report_list_as_file(request: Request):
 
     logging.info(f"Excel-отчет создан: {file_path}")
 
-    return FileResponse(
-        file_path, 
-        filename="clients_report.xlsx", 
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-        headers={"X-Remove-File": file_path}
+    response = FileResponse(
+        file_path,
+        filename="clients_report.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+    # ⚡️ Добавляем удаление файла после отправки
+    @response.call_on_close
+    def cleanup():
+        try:
+            os.remove(file_path)
+            logging.info(f"Файл {file_path} успешно удалён после отправки")
+        except Exception as e:
+            logging.error(f"Ошибка при удалении файла {file_path}: {e}")
+
+    return response
 
 @app.post("/generate_clients_report")
 @exception_handler
