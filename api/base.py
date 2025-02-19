@@ -316,19 +316,29 @@ async def generate_clients_report_list_as_file(request: Request):
 
     invited_list = await generate_clients_report_list_base(telegram_id)
 
-    # Создание DataFrame для Excel
     df = pd.DataFrame(invited_list)
 
-    # Создаем временный файл Excel
-    file_path = f"report_{telegram_id}.xlsx"
+    # Убираем возможные ошибки кодировки
+    df = df.astype(str).apply(lambda x: x.str.encode('utf-8', 'ignore').str.decode('utf-8'))
 
+    file_path = f"report_{telegram_id}.xlsx"
+    
     with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
         df.to_excel(writer, sheet_name="Report", index=False)
-    
+        writer.close()  # Закрываем файл вручную
+
+    if not os.path.exists(file_path):
+        logging.error(f"Файл не найден после создания: {file_path}")
+
     logging.info(f"Excel-отчет создан: {file_path}")
 
-    return FileResponse(file_path, filename="clients_report.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    
+    return FileResponse(
+        file_path, 
+        filename="clients_report.xlsx", 
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+        headers={"X-Remove-File": file_path}
+    )
+
 @app.post("/generate_clients_report")
 @exception_handler
 async def generate_clients_report(request: Request):
