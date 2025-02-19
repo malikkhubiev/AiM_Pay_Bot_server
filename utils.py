@@ -149,7 +149,7 @@ async def send_request(url: str, data: dict, method: str = "POST") -> dict:
         raise HTTPException(status_code=500, message="An unknown error occurred")
 
 def format_datetime(dt):
-    return dt.strftime("%d.%m.%Y [%H:%M]")
+    return dt.strftime("%d.%m.%Y [%H:%M:%S]")
 
 def format_timedelta(td):
     days = td.days
