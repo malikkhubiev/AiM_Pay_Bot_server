@@ -325,6 +325,10 @@ async def generate_clients_report_list_as_file(request: Request):
     
     with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
         df.to_excel(writer, sheet_name="Report", index=False)
+        writer.close()  # Закрываем файл вручную
+
+    if not os.path.exists(file_path):
+        logging.error(f"Файл не найден после создания: {file_path}")
 
     logging.info(f"Excel-отчет создан: {file_path}")
 
