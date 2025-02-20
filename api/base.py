@@ -321,32 +321,30 @@ async def generate_clients_report_list_as_file(request: Request):
     # Убираем возможные ошибки кодировки
     df = df.astype(str).apply(lambda x: x.str.encode('utf-8', 'ignore').str.decode('utf-8'))
 
-    file_path = f"report_{telegram_id}.xlsx"
-    
-    with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
-        df.to_excel(writer, sheet_name="Report", index=False)
+    EXPORT_FOLDER = 'exports'
+    os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
-    if not os.path.exists(file_path):
-        logging.error(f"Файл не найден после создания: {file_path}")
+    file_path = os.path.join(EXPORT_FOLDER, f"report_{telegram_id}.xlsx")
 
-    logging.info(f"Excel-отчет создан: {file_path}")
+    try:
+        with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
+            df.to_excel(writer, sheet_name="Report", index=False)
 
-    response = FileResponse(
-        file_path,
-        filename="clients_report.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        if not os.path.exists(file_path):
+            logging.error(f"Файл не найден после создания: {file_path}")
+            raise HTTPException(status_code=500, detail="Не удалось создать отчет")
 
-    # ⚡️ Добавляем удаление файла после отправки
-    @response.call_on_close
-    def cleanup():
-        try:
-            os.remove(file_path)
-            logging.info(f"Файл {file_path} успешно удалён после отправки")
-        except Exception as e:
-            logging.error(f"Ошибка при удалении файла {file_path}: {e}")
+        logging.info(f"Отправка отчета: {file_path}")
 
-    return response
+        return FileResponse(
+            path=file_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename="clients_report.xlsx"
+        )
+
+    except Exception as e:
+        logging.error(f"Ошибка генерации отчета: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации отчета: {e}")
 
 @app.post("/generate_clients_report")
 @exception_handler
