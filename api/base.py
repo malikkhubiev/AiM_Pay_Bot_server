@@ -278,11 +278,15 @@ async def generate_clients_report_list_base(telegram_id, response_type):
                     "time_for_pay": format_timedelta(payment_date - start_working_date) if payment_date and start_working_date else ""
                 }
                 
-                if response_type == "string":
-                    payment_date_formatted = format_datetime(payment_date) if payment_date else None
-                    start_working_date_formatted = format_datetime(start_working_date) if start_working_date else None
-                    referral_data["payment_date"] = payment_date_formatted
-                    referral_data["start_working_date"] = start_working_date_formatted
+                if payment_date and start_working_date:
+                    if response_type == "string":
+                        payment_date_formatted = format_datetime(payment_date)
+                        start_working_date_formatted = format_datetime(start_working_date)
+                        referral_data["payment_date"] = payment_date_formatted
+                        referral_data["start_working_date"] = start_working_date_formatted
+                    elif response_type == "datetime":
+                        referral_data["payment_date"] = format_datetime_for_excel(payment_date)
+                        referral_data["start_working_date"] = format_datetime_for_excel(start_working_date)
 
                 referrals_with_payment.append((payment_date, referral_data))
 
