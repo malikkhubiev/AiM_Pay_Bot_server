@@ -1,5 +1,6 @@
 from loader import *
 from utils import *
+from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from config import (
     BOT_USERNAME,
@@ -309,7 +310,7 @@ async def generate_clients_report_list_as_is(request: Request):
     
 @app.post("/generate_clients_report_list_as_file")
 @exception_handler
-async def generate_clients_report_list_as_file(request: Request):
+async def generate_clients_report_list_as_file(request: Request, background_tasks: BackgroundTasks):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -336,6 +337,9 @@ async def generate_clients_report_list_as_file(request: Request):
 
         logging.info(f"Отправка отчета: {file_path}")
 
+        # Добавляем задачу на удаление файла после отправки
+        background_tasks.add_task(delete_file, file_path)
+
         return FileResponse(
             path=file_path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -345,6 +349,15 @@ async def generate_clients_report_list_as_file(request: Request):
     except Exception as e:
         logging.error(f"Ошибка генерации отчета: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка генерации отчета: {e}")
+
+def delete_file(file_path: str):
+    """Функция для удаления файла после отправки"""
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logging.info(f"Файл {file_path} удалён после отправки")
+    except Exception as e:
+        logging.error(f"Ошибка при удалении файла {file_path}: {e}")
 
 @app.post("/generate_clients_report")
 @exception_handler
