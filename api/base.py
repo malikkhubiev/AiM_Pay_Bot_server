@@ -1,9 +1,12 @@
 from loader import *
 from utils import *
+import plotly.graph_objects as go
+import plotly.io as pio
 from fastapi import BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from config import (
     BOT_USERNAME,
+    SERVER_URL,
     MAHIN_URL,
     REFERRAL_AMOUNT,
     PROMO_NUM_LIMIT
@@ -30,6 +33,8 @@ from database import (
     get_promo_user,
     get_promo_user_count,
     add_promo_user,
+    get_user_by_unique_str,
+    get_paid_referrals_by_user,
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
@@ -523,6 +528,51 @@ async def get_payments_frequency(request: Request):
             "payments_frequency": payments_frequency_values
         }
     })
+
+@app.post("/generate_referral_chart_link")
+async def generate_referral_chart_link(request: Request):
+    """ Генерирует ссылку на график рефералов """
+
+    logging.info("inside generate_referral_chart_link")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id)
+    unique_str = user.unique_str
+
+    chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
+    return JSONResponse({
+        "status": "success",
+        "data": {
+            "chart_url": chart_url
+        }
+    })
+
+@app.get("/referral_chart/{unique_str}")
+async def referral_chart(unique_str: str):
+    """ Генерирует HTML с графиком Plotly для пользователя по unique_str """
+    # Получаем пользователя по unique_str
+    user = await get_user_by_unique_str(unique_str)
+    if not user:
+        return HTMLResponse("<h3>Ссылка недействительна</h3>", status_code=404)
+
+    referral_data = await get_paid_referrals_by_user(user.telegram_id)
+
+    # Создаем график
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=list(referral_data.keys()), y=list(referral_data.values()), mode='lines+markers', name='Рефералы'))
+    fig.update_layout(title="Оплатившие рефералы по дням", xaxis_title="Дата", yaxis_title="Количество")
+
+    # Генерируем HTML
+    html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
+    return HTMLResponse(html_content)
+
 # @app.post("/get_invite_link")
 # @exception_handler
 # async def get_invite_link(request: Request):

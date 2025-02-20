@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import insert, create_engine, func, and_, Column, Integer, String, ForeignKey, DateTime, Boolean, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -37,6 +38,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
+    unique_str = Column(String, unique=True, default=lambda: str(uuid.uuid4()))
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
@@ -131,6 +133,11 @@ async def create_pending_payout(
 
 async def get_user(telegram_id: str):
     query = select(User).filter_by(telegram_id=telegram_id)
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query)
+
+async def get_user_by_unique_str(unique_str: str):
+    query = select(User).filter_by(unique_str=unique_str)
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
 
@@ -235,6 +242,23 @@ async def get_referral_statistics():
         {"telegram_id": row["telegram_id"], "username": row["username"], "paid_referrals": row["paid_referrals"]}
         for row in result
     ]
+
+async def get_paid_referrals_by_user(telegram_id: str):
+    """ Получает количество оплаченных рефералов по дням для пользователя """
+    query = (
+        select(Payment.created_at)
+        .join(User, Payment.telegram_id == User.telegram_id)
+        .join(Referral, Referral.referred_id == User.telegram_id)
+        .where(Referral.referrer_id == telegram_id, Payment.status == "paid")
+    )
+    payments = await database.fetch_all(query)
+    
+    referral_data = {}
+    for row in payments:
+        date_str = row["created_at"].strftime("%Y-%m-%d")
+        referral_data[date_str] = referral_data.get(date_str, 0) + 1
+    
+    return referral_data
 
 async def add_promo_user(telegram_id: str):
     query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"

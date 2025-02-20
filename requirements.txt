@@ -16,3 +16,4 @@ httpx
 uuid
 pandas
 xlsxwriter
+plotly
