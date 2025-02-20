@@ -1,4 +1,5 @@
 import os
+import pandas
 from responses import *
 from fastapi import HTTPException, Request, status
 import ipaddress
@@ -173,3 +174,9 @@ def format_timedelta(td):
         time_str.append(f"{seconds} {second_label}")
     
     return ", ".join(time_str)
+
+def format_datetime_for_excel(dt):
+    """Преобразует datetime в формат, подходящий для Excel."""
+    if dt is None:
+        return None
+    return pd.Timestamp(dt)  # Pandas автоматически конвертирует в Excel-friendly формат

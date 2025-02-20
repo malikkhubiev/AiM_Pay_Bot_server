@@ -235,8 +235,7 @@ async def register_user_with_promo(request: Request):
             "message": "Лимит пользователей, которые могут зарегистрироваться по промокоду, исчерпан"
         })
 
-
-async def generate_clients_report_list_base(telegram_id):
+async def generate_clients_report_list_base(telegram_id, response_type):
     logging.info(f"telegram_id {telegram_id}")
     
     check = check_parameters(telegram_id=telegram_id)
@@ -270,18 +269,25 @@ async def generate_clients_report_list_base(telegram_id):
             if referred_user:
                 payment_date = await get_payment_date(referral.referred_id)
                 start_working_date = await get_start_working_date(referral.referred_id)
-                
-                payment_date_formatted = format_datetime(payment_date) if payment_date else None
-                start_working_date_formatted = format_datetime(start_working_date) if start_working_date else None
-                
+
                 referral_data = {
                     "telegram_id": referred_user.telegram_id,
                     "username": referred_user.username,
-                    "payment_date": payment_date_formatted,
-                    "start_working_date": start_working_date_formatted,
+                    "payment_date": payment_date,
+                    "start_working_date": start_working_date,
                     "time_for_pay": format_timedelta(payment_date - start_working_date) if payment_date and start_working_date else ""
                 }
                 
+                if payment_date and start_working_date:
+                    if response_type == "string":
+                        payment_date_formatted = format_datetime(payment_date)
+                        start_working_date_formatted = format_datetime(start_working_date)
+                        referral_data["payment_date"] = payment_date_formatted
+                        referral_data["start_working_date"] = start_working_date_formatted
+                    elif response_type == "datetime":
+                        referral_data["payment_date"] = format_datetime_for_excel(payment_date)
+                        referral_data["start_working_date"] = format_datetime_for_excel(start_working_date)
+
                 referrals_with_payment.append((payment_date, referral_data))
 
         # Сортируем список по убыванию даты платежа (самые последние оплаты в начале)
@@ -301,7 +307,7 @@ async def generate_clients_report_list_as_is(request: Request):
     data = await request.json()
     telegram_id = data.get("telegram_id")
 
-    invited_list = await generate_clients_report_list_base(telegram_id)
+    invited_list = await generate_clients_report_list_base(telegram_id, "string")
 
     return JSONResponse({
         "status": "success",
@@ -315,7 +321,7 @@ async def generate_clients_report_list_as_file(request: Request, background_task
     data = await request.json()
     telegram_id = data.get("telegram_id")
 
-    invited_list = await generate_clients_report_list_base(telegram_id)
+    invited_list = await generate_clients_report_list_base(telegram_id, "datetime")
 
     df = pd.DataFrame(invited_list)
 
