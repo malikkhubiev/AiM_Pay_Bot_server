@@ -1,5 +1,5 @@
 import os
-import pandas
+import pandas as pd
 from responses import *
 from fastapi import HTTPException, Request, status
 import ipaddress
