@@ -538,23 +538,25 @@ async def generate_referral_chart_link(request: Request):
     
     data = await request.json()
     telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
 
     check = check_parameters(telegram_id=telegram_id)
     if not(check["result"]):
         return {"status": "error", "message": check["message"]}
     
-    user = await get_user_by_telegram_id(telegram_id)
-    logging.info(f"user {user}")
-    unique_str = user.unique_str
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if user:
+        logging.info(f"user {user}")
+        unique_str = user.unique_str
 
-    chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
-    logging.info(f"chart_url {chart_url}")
-    return JSONResponse({
-        "status": "success",
-        "data": {
-            "chart_url": chart_url
-        }
-    })
+        chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
+        logging.info(f"chart_url {chart_url}")
+        return JSONResponse({
+            "status": "success",
+            "data": {
+                "chart_url": chart_url
+            }
+        })
 
 @app.get("/referral_chart/{unique_str}")
 async def referral_chart(unique_str: str):
