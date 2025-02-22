@@ -263,7 +263,10 @@ async def get_paid_referrals_by_user(telegram_id: str):
         date_str = row["created_at"].strftime("%Y-%m-%d")
         referral_data[date_str] = referral_data.get(date_str, 0) + 1
     
-    return referral_data
+    # Сортируем даты
+    sorted_referral_data = dict(sorted(referral_data.items()))
+
+    return sorted_referral_data
 
 async def add_promo_user(telegram_id: str):
     query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"
