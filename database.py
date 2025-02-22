@@ -254,7 +254,7 @@ async def get_paid_referrals_by_user(telegram_id: str):
         select(Payment.created_at)
         .join(User, Payment.telegram_id == User.telegram_id)
         .join(Referral, Referral.referred_id == User.telegram_id)
-        .where(Referral.referrer_id == telegram_id, Payment.status == "paid")
+        .where(Referral.referrer_id == telegram_id, Payment.status == "success")
     )
     payments = await database.fetch_all(query)
     
