@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+import random
 from config import (
     BOT_USERNAME,
     SERVER_URL,
@@ -538,36 +539,68 @@ async def generate_referral_chart_link(request: Request):
     
     data = await request.json()
     telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
 
     check = check_parameters(telegram_id=telegram_id)
     if not(check["result"]):
         return {"status": "error", "message": check["message"]}
     
-    user = await get_user_by_telegram_id(telegram_id)
-    unique_str = user.unique_str
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if user:
+        logging.info(f"user {user}")
+        unique_str = user.unique_str
 
-    chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
-    return JSONResponse({
-        "status": "success",
-        "data": {
-            "chart_url": chart_url
-        }
-    })
+        chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
+        logging.info(f"chart_url {chart_url}")
+        return JSONResponse({
+            "status": "success",
+            "data": {
+                "chart_url": chart_url
+            }
+        })
+    else:
+        return JSONResponse({
+            "status": "error",
+            "message": "Пользователь не найден"
+        })
 
 @app.get("/referral_chart/{unique_str}")
 async def referral_chart(unique_str: str):
     """ Генерирует HTML с графиком Plotly для пользователя по unique_str """
-    # Получаем пользователя по unique_str
+    
+    logging.info(f"inside referral_chart")
+    
     user = await get_user_by_unique_str(unique_str)
     if not user:
         return HTMLResponse("<h3>Ссылка недействительна</h3>", status_code=404)
 
-    referral_data = await get_paid_referrals_by_user(user.telegram_id)
+    # Real🔥 referral_data = await get_paid_referrals_by_user(user.telegram_id)
+    base_date = datetime.today()
+    dates = [base_date - timedelta(days=i) for i in range(45)]  # 45 последних дней
+    referral_data = {date.strftime("%Y-%m-%d"): random.randint(1, 100) for date in dates}
+    # 🔥
 
+    logging.info(f"referral_data {referral_data}")
+    
+    # Преобразуем даты в формат "дд.мм"
+    # Предположим, что referral_data - это словарь, где ключи - это даты, а значения - это количество рефералов.
+    # Преобразуем ключи в строковый формат "дд.мм"
+    formatted_dates = [datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m") for date_str in referral_data.keys()]
+    formatted_dates.reverse()
+    referral_values = list(referral_data.values())[::-1]
     # Создаем график
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=list(referral_data.keys()), y=list(referral_data.values()), mode='lines+markers', name='Рефералы'))
-    fig.update_layout(title="Оплатившие рефералы по дням", xaxis_title="Дата", yaxis_title="Количество")
+    # Real🔥 fig.add_trace(go.Scatter(x=formatted_dates, y=list(referral_data.values()), mode='lines+markers', name='Рефералы'))
+    fig.add_trace(go.Scatter(x=formatted_dates, y=list(referral_values), mode='lines+markers', name='Рефералы'))
+    # 🔥
+
+    # Устанавливаем форматирование для оси X
+    fig.update_layout(
+        title="График оплат рефералов",
+        xaxis_title="Дата",
+        yaxis_title="Количество",
+        xaxis=dict(tickformat="%d.%m")  # Форматирование оси X
+    )
 
     # Генерируем HTML
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')

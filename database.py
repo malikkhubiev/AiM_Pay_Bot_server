@@ -38,7 +38,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
-    unique_str = Column(String, unique=True, default=lambda: str(uuid.uuid4()))
+    unique_str = Column(String, unique=True, nullable=False)
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
@@ -107,7 +107,12 @@ def initialize_database():
 
 # Асинхронные функции с типами
 async def create_user(telegram_id: str, username: str):
-    query = User.__table__.insert().values(telegram_id=telegram_id, username=username)
+    unique_str = str(uuid.uuid4())
+    query = User.__table__.insert().values(
+        telegram_id=telegram_id,
+        username=username,
+        unique_str=unique_str
+    )
     async with database.transaction():  # Используем async with для выполнения транзакции
         await database.execute(query)
 
@@ -249,7 +254,7 @@ async def get_paid_referrals_by_user(telegram_id: str):
         select(Payment.created_at)
         .join(User, Payment.telegram_id == User.telegram_id)
         .join(Referral, Referral.referred_id == User.telegram_id)
-        .where(Referral.referrer_id == telegram_id, Payment.status == "paid")
+        .where(Referral.referrer_id == telegram_id, Payment.status == "success")
     )
     payments = await database.fetch_all(query)
     
@@ -258,7 +263,10 @@ async def get_paid_referrals_by_user(telegram_id: str):
         date_str = row["created_at"].strftime("%Y-%m-%d")
         referral_data[date_str] = referral_data.get(date_str, 0) + 1
     
-    return referral_data
+    # Сортируем даты
+    sorted_referral_data = dict(sorted(referral_data.items()))
+
+    return sorted_referral_data
 
 async def add_promo_user(telegram_id: str):
     query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"
