@@ -544,9 +544,11 @@ async def generate_referral_chart_link(request: Request):
         return {"status": "error", "message": check["message"]}
     
     user = await get_user_by_telegram_id(telegram_id)
+    logging.info(f"user {user}")
     unique_str = user.unique_str
 
     chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
+    logging.info(f"chart_url {chart_url}")
     return JSONResponse({
         "status": "success",
         "data": {
@@ -557,12 +559,15 @@ async def generate_referral_chart_link(request: Request):
 @app.get("/referral_chart/{unique_str}")
 async def referral_chart(unique_str: str):
     """ Генерирует HTML с графиком Plotly для пользователя по unique_str """
-    # Получаем пользователя по unique_str
+    
+    logging.info(f"inside referral_chart")
+    
     user = await get_user_by_unique_str(unique_str)
     if not user:
         return HTMLResponse("<h3>Ссылка недействительна</h3>", status_code=404)
 
     referral_data = await get_paid_referrals_by_user(user.telegram_id)
+    logging.info(f"referral_data {referral_data}")
 
     # Создаем график
     fig = go.Figure()
