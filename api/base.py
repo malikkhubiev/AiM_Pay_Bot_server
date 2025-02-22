@@ -557,6 +557,11 @@ async def generate_referral_chart_link(request: Request):
                 "chart_url": chart_url
             }
         })
+    else:
+        return JSONResponse({
+            "status": "error",
+            "message": "Пользователь не найден"
+        })
 
 @app.get("/referral_chart/{unique_str}")
 async def referral_chart(unique_str: str):
