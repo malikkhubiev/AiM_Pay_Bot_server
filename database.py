@@ -469,7 +469,7 @@ async def get_binding_by_unique_str(unique_str: str):
 #
 
 
-async def create_user(telegram_id: str, username: str):
+async def create_user1(telegram_id: str, username: str):
     unique_str = str(uuid.uuid4())
     query = insert(User).values(
         telegram_id=telegram_id,
@@ -480,7 +480,7 @@ async def create_user(telegram_id: str, username: str):
         await database.execute(query)
     return telegram_id
 
-async def create_referral(referrer_id: str, referred_id: str):
+async def create_referral1(referrer_id: str, referred_id: str):
     query = insert(Referral).values(
         referrer_id=referrer_id,
         referred_id=referred_id,
@@ -489,7 +489,7 @@ async def create_referral(referrer_id: str, referred_id: str):
     async with database.transaction():
         await database.execute(query)
 
-async def create_payment(telegram_id: str):
+async def create_payment1(telegram_id: str):
     idempotence_key = str(uuid.uuid4())
     query = insert(Payment).values(
         telegram_id=telegram_id,
@@ -501,7 +501,7 @@ async def create_payment(telegram_id: str):
         await database.execute(query)
 
 async def add_mock_referral_with_payment(referrer_telegram_id: str, referred_telegram_id: str):
-    await create_user(referrer_telegram_id, f'user_{referrer_telegram_id}', database)
-    await create_user(referred_telegram_id, f'user_{referred_telegram_id}', database)
-    await create_referral(referrer_telegram_id, referred_telegram_id, database)
-    await create_payment(referred_telegram_id, database)
+    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', database)
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', database)
+    await create_referral1(referrer_telegram_id, referred_telegram_id, database)
+    await create_payment1(referred_telegram_id, database)
