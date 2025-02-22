@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+import random
 from config import (
     BOT_USERNAME,
     SERVER_URL,
@@ -573,7 +574,11 @@ async def referral_chart(unique_str: str):
     if not user:
         return HTMLResponse("<h3>Ссылка недействительна</h3>", status_code=404)
 
-    referral_data = await get_paid_referrals_by_user(user.telegram_id)
+    # Real🔥 referral_data = await get_paid_referrals_by_user(user.telegram_id)
+    base_date = datetime.today()
+    dates = [base_date - timedelta(days=i) for i in range(45)]  # 45 последних дней
+    referral_data = {date.strftime("%Y-%m-%d"): random.randint(1, 100) for date in dates}
+
     logging.info(f"referral_data {referral_data}")
     
     # Преобразуем даты в формат "дд.мм"
