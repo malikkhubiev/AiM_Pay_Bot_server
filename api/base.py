@@ -36,6 +36,8 @@ from database import (
     add_promo_user,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
+
+    add_mock_referral_with_payment
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
@@ -595,6 +597,34 @@ async def referral_chart(unique_str: str):
     # Генерируем HTML
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
     return HTMLResponse(html_content)
+
+
+
+
+
+
+#
+
+
+
+
+
+
+
+@app.post("/add_mock_referral")
+async def add_mock_referral(request: Request):
+
+    data = await request.json()
+    referrer_telegram_id = data.get("referrer_telegram_id")
+    referred_telegram_id = data.get("referred_telegram_id")
+    
+    logging.info(f"add_mock_referral referral_chart")
+    
+    await add_mock_referral_with_payment(referrer_telegram_id, referred_telegram_id)
+    
+    return JSONResponse({
+        "status": "success"
+    })
 
 # @app.post("/get_invite_link")
 # @exception_handler
