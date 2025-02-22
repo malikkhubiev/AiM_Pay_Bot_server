@@ -469,15 +469,29 @@ async def get_binding_by_unique_str(unique_str: str):
 #
 
 
-async def create_user1(telegram_id: str, username: str):
+async def create_user1(telegram_id: str, username: str, created_at_str: str):
+    # Преобразуем строку в объект datetime
+    created_at = datetime.strptime(created_at_str, "%d.%m.%Y")
+    
+    # Проверяем, существует ли пользователь с таким telegram_id
+    query_check = select(User).where(User.telegram_id == telegram_id)
+    existing_user = await database.fetch_one(query_check)
+    
+    if existing_user:
+        return f"Пользователь с telegram_id {telegram_id} уже существует"
+    
+    # Если не существует, создаем нового пользователя
     unique_str = str(uuid.uuid4())
-    query = insert(User).values(
+    query_insert = insert(User).values(
         telegram_id=telegram_id,
         username=username,
-        unique_str=unique_str
+        unique_str=unique_str,
+        created_at=created_at
     )
+    
     async with database.transaction():
-        await database.execute(query)
+        await database.execute(query_insert)
+    
     return telegram_id
 
 async def create_referral1(referrer_id: str, referred_id: str):
@@ -500,8 +514,13 @@ async def create_payment1(telegram_id: str):
     async with database.transaction():
         await database.execute(query)
 
-async def add_mock_referral_with_payment(referrer_telegram_id: str, referred_telegram_id: str):
-    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}')
-    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}')
+async def add_mock_referral_with_payment(
+    referrer_telegram_id: str,
+    referred_telegram_id: str,
+    created_at_str1: str,
+    created_at_str2: str,
+):
+    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str2)
     await create_referral1(referrer_telegram_id, referred_telegram_id)
     await create_payment1(referred_telegram_id)
