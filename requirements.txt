@@ -17,4 +17,3 @@ uuid
 pandas
 xlsxwriter
 plotly
-random
