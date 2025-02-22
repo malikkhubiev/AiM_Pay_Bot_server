@@ -575,11 +575,23 @@ async def referral_chart(unique_str: str):
 
     referral_data = await get_paid_referrals_by_user(user.telegram_id)
     logging.info(f"referral_data {referral_data}")
+    
+    # Преобразуем даты в формат "дд.мм"
+    # Предположим, что referral_data - это словарь, где ключи - это даты, а значения - это количество рефералов.
+    # Преобразуем ключи в строковый формат "дд.мм"
+    formatted_dates = [datetime.strptime(date_str, "%Y-%m-%d").strftime("%d.%m") for date_str in referral_data.keys()]
 
     # Создаем график
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=list(referral_data.keys()), y=list(referral_data.values()), mode='lines+markers', name='Рефералы'))
-    fig.update_layout(title="Оплатившие рефералы по дням", xaxis_title="Дата", yaxis_title="Количество")
+    fig.add_trace(go.Scatter(x=formatted_dates, y=list(referral_data.values()), mode='lines+markers', name='Рефералы'))
+
+    # Устанавливаем форматирование для оси X
+    fig.update_layout(
+        title="График оплат рефералов",
+        xaxis_title="Дата",
+        yaxis_title="Количество",
+        xaxis=dict(tickformat="%d.%m")  # Форматирование оси X
+    )
 
     # Генерируем HTML
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
