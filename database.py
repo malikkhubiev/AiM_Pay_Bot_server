@@ -501,7 +501,7 @@ async def create_payment1(telegram_id: str):
         await database.execute(query)
 
 async def add_mock_referral_with_payment(referrer_telegram_id: str, referred_telegram_id: str):
-    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', database)
-    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', database)
-    await create_referral1(referrer_telegram_id, referred_telegram_id, database)
-    await create_payment1(referred_telegram_id, database)
+    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}')
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}')
+    await create_referral1(referrer_telegram_id, referred_telegram_id)
+    await create_payment1(referred_telegram_id)
