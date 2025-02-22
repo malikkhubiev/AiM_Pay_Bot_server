@@ -38,7 +38,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
-    unique_str = Column(String, unique=True, default=lambda: str(uuid.uuid4()))
+    unique_str = Column(String, unique=True, nullable=False)
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
@@ -107,7 +107,12 @@ def initialize_database():
 
 # Асинхронные функции с типами
 async def create_user(telegram_id: str, username: str):
-    query = User.__table__.insert().values(telegram_id=telegram_id, username=username)
+    unique_str = str(uuid.uuid4())
+    query = User.__table__.insert().values(
+        telegram_id=telegram_id,
+        username=username,
+        unique_str=unique_str
+    )
     async with database.transaction():  # Используем async with для выполнения транзакции
         await database.execute(query)
 
