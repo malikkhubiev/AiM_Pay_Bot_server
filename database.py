@@ -503,13 +503,14 @@ async def create_referral1(referrer_id: str, referred_id: str):
     async with database.transaction():
         await database.execute(query)
 
-async def create_payment1(telegram_id: str):
+async def create_payment1(telegram_id: str, created_at_str2: str):
     idempotence_key = str(uuid.uuid4())
+    created_at = datetime.strptime(created_at_str2, "%d.%m.%Y")
     query = insert(Payment).values(
         telegram_id=telegram_id,
         idempotence_key=idempotence_key,
         status="success",
-        created_at=datetime.utcnow()
+        created_at=created_at
     )
     async with database.transaction():
         await database.execute(query)
@@ -521,6 +522,6 @@ async def add_mock_referral_with_payment(
     created_at_str2: str,
 ):
     await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
-    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str2)
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
     await create_referral1(referrer_telegram_id, referred_telegram_id)
-    await create_payment1(referred_telegram_id)
+    await create_payment1(referred_telegram_id, created_at_str2)
