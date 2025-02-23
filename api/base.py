@@ -598,40 +598,28 @@ async def referral_chart(unique_str: str):
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
     return HTMLResponse(html_content)
 
+# Фейк-юзеры
+# @app.post("/add_mock_referral")
+# async def add_mock_referral(request: Request):
 
-
-
-
-
-#
-
-
-
-
-
-
-
-@app.post("/add_mock_referral")
-async def add_mock_referral(request: Request):
-
-    data = await request.json()
-    referrer_telegram_id = data.get("referrer_telegram_id")
-    referred_telegram_id = data.get("referred_telegram_id")
-    created_at_str1 = data.get("created_at_str1")
-    created_at_str2 = data.get("created_at_str2")
+#     data = await request.json()
+#     referrer_telegram_id = data.get("referrer_telegram_id")
+#     referred_telegram_id = data.get("referred_telegram_id")
+#     created_at_str1 = data.get("created_at_str1")
+#     created_at_str2 = data.get("created_at_str2")
     
-    logging.info(f"add_mock_referral referral_chart")
+#     logging.info(f"add_mock_referral referral_chart")
     
-    await add_mock_referral_with_payment(
-        referrer_telegram_id, 
-        referred_telegram_id,
-        created_at_str1,
-        created_at_str2
-    )
+#     await add_mock_referral_with_payment(
+#         referrer_telegram_id, 
+#         referred_telegram_id,
+#         created_at_str1,
+#         created_at_str2
+#     )
     
-    return JSONResponse({
-        "status": "success"
-    })
+#     return JSONResponse({
+#         "status": "success"
+#     })
 
 # @app.post("/get_invite_link")
 # @exception_handler
