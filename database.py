@@ -525,3 +525,64 @@ async def add_mock_referral_with_payment(
     await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
     await create_referral1(referrer_telegram_id, referred_telegram_id)
     await create_payment1(referred_telegram_id, created_at_str2)
+
+
+#
+
+
+async def create_user1(telegram_id: str, username: str, created_at_str: str):
+    # Преобразуем строку в объект datetime
+    created_at = datetime.strptime(created_at_str, "%d.%m.%Y")
+    
+    # Проверяем, существует ли пользователь с таким telegram_id
+    query_check = select(User).where(User.telegram_id == telegram_id)
+    existing_user = await database.fetch_one(query_check)
+    
+    if existing_user:
+        return f"Пользователь с telegram_id {telegram_id} уже существует"
+    
+    # Если не существует, создаем нового пользователя
+    unique_str = str(uuid.uuid4())
+    query_insert = insert(User).values(
+        telegram_id=telegram_id,
+        username=username,
+        unique_str=unique_str,
+        created_at=created_at
+    )
+    
+    async with database.transaction():
+        await database.execute(query_insert)
+    
+    return telegram_id
+
+async def create_referral1(referrer_id: str, referred_id: str):
+    query = insert(Referral).values(
+        referrer_id=referrer_id,
+        referred_id=referred_id,
+        status="success"
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def create_payment1(telegram_id: str, created_at_str2: str):
+    idempotence_key = str(uuid.uuid4())
+    created_at = datetime.strptime(created_at_str2, "%d.%m.%Y")
+    query = insert(Payment).values(
+        telegram_id=telegram_id,
+        idempotence_key=idempotence_key,
+        status="success",
+        created_at=created_at
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def add_mock_referral_with_payment(
+    referrer_telegram_id: str,
+    referred_telegram_id: str,
+    created_at_str1: str,
+    created_at_str2: str,
+):
+    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
+    await create_referral1(referrer_telegram_id, referred_telegram_id)
+    await create_payment1(referred_telegram_id, created_at_str2)
