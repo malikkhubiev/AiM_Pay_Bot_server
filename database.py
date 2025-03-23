@@ -57,7 +57,7 @@ class Payment(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'), nullable=False)  # Ссылка на пользователя
     transaction_id = Column(String, default=None)  # Идентификатор транзакции
     idempotence_key = Column(String, nullable=False, unique=True)
-    status = Column(String, nullable=False)
+    status = Column(String, nullable=False) # (success|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
 
     user = relationship("User", back_populates="payments")  # Связь с пользователем
@@ -68,7 +68,7 @@ class Referral(Base):
     id = Column(Integer, primary_key=True, index=True)
     referrer_id = Column(String, ForeignKey('users.telegram_id'))  # Кто пригласил
     referred_id = Column(String, ForeignKey('users.telegram_id'), unique=True)  # Кто был приглашён
-    status = Column(String, nullable=False)
+    status = Column(String, nullable=False) # (success|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
@@ -83,7 +83,7 @@ class Payout(Base):
     card_synonym = Column(String, nullable=False)
     idempotence_key = Column(String, nullable=False, unique=True)
     amount = Column(Float)
-    status = Column(String, nullable=False)
+    status = Column(String, nullable=False) # (pending|success)
     notified = Column(Boolean, default=False)
     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
     created_at = Column(DateTime, nullable=False, server_default=func.now())
@@ -464,3 +464,64 @@ async def get_binding_by_unique_str(unique_str: str):
     query = select(Binding).filter(Binding.unique_str == unique_str)
     async with database.transaction():  # Используем async with для транзакции
         return await database.fetch_one(query)
+
+
+#
+
+
+async def create_user1(telegram_id: str, username: str, created_at_str: str):
+    # Преобразуем строку в объект datetime
+    created_at = datetime.strptime(created_at_str, "%d.%m.%Y")
+    
+    # Проверяем, существует ли пользователь с таким telegram_id
+    query_check = select(User).where(User.telegram_id == telegram_id)
+    existing_user = await database.fetch_one(query_check)
+    
+    if existing_user:
+        return f"Пользователь с telegram_id {telegram_id} уже существует"
+    
+    # Если не существует, создаем нового пользователя
+    unique_str = str(uuid.uuid4())
+    query_insert = insert(User).values(
+        telegram_id=telegram_id,
+        username=username,
+        unique_str=unique_str,
+        created_at=created_at
+    )
+    
+    async with database.transaction():
+        await database.execute(query_insert)
+    
+    return telegram_id
+
+async def create_referral1(referrer_id: str, referred_id: str):
+    query = insert(Referral).values(
+        referrer_id=referrer_id,
+        referred_id=referred_id,
+        status="success"
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def create_payment1(telegram_id: str, created_at_str2: str):
+    idempotence_key = str(uuid.uuid4())
+    created_at = datetime.strptime(created_at_str2, "%d.%m.%Y")
+    query = insert(Payment).values(
+        telegram_id=telegram_id,
+        idempotence_key=idempotence_key,
+        status="success",
+        created_at=created_at
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def add_mock_referral_with_payment(
+    referrer_telegram_id: str,
+    referred_telegram_id: str,
+    created_at_str1: str,
+    created_at_str2: str,
+):
+    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
+    await create_referral1(referrer_telegram_id, referred_telegram_id)
+    await create_payment1(referred_telegram_id, created_at_str2)
