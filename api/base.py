@@ -687,23 +687,30 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     # Генерируем PDF поверх шаблона
     buffer = BytesIO()
     c = canvas.Canvas(buffer)
-    c.setPageSize((595, 842))  # A4
+    c.setPageSize((842, 595))  # A4
     c.setFont("Helvetica-Bold", 36)
-
-    # Вставляем ФИО
-    c.drawString(200, 500, name)
 
     # Вставляем дату
     date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
     c.setFont("Helvetica", 24)
     c.drawString(200, 450, date_str)
 
+    # Вставляем центрированное имя
+    font_size = 36
+    font = "Helvetica-Bold"
+    c.setFont(font, font_size)
+    c.setFillColorRGB(1, 1, 1)  # Белый цвет
+    text_width = c.stringWidth(name, font, font_size)
+    x = (842 - text_width) / 2  # Центр страницы по ширине
+    c.drawString(x, 340, name)
+
     # Вставляем cert_id над QR-кодом
+    c.setFillColorRGB(1, 1, 1)  # Белый цвет
     c.setFont("Helvetica", 18)
-    c.drawString(450, 320, cert_id)  
+    c.drawString(372, 517, cert_id)  
 
     # Вставляем QR-код
-    c.drawImage(ImageReader(qr_path), 450, 200, 100, 100)
+    c.drawImage(ImageReader(qr_path), 27, 429, 138, 138)
 
     c.showPage()
     c.save()
