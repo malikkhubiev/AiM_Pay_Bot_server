@@ -627,9 +627,13 @@ async def save_fio(request: Request):
                 "message": "Пользователь не найден"
             })
         
-        fio = data.get("telegram_id")
+        logging.info(f"ФИО ещё не установлено")
+        fio = data.get("fio")
+        logging.info(f"полученное ФИО {fio}")
 
         await update_fio_and_date_of_cert(telegram_id, fio)
+
+        logging.info(f"ФИО обновлено")
 
         return JSONResponse({
             "status": "success",
