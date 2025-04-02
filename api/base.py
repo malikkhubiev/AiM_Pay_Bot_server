@@ -36,7 +36,7 @@ from database import (
     add_promo_user,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
-
+    update_fio_and_date_of_cert,
     add_mock_referral_with_payment
 )
 import pandas as pd
@@ -598,6 +598,47 @@ async def referral_chart(unique_str: str):
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
     return HTMLResponse(html_content)
 
+@app.post("/save_fio")
+async def save_fio(request: Request):
+    """ Генерирует ссылку на график рефералов """
+
+    logging.info("inside save_fio")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if user:
+        logging.info(f"user {user}")
+
+        if user.fio:
+            return JSONResponse({
+                "status": "error",
+                "message": "Пользователь не найден"
+            })
+        
+        fio = data.get("telegram_id")
+
+        await update_fio_and_date_of_cert(telegram_id, fio)
+
+        return JSONResponse({
+            "status": "success",
+            "data": {
+                "message": "Ваше ФИО установлено. Вы можете скачать сертификат, получить ссылку на просмотр или вернуться в главное меню"
+            }
+        })
+    else:
+        return JSONResponse({
+            "status": "error",
+            "message": "Пользователь не найден"
+        })
+    
 # Фейк-юзеры
 # @app.post("/add_mock_referral")
 # async def add_mock_referral(request: Request):

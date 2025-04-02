@@ -38,6 +38,8 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
+    fio = Column(String(255), unique=False, nullable=True)
+    date_of_certificate = Column(DateTime, nullable=True)
     unique_str = Column(String, unique=True, nullable=False)
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
@@ -359,12 +361,6 @@ async def update_temp_user(telegram_id: str, username: Optional[str] = None):
             update_query = TempUser.__table__.update().where(TempUser.telegram_id == telegram_id).values(update_data)
             await database.execute(update_query)
 
-async def save_invite_link_db(telegram_id: str, invite_link: str):
-    update_data = {'invite_link': invite_link}
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
 async def update_payment_done(telegram_id: str, transaction_id: str):
     user_update_data = {'paid': True}
     user_update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(user_update_data)
@@ -382,6 +378,21 @@ async def update_payment_idempotence_key(telegram_id: str, idempotence_key: str)
 
 async def update_user_card_synonym(telegram_id: str, card_synonym: str):
     update_data = {'card_synonym': card_synonym}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def update_fio_and_date_of_cert(telegram_id: str, fio: str):
+    update_data = {
+        'fio': fio,
+        'date_of_certificate': datetime.now(timezone.utc)
+    }
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def save_invite_link_db(telegram_id: str, invite_link: str):
+    update_data = {'invite_link': invite_link}
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
