@@ -3,8 +3,13 @@ from utils import *
 import plotly.graph_objects as go
 import plotly.io as pio
 from fastapi import BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTMLResponse
 import random
+from io import BytesIO
+import qrcode
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 from config import (
     BOT_USERNAME,
     SERVER_URL,
@@ -600,7 +605,6 @@ async def referral_chart(unique_str: str):
 
 @app.post("/save_fio")
 async def save_fio(request: Request):
-    """ Генерирует ссылку на график рефералов """
 
     logging.info("inside save_fio")
     verify_secret_code(request)
@@ -638,6 +642,96 @@ async def save_fio(request: Request):
             "status": "error",
             "message": "Пользователь не найден"
         })
+
+@app.post("/generate_certificate")
+async def generate_certificate(request: Request, background_tasks: BackgroundTasks):
+
+    logging.info("inside generate_certificate")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if not(user):
+        return JSONResponse({
+            "status": "error",
+            "message": "Такого пользователя не существует"
+        })
+    if not(user.fio):
+        return JSONResponse({
+            "status": "error",
+            "message": "Сертификационный экзамен не был сдан"
+        })
+    
+    EXPORT_FOLDER = 'exports'
+    os.makedirs(EXPORT_FOLDER, exist_ok=True)
+    
+    name = user["fio"]
+    cert_id = "CERT-" + user["unique_str"][:10]
+    template_path = "../templates/cert_template.pdf"
+    output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
+
+    # Генерируем QR-код
+    qr_data = f"{SERVER_URL}/certificate/{cert_id}"
+    qr = qrcode.make(qr_data)
+
+    qr_path = os.path.join(EXPORT_FOLDER, f"qr_{cert_id}.png")
+    qr.save(qr_path)
+
+    # Генерируем PDF поверх шаблона
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer)
+    c.setPageSize((595, 842))  # A4
+    c.setFont("Helvetica-Bold", 36)
+
+    # Вставляем ФИО
+    c.drawString(200, 500, name)
+
+    # Вставляем дату
+    date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
+    c.setFont("Helvetica", 24)
+    c.drawString(200, 450, date_str)
+
+    # Вставляем cert_id над QR-кодом
+    c.setFont("Helvetica", 18)
+    c.drawString(450, 320, cert_id)  
+
+    # Вставляем QR-код
+    c.drawImage(ImageReader(qr_path), 450, 200, 100, 100)
+
+    c.showPage()
+    c.save()
+
+    buffer.seek(0)
+
+    # Накладываем текст и QR-код на шаблон
+    template_pdf = PdfReader(template_path)
+    overlay_pdf = PdfReader(buffer)
+    output_pdf = PdfWriter()
+
+    page = template_pdf.pages[0]
+    page.merge_page(overlay_pdf.pages[0])
+    output_pdf.add_page(page)
+
+    # Сохраняем PDF во временную папку
+    with open(output_path, "wb") as f:
+        output_pdf.write(f)
+
+    # Добавляем задачу на удаление файла после отправки
+    background_tasks.add_task(delete_file, output_path)
+    background_tasks.add_task(delete_file, qr_path)
+
+    return FileResponse(
+        path=output_path,
+        media_type="application/pdf",
+        filename=f"certificate_{cert_id}.pdf"
+    )
     
 # Фейк-юзеры
 # @app.post("/add_mock_referral")
