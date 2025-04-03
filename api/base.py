@@ -624,11 +624,11 @@ async def save_fio(request: Request):
     if user:
         logging.info(f"user {user}")
 
-        if user.fio:
-            return JSONResponse({
-                "status": "error",
-                "message": "Вы уже указали ФИО. Изменить ФИО невозможно"
-            })
+        # if user.fio:
+        #     return JSONResponse({
+        #         "status": "error",
+        #         "message": "Вы уже указали ФИО. Изменить ФИО невозможно"
+        #     })
         
         logging.info(f"ФИО ещё не установлено")
         fio = data.get("fio")
