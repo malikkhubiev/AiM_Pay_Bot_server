@@ -704,16 +704,15 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     font = "Jura"
     pdfmetrics.registerFont(TTFont(font, font_path))
     
-
     c.setPageSize((842, 595))  # A4
     c.setFont(font, 36)
 
     # Вставляем дату
     date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
-    font_size = 20
+    font_size = 16
     text_width = c.stringWidth(name, font, font_size)
-    x = (840 - text_width) / 2  # Центр страницы по ширине
-    c.drawString(x, 50, date_str)
+    x = (842 - text_width) / 2  # Центр страницы по ширине
+    c.drawString(x, 45, date_str)
 
     # Вставляем центрированное имя
     font_size = 36
@@ -725,7 +724,7 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
 
     # Вставляем cert_id над QR-кодом
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
-    c.setFont(font, 18)
+    c.setFont(font, 16)
     c.drawString(28, 180, cert_id)  
 
     # Вставляем QR-код
