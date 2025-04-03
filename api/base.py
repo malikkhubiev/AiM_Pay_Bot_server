@@ -719,17 +719,17 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     font_size = 36
     c.setFont(font, font_size)
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
-    text_width = c.stringWidth(name, font, font_size)
+    text_width = c.stringWidth(name, font, font_size) + 10
     x = (842 - text_width) / 2  # Центр страницы по ширине
     c.drawString(x, 235, name)
 
     # Вставляем cert_id над QR-кодом
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
     c.setFont(font, 17)
-    c.drawString(28, 180, cert_id)  
+    c.drawString(35, 185, cert_id)  
 
     # Вставляем QR-код
-    c.drawImage(ImageReader(qr_path), 28, 28, 138, 138)
+    c.drawImage(ImageReader(qr_path), 35, 35, 138, 138)
 
     c.showPage()
     c.save()
