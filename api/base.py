@@ -711,8 +711,8 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
     font_size = 20
     c.setFont(font, font_size)
-    text_width = c.stringWidth(name, font, font_size)
-    # x = (842 - 107) / 2  # Центр страницы по ширине
+    # text_width = c.stringWidth(name, font, font_size)
+    x = (842 - 107) / 2  # Центр страницы по ширине
     c.drawString(x, 45, date_str)
 
     # Вставляем центрированное имя
