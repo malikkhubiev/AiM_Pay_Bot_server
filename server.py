@@ -4,7 +4,6 @@ from config import PORT
 import uvicorn
 from database import database, delete_expired_records
 from api.base import *
-from api.docs import *
 from api.kassa import *
 from api.store_db import *
 from utils import *
