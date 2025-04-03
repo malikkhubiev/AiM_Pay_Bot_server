@@ -681,27 +681,8 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     cert_id = "CERT-" + user["unique_str"][:10]
 
     current_dir = os.path.dirname(os.path.abspath(__file__))  # Папка, где находится скрипт
-    template_path = os.path.join(current_dir, "templates", "cert_template.pdf")
-
-    # delete
     template_dir = os.path.abspath(os.path.join(current_dir, "..", "templates"))
-    template_path_test = os.path.join(template_dir, "cert_template.pdf")
-
-    # Логируем содержимое текущей папки
-    logger.info(f"Текущая директория: {current_dir}")
-    logger.info(f"Файлы в текущей директории: {os.listdir(current_dir)}")
-
-    # Логируем содержимое templates
-    if os.path.exists(template_dir):
-        logger.info(f"Файлы в {template_dir}: {os.listdir(template_dir)}")
-    else:
-        logger.error(f"Папка templates не найдена: {template_dir}")
-
-    # Проверяем, существует ли файл шаблона
-    if not os.path.exists(template_path_test):
-        logger.error(f"Файл шаблона не найден: {template_path_test}")
-        raise FileNotFoundError(f"Файл шаблона не найден: {template_path_test}")
-    # delete
+    template_path = os.path.join(template_dir, "cert_template.pdf")
 
     output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
 

@@ -70,7 +70,7 @@ class Referral(Base):
     id = Column(Integer, primary_key=True, index=True)
     referrer_id = Column(String, ForeignKey('users.telegram_id'))  # Кто пригласил
     referred_id = Column(String, ForeignKey('users.telegram_id'), unique=True)  # Кто был приглашён
-    status = Column(String, nullable=False) # (success|pending)
+    status = Column(String, nullable=False) # (success|registered|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
