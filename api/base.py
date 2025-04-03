@@ -10,6 +10,8 @@ import qrcode
 from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 from config import (
     BOT_USERNAME,
     SERVER_URL,
@@ -696,26 +698,34 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     # Генерируем PDF поверх шаблона
     buffer = BytesIO()
     c = canvas.Canvas(buffer)
+
+    # Регистрируем шрифты
+    font_path = os.path.join(current_dir, "..", "Jura.ttf")
+    font = "Jura"
+    pdfmetrics.registerFont(TTFont(font, font_path))
+    
+
     c.setPageSize((842, 595))  # A4
-    c.setFont("Helvetica-Bold", 36)
+    c.setFont(font, 36)
 
     # Вставляем дату
     date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
-    c.setFont("Helvetica-Bold", 24)
-    c.drawString(373, 50, date_str)
+    font_size = 20
+    text_width = c.stringWidth(name, font, font_size)
+    x = (840 - text_width) / 2  # Центр страницы по ширине
+    c.drawString(x, 50, date_str)
 
     # Вставляем центрированное имя
     font_size = 36
-    font = "Helvetica-Bold"
     c.setFont(font, font_size)
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
     text_width = c.stringWidth(name, font, font_size)
-    x = (842 - text_width) / 2  # Центр страницы по ширине
+    x = (840 - text_width) / 2  # Центр страницы по ширине
     c.drawString(x, 235, name)
 
     # Вставляем cert_id над QR-кодом
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
-    c.setFont("Helvetica", 18)
+    c.setFont(font, 18)
     c.drawString(28, 180, cert_id)  
 
     # Вставляем QR-код
