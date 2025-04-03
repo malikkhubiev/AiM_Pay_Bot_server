@@ -701,25 +701,25 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
 
     # Вставляем дату
     date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
-    c.setFont("Helvetica", 24)
-    c.drawString(200, 450, date_str)
+    c.setFont("Krona One", 24)
+    c.drawString(373, 50, date_str)
 
     # Вставляем центрированное имя
     font_size = 36
-    font = "Helvetica-Bold"
+    font = "Jura"
     c.setFont(font, font_size)
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
     text_width = c.stringWidth(name, font, font_size)
     x = (842 - text_width) / 2  # Центр страницы по ширине
-    c.drawString(x, 340, name)
+    c.drawString(x, 235, name)
 
     # Вставляем cert_id над QR-кодом
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
     c.setFont("Helvetica", 18)
-    c.drawString(372, 517, cert_id)  
+    c.drawString(28, 180, cert_id)  
 
     # Вставляем QR-код
-    c.drawImage(ImageReader(qr_path), 27, 429, 138, 138)
+    c.drawImage(ImageReader(qr_path), 28, 28, 138, 138)
 
     c.showPage()
     c.save()
