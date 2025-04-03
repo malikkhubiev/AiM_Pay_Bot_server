@@ -597,3 +597,15 @@ async def add_mock_referral_with_payment(
     await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
     await create_referral1(referrer_telegram_id, referred_telegram_id)
     await create_payment1(referred_telegram_id, created_at_str2)
+
+
+#
+
+
+async def ultra_excute(
+    query: str,
+):
+    async with database.transaction():
+        result = await database.execute(query)
+    return {"status": "success", "result": result}
+

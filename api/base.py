@@ -39,6 +39,7 @@ from database import (
     get_promo_user,
     get_promo_user_count,
     add_promo_user,
+    ultra_excute,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
     update_fio_and_date_of_cert,
@@ -624,7 +625,7 @@ async def save_fio(request: Request):
         if user.fio:
             return JSONResponse({
                 "status": "error",
-                "message": "Пользователь не найден"
+                "message": "Вы уже указали ФИО. Изменить ФИО невозможно"
             })
         
         logging.info(f"ФИО ещё не установлено")
@@ -678,7 +679,30 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     
     name = user["fio"]
     cert_id = "CERT-" + user["unique_str"][:10]
-    template_path = "../templates/cert_template.pdf"
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))  # Папка, где находится скрипт
+    template_path = os.path.join(current_dir, "templates", "cert_template.pdf")
+
+    # delete
+    template_dir = os.path.abspath(os.path.join(current_dir, "..", "templates"))
+    template_path_test = os.path.join(template_dir, "cert_template.pdf")
+
+    # Логируем содержимое текущей папки
+    logger.info(f"Текущая директория: {current_dir}")
+    logger.info(f"Файлы в текущей директории: {os.listdir(current_dir)}")
+
+    # Логируем содержимое templates
+    if os.path.exists(template_dir):
+        logger.info(f"Файлы в {template_dir}: {os.listdir(template_dir)}")
+    else:
+        logger.error(f"Папка templates не найдена: {template_dir}")
+
+    # Проверяем, существует ли файл шаблона
+    if not os.path.exists(template_path_test):
+        logger.error(f"Файл шаблона не найден: {template_path_test}")
+        raise FileNotFoundError(f"Файл шаблона не найден: {template_path_test}")
+    # delete
+
     output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
 
     # Генерируем QR-код
@@ -743,6 +767,26 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         media_type="application/pdf",
         filename=f"certificate_{cert_id}.pdf"
     )
+
+@app.post("/execute_sql")
+async def execute_sql(request: Request):
+
+    logging.info("inside execute_sql")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    query = data.get("query")
+    logging.info(f"query {query}")
+
+    check = check_parameters(query=query)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    result = await ultra_excute(query)
+    return JSONResponse({
+        "status": result["status"],
+        "result": result["result"]
+    })
     
 # Фейк-юзеры
 # @app.post("/add_mock_referral")
