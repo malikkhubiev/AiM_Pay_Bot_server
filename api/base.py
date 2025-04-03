@@ -712,14 +712,14 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     font_size = 20
     c.setFont(font, font_size)
     # text_width = c.stringWidth(name, font, font_size)
-    x = (842 - 107) / 2  # Центр страницы по ширине
+    x = (842 - 105) / 2  # Центр страницы по ширине
     c.drawString(x, 45, date_str)
 
     # Вставляем центрированное имя
     font_size = 36
     c.setFont(font, font_size)
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
-    text_width = c.stringWidth(name, font, font_size) + 10
+    text_width = c.stringWidth(name, font, font_size) + 13
     x = (842 - text_width) / 2  # Центр страницы по ширине
     c.drawString(x, 235, name)
 
