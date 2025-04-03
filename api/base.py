@@ -701,12 +701,12 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
 
     # Вставляем дату
     date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
-    c.setFont("Krona One", 24)
+    c.setFont("Helvetica-Bold", 24)
     c.drawString(373, 50, date_str)
 
     # Вставляем центрированное имя
     font_size = 36
-    font = "Jura"
+    font = "Helvetica-Bold"
     c.setFont(font, font_size)
     c.setFillColorRGB(1, 1, 1)  # Белый цвет
     text_width = c.stringWidth(name, font, font_size)
