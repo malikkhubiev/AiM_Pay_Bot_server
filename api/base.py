@@ -45,6 +45,7 @@ from database import (
     get_user_by_unique_str,
     get_paid_referrals_by_user,
     update_fio_and_date_of_cert,
+    update_passed_exam,
     add_mock_referral_with_payment
 )
 import pandas as pd
