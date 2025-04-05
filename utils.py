@@ -180,3 +180,9 @@ def format_datetime_for_excel(dt):
     if dt is None:
         return None
     return pd.Timestamp(dt)  # Pandas автоматически конвертирует в Excel-friendly формат
+
+def format_datetime_for_excel(dt):
+    """Преобразует datetime в формат, подходящий для Excel."""
+    if dt is None:
+        return None
+    return pd.Timestamp(dt)  # Pandas автоматически конвертирует в Excel-friendly формат

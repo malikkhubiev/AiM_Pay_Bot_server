@@ -16,4 +16,10 @@ httpx
 uuid
 pandas
 xlsxwriter
+pandas
+xlsxwriter
 plotly
+
+qrcode
+PyPDF2
+reportlab

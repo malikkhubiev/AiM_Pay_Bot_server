@@ -38,6 +38,8 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False)
     telegram_id = Column(String, unique=True, nullable=False)
+    fio = Column(String(255), unique=False, nullable=True)
+    date_of_certificate = Column(DateTime, nullable=True)
     unique_str = Column(String, unique=True, nullable=False)
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
@@ -68,7 +70,7 @@ class Referral(Base):
     id = Column(Integer, primary_key=True, index=True)
     referrer_id = Column(String, ForeignKey('users.telegram_id'))  # Кто пригласил
     referred_id = Column(String, ForeignKey('users.telegram_id'), unique=True)  # Кто был приглашён
-    status = Column(String, nullable=False) # (success|pending)
+    status = Column(String, nullable=False) # (success|registered|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     referrer = relationship("User", foreign_keys=[referrer_id])  # Связь с пригласившим
@@ -359,12 +361,6 @@ async def update_temp_user(telegram_id: str, username: Optional[str] = None):
             update_query = TempUser.__table__.update().where(TempUser.telegram_id == telegram_id).values(update_data)
             await database.execute(update_query)
 
-async def save_invite_link_db(telegram_id: str, invite_link: str):
-    update_data = {'invite_link': invite_link}
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
 async def update_payment_done(telegram_id: str, transaction_id: str):
     user_update_data = {'paid': True}
     user_update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(user_update_data)
@@ -382,6 +378,21 @@ async def update_payment_idempotence_key(telegram_id: str, idempotence_key: str)
 
 async def update_user_card_synonym(telegram_id: str, card_synonym: str):
     update_data = {'card_synonym': card_synonym}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def update_fio_and_date_of_cert(telegram_id: str, fio: str):
+    update_data = {
+        'fio': fio,
+        'date_of_certificate': datetime.now(timezone.utc)
+    }
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def save_invite_link_db(telegram_id: str, invite_link: str):
+    update_data = {'invite_link': invite_link}
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
@@ -525,3 +536,76 @@ async def add_mock_referral_with_payment(
     await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
     await create_referral1(referrer_telegram_id, referred_telegram_id)
     await create_payment1(referred_telegram_id, created_at_str2)
+
+
+#
+
+
+async def create_user1(telegram_id: str, username: str, created_at_str: str):
+    # Преобразуем строку в объект datetime
+    created_at = datetime.strptime(created_at_str, "%d.%m.%Y")
+    
+    # Проверяем, существует ли пользователь с таким telegram_id
+    query_check = select(User).where(User.telegram_id == telegram_id)
+    existing_user = await database.fetch_one(query_check)
+    
+    if existing_user:
+        return f"Пользователь с telegram_id {telegram_id} уже существует"
+    
+    # Если не существует, создаем нового пользователя
+    unique_str = str(uuid.uuid4())
+    query_insert = insert(User).values(
+        telegram_id=telegram_id,
+        username=username,
+        unique_str=unique_str,
+        created_at=created_at
+    )
+    
+    async with database.transaction():
+        await database.execute(query_insert)
+    
+    return telegram_id
+
+async def create_referral1(referrer_id: str, referred_id: str):
+    query = insert(Referral).values(
+        referrer_id=referrer_id,
+        referred_id=referred_id,
+        status="success"
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def create_payment1(telegram_id: str, created_at_str2: str):
+    idempotence_key = str(uuid.uuid4())
+    created_at = datetime.strptime(created_at_str2, "%d.%m.%Y")
+    query = insert(Payment).values(
+        telegram_id=telegram_id,
+        idempotence_key=idempotence_key,
+        status="success",
+        created_at=created_at
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def add_mock_referral_with_payment(
+    referrer_telegram_id: str,
+    referred_telegram_id: str,
+    created_at_str1: str,
+    created_at_str2: str,
+):
+    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
+    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
+    await create_referral1(referrer_telegram_id, referred_telegram_id)
+    await create_payment1(referred_telegram_id, created_at_str2)
+
+
+#
+
+
+async def ultra_excute(
+    query: str,
+):
+    async with database.transaction():
+        result = await database.execute(query)
+    return {"status": "success", "result": result}
+

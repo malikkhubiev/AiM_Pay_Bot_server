@@ -3,8 +3,15 @@ from utils import *
 import plotly.graph_objects as go
 import plotly.io as pio
 from fastapi import BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTMLResponse
 import random
+from io import BytesIO
+import qrcode
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 from config import (
     BOT_USERNAME,
     SERVER_URL,
@@ -34,9 +41,10 @@ from database import (
     get_promo_user,
     get_promo_user_count,
     add_promo_user,
+    ultra_excute,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
-
+    update_fio_and_date_of_cert,
     add_mock_referral_with_payment
 )
 import pandas as pd
@@ -598,6 +606,179 @@ async def referral_chart(unique_str: str):
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
     return HTMLResponse(html_content)
 
+@app.post("/save_fio")
+async def save_fio(request: Request):
+
+    logging.info("inside save_fio")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if user:
+        logging.info(f"user {user}")
+
+        if user.fio:
+            return JSONResponse({
+                "status": "error",
+                "message": "Вы уже указали ФИО. Изменить ФИО невозможно"
+            })
+        
+        logging.info(f"ФИО ещё не установлено")
+        fio = data.get("fio")
+        logging.info(f"полученное ФИО {fio}")
+
+        await update_fio_and_date_of_cert(telegram_id, fio)
+
+        logging.info(f"ФИО обновлено")
+
+        return JSONResponse({
+            "status": "success",
+            "data": {
+                "message": "Ваше ФИО установлено. Вы можете скачать сертификат, получить ссылку на просмотр или вернуться в главное меню"
+            }
+        })
+    else:
+        return JSONResponse({
+            "status": "error",
+            "message": "Пользователь не найден"
+        })
+
+@app.post("/generate_certificate")
+async def generate_certificate(request: Request, background_tasks: BackgroundTasks):
+
+    logging.info("inside generate_certificate")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if not(user):
+        return JSONResponse({
+            "status": "error",
+            "message": "Такого пользователя не существует"
+        })
+    if not(user.fio):
+        return JSONResponse({
+            "status": "error",
+            "message": "Сертификационный экзамен не был сдан"
+        })
+    
+    EXPORT_FOLDER = 'exports'
+    os.makedirs(EXPORT_FOLDER, exist_ok=True)
+    
+    name = user["fio"]
+    cert_id = "CERT-" + user["unique_str"][:10]
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))  # Папка, где находится скрипт
+    template_dir = os.path.abspath(os.path.join(current_dir, "..", "templates"))
+    template_path = os.path.join(template_dir, "cert_template.pdf")
+
+    output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
+
+    # Генерируем QR-код
+    qr_data = f"{SERVER_URL}/certificate/{cert_id}"
+    qr = qrcode.make(qr_data)
+
+    qr_path = os.path.join(EXPORT_FOLDER, f"qr_{cert_id}.png")
+    qr.save(qr_path)
+
+    # Генерируем PDF поверх шаблона
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer)
+
+    # Регистрируем шрифты
+    font_path = os.path.join(current_dir, "..", "Jura.ttf")
+    font = "Jura"
+    pdfmetrics.registerFont(TTFont(font, font_path))
+    
+    c.setPageSize((842, 595))  # A4
+    c.setFont(font, 36)
+
+    # Вставляем дату
+    date_str = user["date_of_certificate"].strftime("%d.%m.%Y")
+    font_size = 20
+    c.setFont(font, font_size)
+    # text_width = c.stringWidth(name, font, font_size)
+    x = (842 - 105) / 2  # Центр страницы по ширине
+    c.drawString(x, 45, date_str)
+
+    # Вставляем центрированное имя
+    font_size = 36
+    c.setFont(font, font_size)
+    c.setFillColorRGB(1, 1, 1)  # Белый цвет
+    text_width = c.stringWidth(name, font, font_size) + 13
+    x = (842 - text_width) / 2  # Центр страницы по ширине
+    c.drawString(x, 235, name)
+
+    # Вставляем cert_id над QR-кодом
+    c.setFillColorRGB(1, 1, 1)  # Белый цвет
+    c.setFont(font, 17)
+    c.drawString(35, 185, cert_id)  
+
+    # Вставляем QR-код
+    c.drawImage(ImageReader(qr_path), 35, 35, 138, 138)
+
+    c.showPage()
+    c.save()
+
+    buffer.seek(0)
+
+    # Накладываем текст и QR-код на шаблон
+    template_pdf = PdfReader(template_path)
+    overlay_pdf = PdfReader(buffer)
+    output_pdf = PdfWriter()
+
+    page = template_pdf.pages[0]
+    page.merge_page(overlay_pdf.pages[0])
+    output_pdf.add_page(page)
+
+    # Сохраняем PDF во временную папку
+    with open(output_path, "wb") as f:
+        output_pdf.write(f)
+
+    # Добавляем задачу на удаление файла после отправки
+    background_tasks.add_task(delete_file, output_path)
+    background_tasks.add_task(delete_file, qr_path)
+
+    return FileResponse(
+        path=output_path,
+        media_type="application/pdf",
+        filename=f"certificate_{cert_id}.pdf"
+    )
+
+@app.post("/execute_sql")
+async def execute_sql(request: Request):
+
+    logging.info("inside execute_sql")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    query = data.get("query")
+    logging.info(f"query {query}")
+
+    check = check_parameters(query=query)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    result = await ultra_excute(query)
+    return JSONResponse({
+        "status": result["status"],
+        "result": result["result"]
+    })
+    
 # Фейк-юзеры
 # @app.post("/add_mock_referral")
 # async def add_mock_referral(request: Request):
