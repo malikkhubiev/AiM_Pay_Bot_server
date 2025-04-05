@@ -41,6 +41,7 @@ class User(Base):
     fio = Column(String(255), unique=False, nullable=True)
     date_of_certificate = Column(DateTime, nullable=True)
     unique_str = Column(String, unique=True, nullable=False)
+    passed_exam = Column(Boolean, default=False)
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
@@ -303,6 +304,12 @@ async def get_temp_user(telegram_id: str):
 async def update_referrer(telegram_id: str, referrer_id: str):
     update_data = {'referrer_id': referrer_id}
     update_query = Referral.__table__.update().where(Referral.referred_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def update_passed_exam(telegram_id: str):
+    update_data = {'passed_exam': True}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 

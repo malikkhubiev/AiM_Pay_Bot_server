@@ -624,6 +624,11 @@ async def save_fio(request: Request):
     if user:
         logging.info(f"user {user}")
 
+        if not(user.passed_exam):
+            return JSONResponse({
+                "status": "error",
+                "message": "Экзамен не сдан"
+            })
         if user.fio:
             return JSONResponse({
                 "status": "error",
@@ -648,6 +653,74 @@ async def save_fio(request: Request):
         return JSONResponse({
             "status": "error",
             "message": "Пользователь не найден"
+        })
+
+@app.post("/update_passed_exam")
+async def update_passed_exam(request: Request):
+
+    logging.info("inside update_passed_exam")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if user:
+        logging.info(f"user {user}")
+
+        await update_passed_exam(telegram_id)
+
+        logging.info(f"Экзамен сдан")
+
+        return JSONResponse({
+            "status": "success"
+        })
+    else:
+        return JSONResponse({
+            "status": "error",
+            "message": "Пользователь не найден"
+        })
+
+@app.post("/can_get_certificate")
+async def can_get_certificate(request: Request, background_tasks: BackgroundTasks):
+
+    logging.info("inside can_get_certificate")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if not(user):
+        return JSONResponse({
+            "status": "error",
+            "message": "Такого пользователя не существует"
+        })
+    if not(user.fio):
+        return JSONResponse({
+            "status": "error",
+            "message": "Вы не установили своё ФИО для получения сертификата. Введите ФИО в формате: 'ФИО: Иванов Иван Иванович'. Будьте аккуратны в написании, исправить ФИО невозможно. Дата установки ФИО считается датой формирования сертификата."
+        })
+    
+    if not(user.passed_exam):
+        return JSONResponse({
+            "status": "success",
+            "result": "test"
+        })
+    else:
+        return JSONResponse({
+            "status": "success",
+            "result": "passed"
         })
 
 @app.post("/generate_certificate")
