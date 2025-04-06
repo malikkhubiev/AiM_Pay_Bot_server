@@ -47,6 +47,7 @@ from database import (
     add_promo_user,
     ultra_excute,
     update_fio_and_date_of_cert,
+    update_passed_exam,
     add_mock_referral_with_payment
 )
 import pandas as pd
