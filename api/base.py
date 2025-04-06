@@ -6,6 +6,7 @@ from fastapi import BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTMLResponse
 import random
 from io import BytesIO
+import shutil
 import qrcode
 from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
@@ -25,30 +26,36 @@ from database import (
     get_referral_statistics,
     get_payment_date,
     get_start_working_date,
-    save_invite_link_db,
+    get_user_by_cert_id,
     get_promo_users_count,
     get_payments_frequency_db,
-    create_user,
-    create_referral,
     get_pending_referrer,
-    update_temp_user,
     get_referred_user,
-    create_temp_user,
     get_all_paid_money,
     get_paid_count,
-    update_referrer,
     get_all_referred,
     get_promo_user,
     get_promo_user_count,
-    add_promo_user,
-    ultra_excute,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
+    save_invite_link_db,
+    create_user,
+    create_referral,
+    update_temp_user,
+    create_temp_user,
+    update_referrer,
+    add_promo_user,
+    ultra_excute,
     update_fio_and_date_of_cert,
     add_mock_referral_with_payment
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi import Query
+
+templates = Jinja2Templates(directory="templates")
 
 @app.post("/check_user")
 @exception_handler
@@ -627,7 +634,7 @@ async def save_fio(request: Request):
         if not(user.passed_exam):
             return JSONResponse({
                 "status": "error",
-                "message": "Экзамен не сдан"
+                "message": "Тест не сдан"
             })
         if user.fio:
             return JSONResponse({
@@ -675,7 +682,7 @@ async def update_passed_exam(request: Request):
 
         await update_passed_exam(telegram_id)
 
-        logging.info(f"Экзамен сдан")
+        logging.info(f"Тест сдан")
 
         return JSONResponse({
             "status": "success"
@@ -722,38 +729,13 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
             "status": "success",
             "result": "passed"
         })
-
-@app.post("/generate_certificate")
-async def generate_certificate(request: Request, background_tasks: BackgroundTasks):
-
-    logging.info("inside generate_certificate")
-    verify_secret_code(request)
     
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    logging.info(f"telegram_id {telegram_id}")
-
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
-    
-    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
-    if not(user):
-        return JSONResponse({
-            "status": "error",
-            "message": "Такого пользователя не существует"
-        })
-    if not(user.fio):
-        return JSONResponse({
-            "status": "error",
-            "message": "Сертификационный экзамен не был сдан"
-        })
-    
+async def generate_certificate_file(user):
     EXPORT_FOLDER = 'exports'
     os.makedirs(EXPORT_FOLDER, exist_ok=True)
     
     name = user["fio"]
-    cert_id = "CERT-" + user["unique_str"][:10]
+    cert_id = "CERT-" + user["telegram_id"][:10]
 
     current_dir = os.path.dirname(os.path.abspath(__file__))  # Папка, где находится скрипт
     template_dir = os.path.abspath(os.path.join(current_dir, "..", "templates"))
@@ -821,8 +803,37 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
     # Сохраняем PDF во временную папку
     with open(output_path, "wb") as f:
         output_pdf.write(f)
+    
+    return output_path, qr_path, cert_id
 
-    # Добавляем задачу на удаление файла после отправки
+@app.post("/generate_certificate")
+async def generate_certificate(request: Request, background_tasks: BackgroundTasks):
+
+    logging.info("inside generate_certificate")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if not(user):
+        return JSONResponse({
+            "status": "error",
+            "message": "Такого пользователя не существует"
+        })
+    if not(user.fio):
+        return JSONResponse({
+            "status": "error",
+            "message": "Сертификационный тест не был сдан"
+        })
+    
+    output_path, qr_path, cert_id = await generate_certificate_file(user)
+
     background_tasks.add_task(delete_file, output_path)
     background_tasks.add_task(delete_file, qr_path)
 
@@ -831,6 +842,24 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         media_type="application/pdf",
         filename=f"certificate_{cert_id}.pdf"
     )
+
+@app.get("/certificate/{cert_id}", response_class=HTMLResponse)
+async def certificate_page(request: Request, cert_id: str):
+    pdf_url = None
+    if cert_id:
+        user = await get_user_by_cert_id(cert_id)
+        if user and user.passed_exam:
+            output_path, qr_path, _ = await generate_certificate_file(user)
+            pdf_url = f"/static/certificates/certificate_{cert_id}.pdf"
+            shutil.copy(output_path, f".{pdf_url}")  # Копируем в static для отображения
+        else:
+            pdf_url = "NOT_FOUND"
+    
+    return templates.TemplateResponse("certificate_view.html", {
+        "request": request,
+        "cert_id": cert_id,
+        "pdf_url": pdf_url
+    })
 
 @app.post("/execute_sql")
 async def execute_sql(request: Request):

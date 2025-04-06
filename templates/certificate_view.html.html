@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Сертификат</title>
+</head>
+<body style="font-family: sans-serif; text-align: center; padding: 2em;">
+    <h1>Поиск сертификата</h1>
+    <form method="get">
+        <input type="text" name="cert_id" placeholder="Введите CERT-ID" value="{{ cert_id or '' }}" required>
+        <button type="submit">Найти</button>
+    </form>
+
+    {% if pdf_url == "NOT_FOUND" %}
+        <p style="color: red;">Сертификат не найден</p>
+    {% elif pdf_url %}
+        <h2>Сертификат {{ cert_id }}</h2>
+        <embed src="{{ pdf_url }}" type="application/pdf" width="80%" height="600px" />
+    {% endif %}
+</body>
+</html>

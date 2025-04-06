@@ -181,7 +181,10 @@ async def payment_notification(request: Request):
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
 
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
-            notification_data = {"telegram_id": user_telegram_id}
+            notification_data = {
+                "telegram_id": user_telegram_id,
+                "payment_id": payment_id
+            }
             send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
             await send_request(send_invite_link_url, notification_data)
             await mark_payout_as_notified(payment_id)
