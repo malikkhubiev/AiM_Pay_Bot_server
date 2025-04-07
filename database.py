@@ -13,15 +13,6 @@ DATABASE_URL = "sqlite+aiosqlite:///bot_database.db"
 database = databases.Database(DATABASE_URL)
 
 Base = declarative_base()
-
-class TempUser(Base):
-    __tablename__ = 'tempusers'
-
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    telegram_id = Column(String, unique=True, nullable=False)
-    referrer_id = Column(String, nullable=True)  # Кто пригласил
-    created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
     
 class PromoUser(Base):
     __tablename__ = 'promousers'
@@ -36,8 +27,8 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    telegram_id = Column(String, unique=True, nullable=False)
+    username = Column(String, unique=True, nullable=True)
+    telegram_id = Column(String, unique=True, nullable=True)
     fio = Column(String(255), unique=False, nullable=True)
     date_of_certificate = Column(DateTime, nullable=True)
     unique_str = Column(String, unique=True, nullable=False)
@@ -46,12 +37,13 @@ class User(Base):
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
     invite_link = Column(String, nullable=True)
+    is_registered = Column(Boolean, default=False)
+    source = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
 
-    payments = relationship("Payment", back_populates="user")  # Убедитесь, что имя таблицы и свойства совпадают
-    payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")  # Ссылка на выплаты
-    promousers = relationship("PromoUser", back_populates="user")  # Связь с таблицей PromoUser
-
-    created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
+    payments = relationship("Payment", back_populates="user")
+    payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")
+    promousers = relationship("PromoUser", back_populates="user")
 
 class Payment(Base):
     __tablename__ = 'payments'
@@ -186,7 +178,7 @@ async def get_payment_date(referred_id: int):
         return result['created_at'] if result else None
 
 async def get_start_working_date(referred_id: int):
-    query = select(TempUser.created_at).filter_by(telegram_id=referred_id)
+    query = select(User.created_at).filter_by(telegram_id=referred_id)
     async with database.transaction():
         result = await database.fetch_one(query)
         return result['created_at'] if result else None
@@ -301,15 +293,157 @@ async def mark_payout_as_notified(payout_id: int):
             await database.execute(update_query)
 
 async def create_temp_user(telegram_id: str, username: str, referrer_id: Optional[int] = None):
-    query = insert(TempUser).values(telegram_id=telegram_id, username=username, referrer_id=referrer_id).returning(TempUser)
-    async with database.transaction():  # Используем async with для транзакции
-        result = await database.fetch_one(query)  # Выполняем запрос и получаем одну запись
-        return result  # Возвращаем результат, который является созданной записью
+    query = insert(User).values(
+        telegram_id=telegram_id,
+        username=username,
+        referrer_id=referrer_id,
+        is_registered=False
+    ).returning(User)
+    async with database.transaction():
+        result = await database.fetch_one(query)
+        return result
 
 async def get_temp_user(telegram_id: str):
-    query = select(TempUser).filter_by(telegram_id=telegram_id)
-    async with database.transaction():  # Используем async with для транзакции
+    query = select(User).filter_by(telegram_id=telegram_id, is_registered=False)
+    async with database.transaction():
         return await database.fetch_one(query)
+
+async def get_conversion_stats_by_source():
+    query = """ 
+        SELECT 
+            source,
+            COUNT(*) AS total_users,
+            COUNT(*) FILTER (WHERE is_registered = true) AS registered_users,
+            COUNT(*) FILTER (WHERE paid = true) AS paid_users
+        FROM users
+        WHERE source IS NOT NULL
+        GROUP BY source
+        ORDER BY total_users DESC
+    """
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+
+    results = []
+    for row in rows:
+        source = row["source"] or "unknown"
+        total = row["total_users"]
+        registered = row["registered_users"]
+        paid = row["paid_users"]
+
+        registered_pct = round((registered / total) * 100, 2) if total else 0
+        paid_pct_total = round((paid / total) * 100, 2) if total else 0
+        paid_pct_registered = round((paid / registered) * 100, 2) if registered else 0
+
+        results.append({
+            "Источник": source,
+            "Всего": total,
+            "Зарегистрировались": registered,
+            "% Регистраций": f"{registered_pct}%",
+            "Оплатили": paid,
+            "% Оплат от всех": f"{paid_pct_total}%",
+            "% Оплат от зарегистрированных": f"{paid_pct_registered}%"
+        })
+
+    return results
+
+async def get_referral_conversion_stats():
+    query = """ 
+        SELECT 
+            referrer_id,
+            COUNT(*) AS total_referred,
+            COUNT(*) FILTER (WHERE is_registered = true) AS registered_users,
+            COUNT(*) FILTER (WHERE paid = true) AS paid_users
+        FROM referrals
+        JOIN users ON users.telegram_id = referrals.referred_id
+        WHERE referrer_id IS NOT NULL
+        GROUP BY referrer_id
+        ORDER BY total_referred DESC
+    """
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+
+    results = []
+    for row in rows:
+        referrer_id = row["referrer_id"]
+        total = row["total_referred"]
+        registered = row["registered_users"]
+        paid = row["paid_users"]
+
+        registered_pct = round((registered / total) * 100, 2) if total else 0
+        paid_pct_total = round((paid / total) * 100, 2) if total else 0
+        paid_pct_registered = round((paid / registered) * 100, 2) if registered else 0
+
+        results.append({
+            "Реферер ID": referrer_id,
+            "Пришло по рефералке": total,
+            "Зарегистрировались": registered,
+            "% Регистраций": f"{registered_pct}%",
+            "Оплатили": paid,
+            "% Оплат от всех": f"{paid_pct_total}%",
+            "% Оплат от зарегистрированных": f"{paid_pct_registered}%"
+        })
+
+    return results
+
+async def get_top_referrers():
+    query = """
+        SELECT 
+            users.telegram_id,
+            users.username,
+            COUNT(referrals.id) AS total_referred
+        FROM referrals
+        JOIN users ON users.telegram_id = referrals.referrer_id
+        GROUP BY users.telegram_id, users.username
+        HAVING COUNT(referrals.id) >= 5
+        ORDER BY total_referred DESC
+    """
+
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+
+    def resolve_rank(ref_count: int) -> str:
+        if ref_count >= 65:
+            return "🧠 Архитектор мышления"
+        elif ref_count >= 55:
+            return "🌌 Духовный вдохновитель"
+        elif ref_count >= 45:
+            return "💎 Наставник Инноваций"
+        elif ref_count >= 35:
+            return "🚀 Вестник Эволюции"
+        elif ref_count >= 25:
+            return "🌎 Мастер экспансии"
+        elif ref_count >= 15:
+            return "🌱 Амбассадор развития"
+        elif ref_count >= 5:
+            return "🔥 Лидер роста"
+        return "—"
+
+    if not rows:
+        return "Реферальная программа не приведена в исполнение"
+
+    result = ["*🤴 ТОП ПРИГЛАСИВШИХ:*"]
+    for index, row in enumerate(rows, start=1):
+        telegram_id = row["telegram_id"]
+        username = row["username"] or "—"
+        total_referred = row["total_referred"]
+        rank = resolve_rank(total_referred)
+
+        result.append(f"{index}. `{telegram_id}` | @{username} — *{total_referred}* рефералов\n🎖 {rank}")
+
+    return "\n\n".join(result)
+
+async def get_successful_referral_count(telegram_id: str) -> int:
+    query = """
+        SELECT COUNT(*) AS count
+        FROM referrals
+        WHERE referrer_id = :referrer_id AND status = 'success'
+    """
+    values = {"referrer_id": telegram_id}
+
+    async with database.transaction():
+        result = await database.fetch_one(query, values)
+
+    return result["count"] if result else 0
 
 async def update_referrer(telegram_id: str, referrer_id: str):
     update_data = {'referrer_id': referrer_id}
@@ -368,15 +502,16 @@ async def update_user_balance(telegram_id: str, balance: int):
         await database.execute(update_query)
 
 async def update_temp_user(telegram_id: str, username: Optional[str] = None):
-    query = select(TempUser).filter_by(telegram_id=telegram_id)
-    async with database.transaction():  # Используем async with для транзакции
+    query = select(User).filter_by(telegram_id=telegram_id, is_registered=False)
+    async with database.transaction():
         temp_user = await database.fetch_one(query)
         if temp_user:
             update_data = {'created_at': datetime.now(timezone.utc)}
             if username:
                 update_data['username'] = username
-            update_query = TempUser.__table__.update().where(TempUser.telegram_id == telegram_id).values(update_data)
+            update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
             await database.execute(update_query)
+
 
 async def update_payment_done(telegram_id: str, transaction_id: str):
     user_update_data = {'paid': True}
@@ -416,18 +551,24 @@ async def save_invite_link_db(telegram_id: str, invite_link: str):
 
 async def delete_expired_records():
     expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
-    logging.info(f"expiration_date = {expiration_date}")
-    query = select(TempUser).where(TempUser.created_at < expiration_date)
-    logging.info(f"query = {query}")
-    async with database.transaction():  # Используем async with для транзакции
+    query = select(User).where(
+        and_(
+            User.created_at < expiration_date,
+            User.is_registered == False
+        )
+    )
+    async with database.transaction():
         expired_users = await database.fetch_all(query)
-        logging.info(f"expired_users = {expired_users}")
         expired_records_count = 0
         for user in expired_users:
-            delete_query = TempUser.__table__.delete().where(TempUser.telegram_id == user['telegram_id'])
+            delete_query = User.__table__.update().where(
+                User.id == user['id']
+            ).values(
+                telegram_id=None,
+                username=None
+            )
             await database.execute(delete_query)
             expired_records_count += 1
-        logging.info(f"expired_records_count = {expired_records_count}")
         return expired_records_count
 
 async def get_all_paid_money(telegram_id: str):

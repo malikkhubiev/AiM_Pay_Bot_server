@@ -15,24 +15,25 @@ from config import (
 from jinja2 import Environment, FileSystemLoader
 import logging
 from database import (
+    get_binding_by_unique_str,
+    get_pending_payment,
+    get_users_with_positive_balance,
+    get_referrer,
+    get_payout,
+    get_pending_payout,
+    get_successful_referral_count,
     update_user_card_synonym,
     update_payment_done,
-    get_binding_by_unique_str,
     create_binding_and_delete_if_exists,
-    get_pending_payment,
     create_payout,
     update_payment_idempotence_key,
-    get_users_with_positive_balance,
     create_payment_db,
     mark_payout_as_notified,
-    get_referrer,
     update_referral_success,
     create_pending_payout,
     update_payout_transaction,
     update_payout_status,
     update_user_balance,
-    get_payout,
-    get_pending_payout
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -113,6 +114,42 @@ async def create_payment(request: Request):
         logger.error("Ошибка при создании платежа: %s", str(e))
         return {"status": "error", "message": "Ошибка при создании платежа. Попробуйте ещё раз"}
 
+async def send_rank_notification(tg_id: str, message: str):
+    notify_url = f"{MAHIN_URL}/notify_user"
+    payload = {
+        "telegram_id": tg_id,
+        "message": message
+    }
+    try:
+        await send_request(notify_url, payload)
+        logging.info(f"Notification about rank sent to {tg_id}")
+    except Exception as e:
+        logging.error(f"Failed to notify about rank: {e}")
+
+async def check_and_notify_rank_up(user):
+    successful_refs = await get_successful_referral_count(user.telegram_id)
+    # Проверка на порог новых званий
+    thresholds = [
+        (65, "🧠 Архитектор мышления"),
+        (55, "🌌 Духовный вдохновитель"),
+        (45, "💎 Наставник Инноваций"),
+        (35, "🚀 Вестник Эволюции"),
+        (25, "🌎 Мастер экспансии"),
+        (15, "🌱 Амбассадор развития"),
+        (5, "🔥 Лидер роста"),
+    ]
+
+    for threshold, title in thresholds:
+        # Если ровно достиг — поздравляем
+        if successful_refs == threshold:
+            message = (
+                f"🎉 Поздравляем! Вы привлекли *{successful_refs}* новых участников!\n\n"
+                f"🏆 Ваш новый статус: *{title}*\n\n"
+                "Продолжайте делиться ссылкой и получайте бонусы 👇"
+            )
+            await send_rank_notification(user.telegram_id, message)
+            break  # Поздравляем только за одно достижение за раз
+
 @app.post("/payment_notification")
 @exception_handler
 async def payment_notification(request: Request):
@@ -179,6 +216,8 @@ async def payment_notification(request: Request):
                     logging.info(f"new_balance {new_balance}")
                     await update_user_balance(referrer_user.telegram_id, new_balance)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
+                    # 🔔 Проверка и отправка поздравления при новом звании
+                    await check_and_notify_rank_up(referrer_user)
 
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {

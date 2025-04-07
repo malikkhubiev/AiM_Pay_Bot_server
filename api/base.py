@@ -38,6 +38,9 @@ from database import (
     get_promo_user_count,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
+    get_conversion_stats_by_source,
+    get_referral_conversion_stats,
+    get_top_referrers,
     save_invite_link_db,
     create_user,
     create_referral,
@@ -730,6 +733,52 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
             "status": "success",
             "result": "passed"
         })
+
+@app.post("/get_multiplicators")
+async def get_multiplicators(request: Request):
+
+    logging.info("inside get_multiplicators")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    source_stats = await get_conversion_stats_by_source()
+    referral_stats = await get_referral_conversion_stats()
+
+    return JSONResponse({
+        "status": "success",
+        "result": {
+            "source_stats": source_stats,
+            "referral_stats": referral_stats
+        }
+    })
+
+@app.post("/get_top_referrers")
+async def get_top_referrers(request: Request):
+
+    logging.info("inside get_top_referrers")
+    verify_secret_code(request)
+    
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    top = await get_top_referrers()
+
+    return JSONResponse({
+        "status": "success",
+        "top": top
+    })
     
 async def generate_certificate_file(user):
     EXPORT_FOLDER = 'exports'
