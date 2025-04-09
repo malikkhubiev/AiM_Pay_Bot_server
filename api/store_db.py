@@ -44,10 +44,11 @@ async def init_db():
         else:
             logging.error(f"Ошибка скачивания. Статус: {download_response.status_code}")
             # Если не удалось скачать файл, создаём базу данных
-            initialize_database()
 
     except Exception as e:
         logging.error(f"Ошибка при импорте базы данных: {e}")
+
+    initialize_database()
 
 @app.get("/export_db")
 async def export_db():
