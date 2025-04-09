@@ -142,15 +142,11 @@ def initialize_database():
     Base.metadata.create_all(bind=engine)
 
 # Асинхронные функции с типами
-async def create_user(telegram_id: str, username: str):
-    unique_str = str(uuid.uuid4())
-    query = User.__table__.insert().values(
-        telegram_id=telegram_id,
-        username=username,
-        unique_str=unique_str
-    )
-    async with database.transaction():  # Используем async with для выполнения транзакции
-        await database.execute(query)
+async def update_temp_user_registered(telegram_id: str):
+    update_data = {'is_registered': True}
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
 
 async def create_pending_payout(
         telegram_id: str,
@@ -506,9 +502,11 @@ async def mark_payout_as_notified(payout_id: int):
             await database.execute(update_query)
 
 async def create_temp_user(telegram_id: str, username: str):
+    unique_str = str(uuid.uuid4())
     query = insert(User).values(
         telegram_id=telegram_id,
         username=username,
+        unique_str=unique_str,
         is_registered=False
     ).returning(User)
     async with database.transaction():

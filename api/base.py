@@ -38,12 +38,12 @@ from database import (
     get_referral_conversion_stats,
     get_top_referrers,
     save_invite_link_db,
-    create_user,
     create_referral,
     create_temp_user,
     add_promo_user,
     add_mock_referral_with_payment,
     update_pending_referral,
+    update_temp_user_registered,
     update_temp_user,
     update_referrer,
     ultra_excute,
@@ -205,7 +205,7 @@ async def getting_started(request: Request):
         logging.info(f"Есть временный юзер")
         username = temp_user.username
         logging.info(f"У него есть username {username}")
-        await create_user(telegram_id, username)
+        await update_temp_user_registered(telegram_id)
         await update_pending_referral(telegram_id)
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}")
         logging.info(f"Пользователь {username} зарегистрирован")
