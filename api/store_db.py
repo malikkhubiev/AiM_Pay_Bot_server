@@ -25,7 +25,7 @@ async def init_db():
     
     try:
         # Формируем URL для скачивания файла
-        url = f"https://drive.google.com/uc?id={str(await get_setting("FILE_ID"))}"
+        url = f"https://drive.google.com/uc?id={str(await get_setting('FILE_ID'))}"
         logging.info(f"Готов URL: {url}")
 
         # Создаём клиент с разрешением редиректов

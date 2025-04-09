@@ -135,7 +135,7 @@ async def start(request: Request):
         
         promo_user = await get_promo_user(user.telegram_id)
         number_of_promo = await get_promo_user_count() 
-        logging.info(f"promo_num_left = {int(await get_setting("PROMO_NUM_LIMIT")) - number_of_promo}")
+        logging.info(f"promo_num_left = {int(await get_setting('PROMO_NUM_LIMIT')) - number_of_promo}")
         if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
             return_data["with_promo"] = True
 
@@ -568,7 +568,7 @@ async def generate_referral_chart_link(request: Request):
         logging.info(f"user {user}")
         unique_str = user.unique_str
 
-        chart_url = f"{str(await get_setting("SERVER_URL"))}/referral_chart/{unique_str}"
+        chart_url = f"{str(await get_setting('SERVER_URL'))}/referral_chart/{unique_str}"
         logging.info(f"chart_url {chart_url}")
         return JSONResponse({
             "status": "success",
@@ -791,7 +791,7 @@ async def generate_certificate_file(user):
     output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
 
     # Генерируем QR-код
-    qr_data = f"{str(await get_setting("SERVER_URL"))}/certificate/{cert_id}"
+    qr_data = f"{str(await get_setting('SERVER_URL'))}/certificate/{cert_id}"
     qr = qrcode.make(qr_data)
 
     qr_path = os.path.join(EXPORT_FOLDER, f"qr_{cert_id}.png")
