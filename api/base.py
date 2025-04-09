@@ -903,8 +903,20 @@ async def certificate_page(request: Request, cert_id: str):
         user = await get_user_by_cert_id(cert_id)
         if user and user.passed_exam:
             output_path, qr_path, _ = await generate_certificate_file(user)
+
+            # Определяем путь к директории для сертификатов
+            dst_dir = os.path.join(os.getcwd(), 'static', 'certificates')
+
+            # Проверяем, существует ли директория, если нет — создаем её
+            if not os.path.exists(dst_dir):
+                os.makedirs(dst_dir)
+
+            # Путь к файлу сертификата в директории static
             pdf_url = f"/static/certificates/certificate_{cert_id}.pdf"
-            shutil.copy(output_path, f".{pdf_url}")  # Копируем в static для отображения
+            
+            # Копируем сертификат в нужную директорию
+            shutil.copy(output_path, f".{pdf_url}")
+
         else:
             pdf_url = "NOT_FOUND"
     

@@ -3,146 +3,151 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Проверка сертификата</title>
-  <link href="https://fonts.googleapis.com/css2?family=Jura:wght@400;600;700&display=swap" rel="stylesheet">
+  <title>Сертификат</title>
+  <link href="https://fonts.googleapis.com/css2?family=Jura:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
     body {
       margin: 0;
       padding: 0;
       font-family: 'Jura', sans-serif;
-      background: #0d0d0d;
-      color: #f0f0f0;
+      background: #0f2027;
+      color: white;
       display: flex;
       flex-direction: column;
+      justify-content: center;
       align-items: center;
       min-height: 100vh;
-      justify-content: flex-start;
-      padding: 3rem 1rem;
-      overflow-x: hidden;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Анимация нейросетей на фоне */
+    .neural-network {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('neural-network-background.gif') center center no-repeat;
+      background-size: cover;
+      animation: backgroundMove 10s infinite linear;
+      z-index: -1;
+    }
+
+    /* Плавное движение фона */
+    @keyframes backgroundMove {
+      0% {
+        background-position: 0 0;
+      }
+      100% {
+        background-position: 100% 100%;
+      }
     }
 
     h1 {
-      text-align: center;
+      margin-top: 20px;
       font-size: 3rem;
-      font-weight: 700;
-      background: linear-gradient(90deg, #00ffe7, #006eff);
+      font-weight: 800;
+      color: white;
+      text-align: center;
+      background: linear-gradient(90deg, #ff8a00, #e52e71);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      text-transform: uppercase;
-      margin-bottom: 2rem;
-      animation: neon-glow 2s ease-in-out infinite alternate;
-    }
-
-    @keyframes neon-glow {
-      from { text-shadow: 0 0 10px #00ffe7, 0 0 20px #00ffe7; }
-      to { text-shadow: 0 0 20px #006eff, 0 0 40px #006eff; }
+      margin-bottom: 30px;
+      animation: fadeInDown 1s ease-out;
     }
 
     form {
       display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-bottom: 3rem;
-      animation: fadeIn 1s ease-in-out;
+      flex-direction: column;
+      gap: 15px;
+      animation: fadeIn 1.2s ease-out;
+      text-align: center;
     }
 
     input[type="text"] {
-      background: #1c1c1c;
-      border: 1px solid #00ffe7;
+      padding: 15px;
+      border: none;
       border-radius: 8px;
-      padding: 1rem 1.2rem;
-      color: #ffffff;
+      width: 280px;
       font-size: 1rem;
-      min-width: 250px;
-      box-shadow: 0 0 8px #00ffe744;
-      transition: all 0.3s ease;
+      outline: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.2) inset;
+      transition: background 0.3s ease;
     }
 
     input[type="text"]:focus {
-      outline: none;
-      border-color: #00aaff;
-      box-shadow: 0 0 12px #00aaffaa;
+      background: rgba(255, 255, 255, 0.2);
     }
 
     button {
-      background: linear-gradient(135deg, #00ffe7, #006eff);
+      padding: 15px 24px;
+      background: linear-gradient(135deg, #ff416c, #ff4b2b);
       border: none;
       border-radius: 8px;
-      padding: 1rem 1.5rem;
-      color: #000;
-      font-weight: bold;
+      color: white;
+      font-weight: 600;
       cursor: pointer;
-      font-size: 1rem;
-      text-transform: uppercase;
-      transition: all 0.3s ease;
-      box-shadow: 0 0 15px #00ffe770;
+      box-shadow: 0 0 12px rgba(255, 75, 43, 0.6);
+      transition: transform 0.2s ease, box-shadow 0.3s ease;
     }
 
     button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 0 25px #00ffe7;
+      box-shadow: 0 0 18px rgba(255, 75, 43, 0.8);
     }
 
     .result {
+      margin-top: 30px;
       font-size: 1.2rem;
+      animation: fadeInUp 1.4s ease-out;
       text-align: center;
-      margin-bottom: 2rem;
-      animation: fadeInUp 0.8s ease;
     }
 
-    .result.error {
-      color: #ff4b4b;
-      text-shadow: 0 0 6px #ff4b4b88;
-    }
-
-    .result.success {
-      color: #00ffe7;
-      text-shadow: 0 0 6px #00ffe7aa;
+    .error {
+      color: #ff6b6b;
+      font-weight: bold;
     }
 
     embed {
-      border: none;
-      border-radius: 10px;
+      margin-top: 20px;
       width: 90%;
       height: 600px;
-      box-shadow: 0 0 30px #00ffe722;
-      animation: fadeIn 1.2s ease;
+      border-radius: 12px;
+      box-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+      animation: fadeInUp 1.6s ease-out;
     }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
-    @media (max-width: 600px) {
-      h1 {
-        font-size: 2rem;
-      }
-
-      input[type="text"], button {
-        width: 100%;
-        text-align: center;
-      }
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-30px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
-  <h1>Проверка сертификата</h1>
+  <div class="neural-network"></div>
+  <h1>Проверьте сертификат</h1>
   <form method="get">
     <input type="text" name="cert_id" placeholder="Введите CERT-ID" value="{{ cert_id or '' }}" required>
     <button type="submit">Найти</button>
   </form>
 
   {% if pdf_url == "NOT_FOUND" %}
-    <div class="result error">Сертификат с таким идентификатором не найден</div>
+    <div class="result error">Сертификат не найден</div>
   {% elif pdf_url %}
-    <div class="result success">Сертификат найден: <strong>{{ cert_id }}</strong></div>
+    <div class="result">Сертификат найден: <strong>{{ cert_id }}</strong></div>
     <embed src="{{ pdf_url }}" type="application/pdf" />
   {% endif %}
 </body>
