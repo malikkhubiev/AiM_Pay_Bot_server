@@ -5,16 +5,12 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from time import time
 from yookassa import Payout, Settings, Payment
 from config import (
-    COURSE_AMOUNT,
-    REFERRAL_AMOUNT,
-    YOOKASSA_AGENT_ID,
-    MAHIN_URL,
-    SERVER_URL,
-    SECRET_KEY
+    YOOKASSA_AGENT_ID
 )
 from jinja2 import Environment, FileSystemLoader
 import logging
 from database import (
+    get_setting,
     get_binding_by_unique_str,
     get_pending_payment,
     get_users_with_positive_balance,
@@ -45,7 +41,7 @@ async def create_payment(request: Request):
 
     data = await request.json()
     telegram_id = data.get("telegram_id")
-    amount = float(COURSE_AMOUNT)
+    amount = float(await get_setting("COURSE_AMOUNT"))
     logging.info(f"telegram_id {telegram_id}")
     logging.info(f"amount {amount}")
 
@@ -85,7 +81,7 @@ async def create_payment(request: Request):
         },
         "confirmation": {
             "type": "redirect",
-            "return_url": f"{SERVER_URL}/success"
+            "return_url": f"{str(await get_setting("SERVER_URL"))}/success"
         },
         "capture": True,
         "description": "Оплата курса",
@@ -115,7 +111,7 @@ async def create_payment(request: Request):
         return {"status": "error", "message": "Ошибка при создании платежа. Попробуйте ещё раз"}
 
 async def send_rank_notification(tg_id: str, message: str):
-    notify_url = f"{MAHIN_URL}/notify_user"
+    notify_url = f"{str(await get_setting("MAHIN_URL"))}/notify_user"
     payload = {
         "telegram_id": tg_id,
         "message": message
@@ -210,9 +206,9 @@ async def payment_notification(request: Request):
                 if referrer_user:
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    new_balance = int((referrer_user.balance or 0) + int(REFERRAL_AMOUNT))
+                    new_balance = int((referrer_user.balance or 0) + float(await get_setting("REFERRAL_AMOUNT")))
                     logging.info(f"referrer_user.balance {referrer_user.balance or 0}")
-                    logging.info(f"float(REFERRAL_AMOUNT) {int(REFERRAL_AMOUNT)}")
+                    logging.info(f"float(REFERRAL_AMOUNT) {float(await get_setting("REFERRAL_AMOUNT"))}")
                     logging.info(f"new_balance {new_balance}")
                     await update_user_balance(referrer_user.telegram_id, new_balance)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
@@ -224,7 +220,7 @@ async def payment_notification(request: Request):
                 "telegram_id": user_telegram_id,
                 "payment_id": payment_id
             }
-            send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+            send_invite_link_url = f"{str(await get_setting("MAHIN_URL"))}/send_invite_link"
             await send_request(send_invite_link_url, notification_data)
             await mark_payout_as_notified(payment_id)
             return JSONResponse({"status": "success"})
@@ -242,7 +238,7 @@ async def payment_notification(request: Request):
             idempotence_key = str(uuid.uuid4())
             await update_payment_idempotence_key(user_telegram_id, idempotence_key)
         
-        notify_url = f"{MAHIN_URL}/notify_user"
+        notify_url = f"{str(await get_setting("MAHIN_URL"))}/notify_user"
         notification_data = {
             "telegram_id": user_telegram_id,
             "message": payment_responces[reason]
@@ -341,7 +337,7 @@ async def payout_result(request: Request):
         await update_payout_status(transaction_id, "success")
         await update_user_balance(telegram_id, 0)
 
-        notify_url = f"{MAHIN_URL}/notify_user"
+        notify_url = f"{str(await get_setting("MAHIN_URL"))}/notify_user"
         notification_data = {
             "telegram_id": telegram_id,
             "message": f"Выплата на сумму {amount} произведена успешно"
@@ -359,7 +355,7 @@ async def payout_result(request: Request):
         reason = cancellation_details["reason"]
         user = await get_user_by_telegram_id(telegram_id)
         logging.info(f"юзера тоже получили {user}")
-        notify_url = f"{MAHIN_URL}/notify_user"
+        notify_url = f"{str(await get_setting("MAHIN_URL"))}/notify_user"
         notification_data = {
             "telegram_id": telegram_id,
             "message": payout_responces[reason]
@@ -398,7 +394,7 @@ async def bind_card(request: Request):
 
     await create_binding_and_delete_if_exists(telegram_id, unique_str)
 
-    url = f"{SERVER_URL}/bind_card_page/{unique_str}"
+    url = f"{str(await get_setting("SERVER_URL"))}/bind_card_page/{unique_str}"
 
     return JSONResponse({"status": "success", "binding_url": url})
 
@@ -432,7 +428,7 @@ async def bind_success(request: Request):
     await update_user_card_synonym(binding.telegram_id, card_synonym)
 
     # Уведомление пользователя
-    notify_url = f"{MAHIN_URL}/notify_user"
+    notify_url = f"{str(await get_setting("MAHIN_URL"))}/notify_user"
     notification_data = {
         "telegram_id": binding.telegram_id,
         "message": "Поздравляем! Ваша карта успешно привязана! 🎉"

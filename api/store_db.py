@@ -3,11 +3,11 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 import os
 import httpx
-from config import (
-    FILE_ID,
-)
 import logging
-from database import initialize_database
+from database import (
+    initialize_database,
+    get_setting
+)
 
 # Папка для сохранения экспортированных файлов
 EXPORT_FOLDER = 'exports'
@@ -25,7 +25,7 @@ async def init_db():
     
     try:
         # Формируем URL для скачивания файла
-        url = f"https://drive.google.com/uc?id={FILE_ID}"
+        url = f"https://drive.google.com/uc?id={str(await get_setting("FILE_ID"))}"
         logging.info(f"Готов URL: {url}")
 
         # Создаём клиент с разрешением редиректов

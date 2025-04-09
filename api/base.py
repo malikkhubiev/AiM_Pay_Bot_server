@@ -13,15 +13,11 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
-from config import (
-    BOT_USERNAME,
-    SERVER_URL,
-    MAHIN_URL,
-    REFERRAL_AMOUNT,
-    PROMO_NUM_LIMIT
-)
 import logging
 from database import (
+    get_setting,
+    set_setting,
+    get_all_settings,
     get_temp_user,
     get_referral_statistics,
     get_payment_date,
@@ -44,14 +40,18 @@ from database import (
     save_invite_link_db,
     create_user,
     create_referral,
-    update_temp_user,
     create_temp_user,
-    update_referrer,
     add_promo_user,
+    add_mock_referral_with_payment,
+    update_pending_referral,
+    update_temp_user,
+    update_referrer,
     ultra_excute,
     update_fio_and_date_of_cert,
-    update_passed_exam,
-    add_mock_referral_with_payment
+    update_passed_exam
+)
+from config import (
+    BOT_USERNAME
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
@@ -135,8 +135,8 @@ async def start(request: Request):
         
         promo_user = await get_promo_user(user.telegram_id)
         number_of_promo = await get_promo_user_count() 
-        logging.info(f"promo_num_left = {int(PROMO_NUM_LIMIT) - number_of_promo}")
-        if not(promo_user) and number_of_promo < int(PROMO_NUM_LIMIT):
+        logging.info(f"promo_num_left = {int(await get_setting("PROMO_NUM_LIMIT")) - number_of_promo}")
+        if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
             return_data["with_promo"] = True
 
         return JSONResponse(return_data)
@@ -155,14 +155,12 @@ async def start(request: Request):
             logging.info(f"telegram_id {telegram_id}")
             logging.info(f"username {username}")
             logging.info(f"referrer_id {referrer_id}")
-            temp_user = await create_temp_user(telegram_id=telegram_id, username=username, referrer_id=referrer_id)
+            temp_user = await create_temp_user(telegram_id=telegram_id, username=username)
     
     logging.info(f"referrer_id {referrer_id}")
     logging.info(f"referrer_id != telegram_id {referrer_id != telegram_id}")
     logging.info(f"temp_user {temp_user}")
     logging.info(f"user {user}")
-    if user:
-        logging.info(f"not(user.paid) {not(user.paid)}")
     
     if referrer_id and referrer_id != telegram_id and (temp_user or (user and not(user.paid))):
         logging.info(f"Есть реферрал и сам себя не привёл")
@@ -209,16 +207,15 @@ async def getting_started(request: Request):
         }
         logging.info(f"Есть временный юзер")
         username = temp_user.username
-        referrer_id = temp_user.referrer_id
         logging.info(f"У него есть username {username}")
-        logging.info(f"У него есть referrer_id {referrer_id}")
         await create_user(telegram_id, username)
-        logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
-        logging.info(f"Пользователь {username} зарегистрирован {'с реферальной ссылкой' if referrer_id else 'без реферальной ссылки'}.")
+        await update_pending_referral(telegram_id)
+        logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}")
+        logging.info(f"Пользователь {username} зарегистрирован")
 
         promo_user = await get_promo_user(telegram_id)
         number_of_promo = await get_promo_user_count() 
-        if not(promo_user) and number_of_promo < int(PROMO_NUM_LIMIT):
+        if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
             return_data["with_promo"] = True
 
         return JSONResponse(return_data)
@@ -249,10 +246,10 @@ async def register_user_with_promo(request: Request):
         return {"status": "error", "message": "Вы уже были зарегистрированы по промокоду"}
 
     number_of_promo = await get_promo_user_count() 
-    if number_of_promo < int(PROMO_NUM_LIMIT):  
+    if number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):  
         await add_promo_user(telegram_id)
         notification_data = {"telegram_id": telegram_id}
-        send_invite_link_url = f"{MAHIN_URL}/send_invite_link"
+        send_invite_link_url = f"{str(await get_setting("MAHIN_URL"))}/send_invite_link"
         await send_request(send_invite_link_url, notification_data)
 
         return JSONResponse({"status": "success"})
@@ -464,7 +461,7 @@ async def get_payout_balance(request: Request):
     users = []
 
     for user in referral_statistics:
-        payout_amount = user['paid_referrals'] * float(REFERRAL_AMOUNT)
+        payout_amount = user['paid_referrals'] * float(await get_setting("REFERRAL_AMOUNT"))
         total_balance += payout_amount
         users.append({
             "id": user["telegram_id"],
@@ -516,7 +513,7 @@ async def get_promo_users_frequency(request: Request):
         promo_users_frequency_values = []
     
     number_of_promo = await get_promo_user_count() 
-    promo_num_left = int(PROMO_NUM_LIMIT) - number_of_promo
+    promo_num_left = int(await get_setting("PROMO_NUM_LIMIT")) - number_of_promo
 
     # Формируем ответ
     return JSONResponse({
@@ -571,7 +568,7 @@ async def generate_referral_chart_link(request: Request):
         logging.info(f"user {user}")
         unique_str = user.unique_str
 
-        chart_url = f"{SERVER_URL}/referral_chart/{unique_str}"
+        chart_url = f"{str(await get_setting("SERVER_URL"))}/referral_chart/{unique_str}"
         logging.info(f"chart_url {chart_url}")
         return JSONResponse({
             "status": "success",
@@ -794,7 +791,7 @@ async def generate_certificate_file(user):
     output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
 
     # Генерируем QR-код
-    qr_data = f"{SERVER_URL}/certificate/{cert_id}"
+    qr_data = f"{str(await get_setting("SERVER_URL"))}/certificate/{cert_id}"
     qr = qrcode.make(qr_data)
 
     qr_path = os.path.join(EXPORT_FOLDER, f"qr_{cert_id}.png")
@@ -929,6 +926,29 @@ async def execute_sql(request: Request):
     return JSONResponse({
         "status": result["status"],
         "result": result["result"]
+    })
+
+@app.post("/update_and_get_settings")
+async def update_and_get_settings(request: Request):
+    """ Обновляет/устанавливает значение настройки и возвращает все настройки """
+
+    logging.info("inside update_and_get_settings")
+    await verify_secret_code(request)
+
+    data = await request.json()
+    key = data.get("key")
+    value = data.get("value")
+
+    if key and value:
+        logging.info(f"Обновляем настройку: {key} = {value}")
+        await set_setting(key, value)
+
+    all_settings = await get_all_settings()
+    logging.info(f"Текущие настройки: {all_settings}")
+
+    return JSONResponse({
+        "status": "success",
+        "data": all_settings
     })
     
 # Фейк-юзеры

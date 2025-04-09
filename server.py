@@ -2,7 +2,11 @@ from fastapi.responses import JSONResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # Используем AsyncIOScheduler
 from config import PORT
 import uvicorn
-from database import database, delete_expired_records
+from database import (
+    database,
+    delete_expired_records,
+    initialize_settings_once
+)
 from api.base import *
 from api.kassa import *
 from api.store_db import *
@@ -30,6 +34,7 @@ async def db_session_middleware(request: Request, call_next):
 async def initialize_services():
     # Подключение к базе данных
     await init_db()
+    await initialize_settings_once()
 
     # Запуск планировщика
     scheduler.start()
