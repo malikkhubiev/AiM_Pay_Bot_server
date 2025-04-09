@@ -505,11 +505,10 @@ async def mark_payout_as_notified(payout_id: int):
             update_query = Payout.__table__.update().where(Payout.id == payout_id).values(notified=True)
             await database.execute(update_query)
 
-async def create_temp_user(telegram_id: str, username: str, referrer_id: Optional[int] = None):
+async def create_temp_user(telegram_id: str, username: str):
     query = insert(User).values(
         telegram_id=telegram_id,
         username=username,
-        referrer_id=referrer_id,
         is_registered=False
     ).returning(User)
     async with database.transaction():

@@ -154,11 +154,8 @@ async def start(request: Request):
             logging.info(f"Делаем временный юзер")
             logging.info(f"telegram_id {telegram_id}")
             logging.info(f"username {username}")
-            logging.info(f"referrer_id {referrer_id}")
             temp_user = await create_temp_user(telegram_id=telegram_id, username=username)
     
-    logging.info(f"referrer_id {referrer_id}")
-    logging.info(f"referrer_id != telegram_id {referrer_id != telegram_id}")
     logging.info(f"temp_user {temp_user}")
     logging.info(f"user {user}")
     
