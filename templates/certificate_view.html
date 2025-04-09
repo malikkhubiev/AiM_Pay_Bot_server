@@ -1,128 +1,149 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Сертификат</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        /* Reset */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Проверка сертификата</title>
+  <link href="https://fonts.googleapis.com/css2?family=Jura:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Jura', sans-serif;
+      background: #0d0d0d;
+      color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      justify-content: flex-start;
+      padding: 3rem 1rem;
+      overflow-x: hidden;
+    }
 
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-            color: #fff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            min-height: 100vh;
-            padding: 4rem 2rem;
-            animation: fadeIn 1s ease-out;
-        }
+    h1 {
+      text-align: center;
+      font-size: 3rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #00ffe7, #006eff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+      animation: neon-glow 2s ease-in-out infinite alternate;
+    }
 
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 2rem;
-            letter-spacing: 1px;
-            animation: slideDown 0.6s ease-out;
-        }
+    @keyframes neon-glow {
+      from { text-shadow: 0 0 10px #00ffe7, 0 0 20px #00ffe7; }
+      to { text-shadow: 0 0 20px #006eff, 0 0 40px #006eff; }
+    }
 
-        form {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 1rem;
-            width: 100%;
-            max-width: 400px;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-            backdrop-filter: blur(10px);
-            animation: fadeIn 1s ease-out 0.3s forwards;
-        }
+    form {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 3rem;
+      animation: fadeIn 1s ease-in-out;
+    }
 
-        input[type="text"] {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            outline: none;
-            background-color: #f3f3f3;
-            color: #333;
-        }
+    input[type="text"] {
+      background: #1c1c1c;
+      border: 1px solid #00ffe7;
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      color: #ffffff;
+      font-size: 1rem;
+      min-width: 250px;
+      box-shadow: 0 0 8px #00ffe744;
+      transition: all 0.3s ease;
+    }
 
-        button {
-            padding: 0.75rem 1rem;
-            border: none;
-            border-radius: 8px;
-            background: #00c9ff;
-            background: linear-gradient(135deg, #00c9ff, #92fe9d);
-            color: #000;
-            font-weight: bold;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-        }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #00aaff;
+      box-shadow: 0 0 12px #00aaffaa;
+    }
 
-        button:hover {
-            transform: scale(1.05);
-        }
+    button {
+      background: linear-gradient(135deg, #00ffe7, #006eff);
+      border: none;
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 1rem;
+      text-transform: uppercase;
+      transition: all 0.3s ease;
+      box-shadow: 0 0 15px #00ffe770;
+    }
 
-        .message {
-            margin-top: 2rem;
-            font-size: 1.1rem;
-            color: #ff6b6b;
-            animation: fadeIn 0.6s ease-out;
-        }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 25px #00ffe7;
+    }
 
-        .pdf-viewer {
-            margin-top: 3rem;
-            width: 100%;
-            max-width: 90vw;
-            height: 80vh;
-            border: 2px solid #fff;
-            border-radius: 1rem;
-            overflow: hidden;
-            animation: fadeIn 1s ease-out 0.5s forwards;
-        }
+    .result {
+      font-size: 1.2rem;
+      text-align: center;
+      margin-bottom: 2rem;
+      animation: fadeInUp 0.8s ease;
+    }
 
-        @keyframes fadeIn {
-            from {opacity: 0;}
-            to {opacity: 1;}
-        }
+    .result.error {
+      color: #ff4b4b;
+      text-shadow: 0 0 6px #ff4b4b88;
+    }
 
-        @keyframes slideDown {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-    </style>
+    .result.success {
+      color: #00ffe7;
+      text-shadow: 0 0 6px #00ffe7aa;
+    }
+
+    embed {
+      border: none;
+      border-radius: 10px;
+      width: 90%;
+      height: 600px;
+      box-shadow: 0 0 30px #00ffe722;
+      animation: fadeIn 1.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 2rem;
+      }
+
+      input[type="text"], button {
+        width: 100%;
+        text-align: center;
+      }
+    }
+  </style>
 </head>
 <body>
-    <h1>Поиск сертификата</h1>
-    <form method="get">
-        <input type="text" name="cert_id" placeholder="Введите CERT-ID" value="{{ cert_id or '' }}" required>
-        <button type="submit">Найти</button>
-    </form>
+  <h1>Проверка сертификата</h1>
+  <form method="get">
+    <input type="text" name="cert_id" placeholder="Введите CERT-ID" value="{{ cert_id or '' }}" required>
+    <button type="submit">Найти</button>
+  </form>
 
-    {% if pdf_url == "NOT_FOUND" %}
-        <p class="message">Сертификат не найден</p>
-    {% elif pdf_url %}
-        <div class="pdf-viewer">
-            <embed src="{{ pdf_url }}" type="application/pdf" width="100%" height="100%" />
-        </div>
-    {% endif %}
+  {% if pdf_url == "NOT_FOUND" %}
+    <div class="result error">Сертификат с таким идентификатором не найден</div>
+  {% elif pdf_url %}
+    <div class="result success">Сертификат найден: <strong>{{ cert_id }}</strong></div>
+    <embed src="{{ pdf_url }}" type="application/pdf" />
+  {% endif %}
 </body>
 </html>
