@@ -714,7 +714,7 @@ async def create_user1(telegram_id: str, username: str, created_at_str: str):
     
     return telegram_id
 
-async def create_referral1(referrer_id: str, referred_id: str):
+async def create_referral(referrer_id: str, referred_id: str):
     query = insert(Referral).values(
         referrer_id=referrer_id,
         referred_id=referred_id,
