@@ -192,7 +192,7 @@ async def getting_started(request: Request):
     user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user = {user}")
 
-    if user:
+    if user.is_registered:
         return {"status": "error", "message": "Вы уже зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
 
     temp_user = await get_temp_user(telegram_id)
