@@ -1,9 +1,116 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="UTF-8">
     <title>Сертификат</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            padding: 4rem 2rem;
+            animation: fadeIn 1s ease-out;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            letter-spacing: 1px;
+            animation: slideDown 0.6s ease-out;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            animation: fadeIn 1s ease-out 0.3s forwards;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            background-color: #f3f3f3;
+            color: #333;
+        }
+
+        button {
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            background: #00c9ff;
+            background: linear-gradient(135deg, #00c9ff, #92fe9d);
+            color: #000;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        .message {
+            margin-top: 2rem;
+            font-size: 1.1rem;
+            color: #ff6b6b;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        .pdf-viewer {
+            margin-top: 3rem;
+            width: 100%;
+            max-width: 90vw;
+            height: 80vh;
+            border: 2px solid #fff;
+            border-radius: 1rem;
+            overflow: hidden;
+            animation: fadeIn 1s ease-out 0.5s forwards;
+        }
+
+        @keyframes fadeIn {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+    </style>
 </head>
-<body style="font-family: sans-serif; text-align: center; padding: 2em;">
+<body>
     <h1>Поиск сертификата</h1>
     <form method="get">
         <input type="text" name="cert_id" placeholder="Введите CERT-ID" value="{{ cert_id or '' }}" required>
@@ -11,10 +118,11 @@
     </form>
 
     {% if pdf_url == "NOT_FOUND" %}
-        <p style="color: red;">Сертификат не найден</p>
+        <p class="message">Сертификат не найден</p>
     {% elif pdf_url %}
-        <h2>Сертификат {{ cert_id }}</h2>
-        <embed src="{{ pdf_url }}" type="application/pdf" width="80%" height="600px" />
+        <div class="pdf-viewer">
+            <embed src="{{ pdf_url }}" type="application/pdf" width="100%" height="100%" />
+        </div>
     {% endif %}
 </body>
 </html>

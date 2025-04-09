@@ -784,6 +784,8 @@ async def get_top_referrers(request: Request):
     })
     
 async def generate_certificate_file(user):
+    logging.info("user")
+    logging.info(user)
     EXPORT_FOLDER = 'exports'
     os.makedirs(EXPORT_FOLDER, exist_ok=True)
     
@@ -885,6 +887,8 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
             "message": "Сертификационный тест не был сдан"
         })
     
+    logging.info(f"user")
+    logging.info(user)
     output_path, qr_path, cert_id = await generate_certificate_file(user)
 
     background_tasks.add_task(delete_file, output_path)
