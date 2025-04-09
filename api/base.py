@@ -48,7 +48,7 @@ from database import (
     update_referrer,
     ultra_excute,
     update_fio_and_date_of_cert,
-    update_passed_exam
+    update_passed_exam_in_db
 )
 from config import (
     BOT_USERNAME
@@ -664,6 +664,7 @@ async def save_fio(request: Request):
 async def update_passed_exam(request: Request):
 
     logging.info("inside update_passed_exam")
+    logging.info(f"request {request}")
     verify_secret_code(request)
     
     data = await request.json()

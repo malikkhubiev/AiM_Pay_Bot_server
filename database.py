@@ -528,7 +528,7 @@ async def update_pending_referral(telegram_id: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
-async def update_passed_exam(telegram_id: str):
+async def update_passed_exam_in_db(telegram_id: str):
     update_data = {'passed_exam': True}
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
