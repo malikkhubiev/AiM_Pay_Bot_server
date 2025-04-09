@@ -679,7 +679,7 @@ async def update_passed_exam(request: Request):
     if user:
         logging.info(f"user {user}")
 
-        await update_passed_exam(telegram_id)
+        await update_passed_exam_in_db(telegram_id)
 
         logging.info(f"Тест сдан")
 
