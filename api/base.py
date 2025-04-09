@@ -36,7 +36,7 @@ from database import (
     get_paid_referrals_by_user,
     get_conversion_stats_by_source,
     get_referral_conversion_stats,
-    get_top_referrers,
+    get_top_referrers_from_db,
     save_invite_link_db,
     create_referral,
     create_temp_user,
@@ -775,7 +775,7 @@ async def get_top_referrers(request: Request):
     if not(check["result"]):
         return {"status": "error", "message": check["message"]}
     
-    top = await get_top_referrers()
+    top = await get_top_referrers_from_db()
 
     return JSONResponse({
         "status": "success",

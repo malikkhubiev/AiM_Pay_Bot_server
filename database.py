@@ -393,7 +393,7 @@ async def get_referral_conversion_stats():
 
     return results
 
-async def get_top_referrers():
+async def get_top_referrers_from_db():
     query = """
         SELECT 
             users.telegram_id,
