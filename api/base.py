@@ -711,10 +711,11 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
             "status": "error",
             "message": "Такого пользователя не существует"
         })
-    if not(user.fio):
+    
+    if not(user.paid):
         return JSONResponse({
             "status": "error",
-            "message": "Вы не установили своё ФИО для получения сертификата. Введите ФИО в формате: 'ФИО: Иванов Иван Иванович'. Будьте аккуратны в написании, исправить ФИО невозможно. Дата установки ФИО считается датой формирования сертификата."
+            "message": "Для прохождения теста необходимо оплатить курс"
         })
     
     if not(user.passed_exam):
@@ -722,6 +723,13 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
             "status": "success",
             "result": "test"
         })
+    
+    if not(user.fio):
+        return JSONResponse({
+            "status": "error",
+            "message": "Вы не установили своё ФИО для получения сертификата. Введите ФИО в формате: 'ФИО: Иванов Иван Иванович'. Будьте аккуратны в написании, исправить ФИО невозможно. Дата установки ФИО считается датой формирования сертификата."
+        })
+    
     else:
         return JSONResponse({
             "status": "success",
