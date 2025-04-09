@@ -87,6 +87,9 @@ def verify_secret_code(request: Request):
     if DISABLE_SECRET_CODE_CHECK == "True":
         return True
     else:
+        logging.info(f"request = {request}")
+        logging.info(f"request.headers = {request.headers}")
+        logging.info(f"request.headers.get('X-Secret-Code') = {request.headers.get('X-Secret-Code')}")
         secret_code = request.headers.get("X-Secret-Code")
         if secret_code != SECRET_CODE:
             raise HTTPException(status_code=403, detail="Вам запрещён доступ к серверу")
