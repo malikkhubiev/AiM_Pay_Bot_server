@@ -302,7 +302,7 @@ async def get_paid_referrals_by_user(telegram_id: str):
 
 async def get_user_by_cert_id(cert_id: str):
     short_id = cert_id.replace("CERT-", "")
-    query = select(User).where(User.c.telegram_id.like(f"{short_id}%")).limit(1)
+    query = select(User).where(User.telegram_id.like(f"{short_id}%")).limit(1)
     return await database.fetch_one(query)
 
 async def get_temp_user(telegram_id: str):
