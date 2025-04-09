@@ -249,7 +249,7 @@ async def register_user_with_promo(request: Request):
     if number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):  
         await add_promo_user(telegram_id)
         notification_data = {"telegram_id": telegram_id}
-        send_invite_link_url = f"{str(await get_setting("MAHIN_URL"))}/send_invite_link"
+        send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
         await send_request(send_invite_link_url, notification_data)
 
         return JSONResponse({"status": "success"})
