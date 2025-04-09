@@ -304,7 +304,7 @@ async def get_user_by_cert_id(cert_id: str):
     short_id = cert_id.replace("CERT-", "")
     query = """
         SELECT * FROM users
-        WHERE unique_str LIKE :short_id
+        WHERE telegram_id LIKE :short_id
         LIMIT 1
     """
     values = {"short_id": short_id + "%"}
