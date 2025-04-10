@@ -896,49 +896,43 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
+# Логирование
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Папка для статики
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "certificates")
+
+# Убедимся, что папка для сертификатов существует
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+    logger.info(f"[DEBUG] Создана папка для сертификатов: {static_dir}")
+else:
+    logger.info(f"[DEBUG] Папка для сертификатов уже существует: {static_dir}")
+
 @app.get("/certificate/{cert_id}", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str):
     pdf_url = None
 
     if cert_id:
-        user = await get_user_by_cert_id(cert_id)
+        user = await get_user_by_cert_id(cert_id)  # Получаем пользователя по cert_id
         if user and user.passed_exam:
-            output_path, qr_path, _ = await generate_certificate_file(user)
+            output_path, qr_path, _ = await generate_certificate_file(user)  # Генерация сертификата
 
-            # Корень проекта
-            root_dir = os.path.dirname(os.path.abspath(__file__))
-            logger.info(f"[DEBUG] Корень проекта: {root_dir}")
-
-            # Путь к папке static
-            static_dir = os.path.join(root_dir, "static")
-            if not os.path.exists(static_dir):
-                os.makedirs(static_dir)
-                logger.info(f"[DEBUG] Создана папка: {static_dir}")
-            else:
-                logger.info(f"[DEBUG] Папка уже существует: {static_dir}")
-
-            # Путь к папке static/certificates
-            certificates_dir = os.path.join(static_dir, "certificates")
-            if not os.path.exists(certificates_dir):
-                os.makedirs(certificates_dir)
-                logger.info(f"[DEBUG] Создана папка: {certificates_dir}")
-            else:
-                logger.info(f"[DEBUG] Папка уже существует: {certificates_dir}")
-
-            # Имя и путь для итогового PDF
+            # Имя для итогового PDF
             cert_filename = f"certificate_{cert_id}.pdf"
-            dst_path = os.path.join(certificates_dir, cert_filename)
+            dst_path = os.path.join(static_dir, cert_filename)
 
             # Копируем PDF
             shutil.copy(output_path, dst_path)
             logger.info(f"[DEBUG] Скопировали PDF: {dst_path}")
 
-            # Формируем URL для HTML
+            # Формируем URL для доступа к сертификату
             pdf_url = f"/static/certificates/{cert_filename}"
 
-            # Логируем содержимое директории
-            files = os.listdir(certificates_dir)
-            logger.info(f"[DEBUG] Содержимое static/certificates: {files}")
+            # Логируем содержимое папки
+            files = os.listdir(static_dir)
+            logger.info(f"[DEBUG] Содержимое папки certificates: {files}")
         else:
             pdf_url = "NOT_FOUND"
 
