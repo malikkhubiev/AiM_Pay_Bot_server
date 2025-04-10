@@ -912,10 +912,17 @@ async def certificate_page(request: Request, cert_id: str):
                 os.makedirs(dst_dir)
 
             # Путь к файлу сертификата в директории static
-            pdf_url = f"/static/certificates/certificate_{cert_id}.pdf"
+            pdf_url = f"./static/certificates/certificate_{cert_id}.pdf"
             
             # Копируем сертификат в нужную директорию
             shutil.copy(output_path, f".{pdf_url}")
+
+            certificates_dir = os.path.join("static", "certificates")
+            if os.path.exists(certificates_dir):
+                files = os.listdir(certificates_dir)
+                logger.info(f"Содержимое папки static/certificates: {files}")
+            else:
+                logger.warning("Папка static/certificates не найдена")
 
         else:
             pdf_url = "NOT_FOUND"
