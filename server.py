@@ -23,6 +23,8 @@ scheduler = AsyncIOScheduler()
 # Запускаем задачу на удаление устаревших записей каждые сутки
 scheduler.add_job(delete_expired_records, 'interval', hours=24)
 
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
     await database.connect()
