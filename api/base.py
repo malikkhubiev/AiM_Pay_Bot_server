@@ -901,20 +901,6 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
-# Логирование
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Папка для статики
-static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "certificates")
-
-# Убедимся, что папка для сертификатов существует
-if not os.path.exists(static_dir):
-    os.makedirs(static_dir)
-    logger.info(f"[DEBUG] Создана папка для сертификатов: {static_dir}")
-else:
-    logger.info(f"[DEBUG] Папка для сертификатов уже существует: {static_dir}")
-
 @app.get("/certificate/{cert_id}", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str):
     pdf_url = None
