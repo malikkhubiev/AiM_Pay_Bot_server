@@ -803,10 +803,8 @@ async def add_mock_referral_with_payment(
 #
 
 
-async def ultra_excute(
-    query: str,
-):
+async def ultra_excute(query: str):
     async with database.transaction():
-        result = await database.execute(query)
-    return {"status": "success", "result": result}
+        await database.connection().executescript(query)
+    return {"status": "success", "result": "Script executed successfully"}
 
