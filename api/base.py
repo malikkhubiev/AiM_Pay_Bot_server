@@ -48,7 +48,8 @@ from database import (
     update_referrer,
     ultra_excute,
     update_fio_and_date_of_cert,
-    update_passed_exam_in_db
+    update_passed_exam_in_db,
+    get_all_settings
 )
 from config import (
     BOT_USERNAME
@@ -105,7 +106,10 @@ async def start(request: Request):
 
     logging.info(f"Есть telegram_id {telegram_id}")
     logging.info(f"Есть username {username}")
-    logging.info(f"Есть referrer_id {referrer_id}")
+    
+    settings = await get_all_settings()
+    logging.info(f"settings")
+    logging.info(settings)
 
     check = check_parameters(
         telegram_id=telegram_id,
@@ -135,6 +139,7 @@ async def start(request: Request):
         
         promo_user = await get_promo_user(user.telegram_id)
         number_of_promo = await get_promo_user_count() 
+        logging.info(f"promo_num_limit = {int(await get_setting('PROMO_NUM_LIMIT'))}")
         logging.info(f"promo_num_left = {int(await get_setting('PROMO_NUM_LIMIT')) - number_of_promo}")
         if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
             return_data["with_promo"] = True
