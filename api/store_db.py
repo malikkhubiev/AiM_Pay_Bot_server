@@ -4,6 +4,9 @@ from fastapi.responses import FileResponse
 import os
 import httpx
 import logging
+from config import (
+    SECRET_CODE
+)
 from database import (
     initialize_database,
     get_setting
@@ -50,25 +53,30 @@ async def init_db():
 
     initialize_database()
 
-@app.get("/export_db")
-async def export_db():
-    logging.info("Просят скачать db файл")
+@app.post("/export_db")
+async def export_db(request: Request):
+    logging.info("Запрос на экспорт базы данных")
+    
     try:
+        data = await request.json()
+        secret_code = data.get("secret_code")
+
+        if secret_code != SECRET_CODE:
+            raise HTTPException(status_code=403, detail="Неверный секретный код.")
+
         logging.info(f"Путь к базе данных: {db_path}")
         if not os.path.exists(db_path):
             raise HTTPException(status_code=404, detail="База данных не найдена.")
-        
-        # Путь к файлу для скачивания
+
         export_path = os.path.join(EXPORT_FOLDER, 'bot_database.db')
-        
-        # Копируем файл в папку экспортов
+
         with open(db_path, 'rb') as f_in:
             with open(export_path, 'wb') as f_out:
                 f_out.write(f_in.read())
-        
-        logging.info(f"Отправка файла: {export_path}")
-        # Возвращаем файл как ответ
+
+        logging.info(f"Файл готов к отправке: {export_path}")
         return FileResponse(export_path, media_type='application/octet-stream', filename='bot_database.db')
-    
+
     except Exception as e:
+        logging.error(f"Ошибка экспорта: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка при экспорте базы данных: {e}")
