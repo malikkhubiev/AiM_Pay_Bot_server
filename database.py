@@ -134,19 +134,23 @@ async def get_all_settings():
         rows = await database.fetch_all(query)
     return {row["key"]: row["value"] for row in rows}
 
-
-# Функция для установки значения настройки
+# Асинхронная функция для установки значения настройки
 async def set_setting(key: str, value: str):
-    query = Setting.select().where(Setting.c.key == key)
+    # Данные для обновления
+    update_data = {'value': value}
+    
+    # Запрос на обновление, если запись с таким ключом существует
+    update_query = Setting.__table__.update().where(Setting.key == key).values(update_data)
+    
+    # Запрос на вставку новой записи, если её нет
+    insert_query = Setting.__table__.insert().values(key=key, value=value)
+    
+    # Работаем в контексте транзакции
     async with database.transaction():
-        row = await database.fetch_one(query)
-        if row:
-            # Если запись существует, обновим её
-            update_query = Setting.update().where(Setting.c.key == key).values(value=value)
-            await database.execute(update_query)
-        else:
-            # Если записи нет, вставим новую
-            insert_query = Setting.insert().values(key=key, value=value)
+        # Пробуем выполнить обновление
+        result = await database.execute(update_query)
+        
+        if result == 0:  # Если строк не обновлено (значит, записи не было), выполняем вставку
             await database.execute(insert_query)
             
 def initialize_database():
