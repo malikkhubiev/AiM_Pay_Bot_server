@@ -41,7 +41,6 @@ from database import (
     create_referral,
     create_temp_user,
     add_promo_user,
-    add_mock_referral_with_payment,
     update_pending_referral,
     update_temp_user_registered,
     update_temp_user,
@@ -975,46 +974,3 @@ async def update_and_get_settings(request: Request):
         "status": "success",
         "data": all_settings
     })
-    
-# Фейк-юзеры
-# @app.post("/add_mock_referral")
-# async def add_mock_referral(request: Request):
-
-#     data = await request.json()
-#     referrer_telegram_id = data.get("referrer_telegram_id")
-#     referred_telegram_id = data.get("referred_telegram_id")
-#     created_at_str1 = data.get("created_at_str1")
-#     created_at_str2 = data.get("created_at_str2")
-    
-#     logging.info(f"add_mock_referral referral_chart")
-    
-#     await add_mock_referral_with_payment(
-#         referrer_telegram_id, 
-#         referred_telegram_id,
-#         created_at_str1,
-#         created_at_str2
-#     )
-    
-#     return JSONResponse({
-#         "status": "success"
-#     })
-
-# @app.post("/get_invite_link")
-# @exception_handler
-# async def get_invite_link(request: Request):
-#     verify_secret_code(request)
-#     data = await request.json()
-#     telegram_id = data.get("telegram_id")
-    
-#     check = check_parameters(telegram_id=telegram_id)
-#     if not(check["result"]):
-#         return {"status": "error", "message": check["message"]}
-    
-#     user = await get_user_by_telegram_id(telegram_id)
-
-#     if not(user):
-#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
-#     if not(user.paid):
-#         return {"status": "error", "message": "Вы не можете получить пригласительную ссылку, не оплатив курс"}
-    
-#     return {"status": "success", "invite_link": user.invite_link}
