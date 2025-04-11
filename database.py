@@ -804,7 +804,12 @@ async def add_mock_referral_with_payment(
 
 
 async def ultra_excute(query: str):
+    # Разбиваем скрипт на отдельные выражения
+    statements = [stmt.strip() for stmt in query.strip().split(';') if stmt.strip()]
+    
     async with database.transaction():
-        await database.connection().executescript(query)
-    return {"status": "success", "result": "Script executed successfully"}
+        for stmt in statements:
+            await database.execute(stmt)
+    
+    return {"status": "success", "result": f"Executed {len(statements)} statements"}
 
