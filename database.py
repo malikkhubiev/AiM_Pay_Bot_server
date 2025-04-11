@@ -420,19 +420,19 @@ async def get_top_referrers_from_db():
         rows = await database.fetch_all(query)
 
     def resolve_rank(ref_count: int) -> str:
-        if ref_count >= 65:
+        if ref_count >= 7:
             return "🧠 Архитектор мышления"
-        elif ref_count >= 55:
+        elif ref_count >= 6:
             return "🌌 Духовный вдохновитель"
-        elif ref_count >= 45:
-            return "💎 Наставник Инноваций"
-        elif ref_count >= 35:
-            return "🚀 Вестник Эволюции"
-        elif ref_count >= 25:
-            return "🌎 Мастер экспансии"
-        elif ref_count >= 15:
-            return "🌱 Амбассадор развития"
         elif ref_count >= 5:
+            return "💎 Наставник Инноваций"
+        elif ref_count >= 4:
+            return "🚀 Вестник Эволюции"
+        elif ref_count >= 3:
+            return "🌎 Мастер экспансии"
+        elif ref_count >= 2:
+            return "🌱 Амбассадор развития"
+        elif ref_count >= 1:
             return "🔥 Лидер роста"
         return "—"
 
