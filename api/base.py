@@ -958,7 +958,7 @@ async def update_and_get_settings(request: Request):
     """ Обновляет/устанавливает значение настройки и возвращает все настройки """
 
     logging.info("inside update_and_get_settings")
-    await verify_secret_code(request)
+    verify_secret_code(request)
 
     data = await request.json()
     key = data.get("key")
