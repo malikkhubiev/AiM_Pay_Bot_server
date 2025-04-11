@@ -134,9 +134,10 @@ async def get_all_settings():
         rows = await database.fetch_all(query)
     return {row["key"]: row["value"] for row in rows}
 
+
 # Функция для установки значения настройки
 async def set_setting(key: str, value: str):
-    query = select(Setting).filter_by(key=key)
+    query = Setting.select().where(Setting.c.key == key)
     async with database.transaction():
         row = await database.fetch_one(query)
         if row:
