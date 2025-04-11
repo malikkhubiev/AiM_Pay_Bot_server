@@ -120,23 +120,34 @@ async def initialize_settings_once():
         query = Setting.__table__.insert().values(insert_values)
         await database.execute(query)
 
-async def get_setting(key: str) -> str | None:
-    query = Setting.__table__.select().where(Setting.key == key)
-    row = await database.fetch_one(query)
+# Функция для получения значения настройки по ключу
+async def get_setting(key: str):
+    query = select(Setting).filter_by(key=key)
+    async with database.transaction():
+        row = await database.fetch_one(query)
     return row["value"] if row else None
 
-async def get_all_settings() -> dict:
-    query = Setting.__table__.select()
-    rows = await database.fetch_all(query)
+# Функция для получения всех настроек
+async def get_all_settings():
+    query = select(Setting)
+    async with database.transaction():
+        rows = await database.fetch_all(query)
     return {row["key"]: row["value"] for row in rows}
 
+# Функция для установки значения настройки
 async def set_setting(key: str, value: str):
-    query = Setting.__table__.insert().values(key=key, value=value).on_conflict_do_update(
-        index_elements=["key"],
-        set_={"value": value}
-    )
-    await database.execute(query)
-
+    query = select(Setting).filter_by(key=key)
+    async with database.transaction():
+        row = await database.fetch_one(query)
+        if row:
+            # Если запись существует, обновим её
+            update_query = Setting.update().where(Setting.c.key == key).values(value=value)
+            await database.execute(update_query)
+        else:
+            # Если записи нет, вставим новую
+            insert_query = Setting.insert().values(key=key, value=value)
+            await database.execute(insert_query)
+            
 def initialize_database():
     """Создает базу данных, если она еще не создана."""
     Base.metadata.create_all(bind=engine)
