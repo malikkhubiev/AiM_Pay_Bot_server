@@ -918,10 +918,20 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 @app.get("/certificate/{cert_id}", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str):
+    
+    logging.info("called certificate_page")
+
     pdf_url = None
 
     if cert_id:
+        logging.info(f"cert_id {cert_id}")
+        
         user = await get_user_by_cert_id(cert_id)  # Получаем пользователя по cert_id
+        
+        logging.info(f"user getting query is done")
+        logging.info(f"user {user}")
+        logging.info(f"passed_exam {user.passed_exam}")
+
         if user and user.passed_exam:
             output_path, qr_path, _ = await generate_certificate_file(user)  # Генерация сертификата
 
