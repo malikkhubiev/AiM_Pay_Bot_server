@@ -173,7 +173,7 @@ async def payment_notification(request: Request):
     payment_data = data["object"]
     payment_id = payment_data.get("id")
     status = payment_data.get("status")
-    income_amount = payment_data.get("income_amount")["value"]
+    income_amount = float(payment_data.get("income_amount")["value"])
     metadata = payment_data.get("metadata", {})
     user_telegram_id = metadata.get("telegram_id")
 
@@ -199,7 +199,7 @@ async def payment_notification(request: Request):
                 income_amount
             )
             all_settings = await get_all_settings()
-            current_money = all_settings["MY_MONEY"]
+            current_money = float(all_settings["MY_MONEY"])
             await set_setting("MY_MONEY", current_money + income_amount)
 
             user = await get_user(user_telegram_id)
