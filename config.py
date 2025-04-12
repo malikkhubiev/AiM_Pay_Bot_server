@@ -24,4 +24,5 @@ DEFAULT_SETTINGS = {
     "COURSE_AMOUNT": os.getenv("COURSE_AMOUNT"),
     "REFERRAL_AMOUNT": os.getenv("REFERRAL_AMOUNT"),
     "PROMO_NUM_LIMIT": os.getenv("PROMO_NUM_LIMIT"),
+    "MY_MONEY": 0
 }

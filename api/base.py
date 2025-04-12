@@ -19,7 +19,7 @@ from database import (
     set_setting,
     get_all_settings,
     get_temp_user,
-    get_referral_statistics,
+    get_users_with_positive_balance,
     get_payment_date,
     get_start_working_date,
     get_user_by_cert_id,
@@ -454,7 +454,7 @@ async def get_referral_link(request: Request):
 async def get_payout_balance(request: Request):
     verify_secret_code(request)
     logging.info("inside_payout_balance")
-    referral_statistics = await get_referral_statistics()
+    referral_statistics = await get_users_with_positive_balance()
 
     logging.info(f"referral_statistics {referral_statistics}")
 
@@ -462,12 +462,10 @@ async def get_payout_balance(request: Request):
     users = []
 
     for user in referral_statistics:
-        payout_amount = user['paid_referrals'] * float(await get_setting("REFERRAL_AMOUNT"))
-        total_balance += payout_amount
+        total_balance += user['balance']
         users.append({
             "id": user["telegram_id"],
-            "name": user["username"],
-            "paid_referrals": user['paid_referrals']
+            "name": user["username"]
         })
 
     logging.info(f"referral_statistics {referral_statistics}")

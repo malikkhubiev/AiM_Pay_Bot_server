@@ -30,6 +30,8 @@ from database import (
     update_payout_transaction,
     update_payout_status,
     update_user_balance,
+    get_all_settings,
+    set_setting
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -191,7 +193,14 @@ async def payment_notification(request: Request):
 
         if payment:
             logging.info(f"Есть платёж в режиме ожидания. Завершаем операцию")
-            await update_payment_done(user_telegram_id, payment_id)
+            await update_payment_done(
+                user_telegram_id,
+                payment_id,
+                income_amount
+            )
+            all_settings = await get_all_settings()
+            current_money = all_settings["MY_MONEY"]
+            await set_setting("MY_MONEY", current_money + income_amount)
 
             user = await get_user(user_telegram_id)
             logging.info(f"user {user}")
@@ -205,11 +214,12 @@ async def payment_notification(request: Request):
                 referrer_user = await get_user_by_telegram_id(referrer.referrer_id, to_throw=False)
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user:
+                    referral_current_amount = float(await get_setting("REFERRAL_AMOUNT"))
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    new_balance = int((referrer_user.balance or 0) + float(await get_setting("REFERRAL_AMOUNT")))
+                    new_balance = int((referrer_user.balance or 0) + referral_current_amount)
                     logging.info(f"referrer_user.balance {referrer_user.balance or 0}")
-                    logging.info(f"float(REFERRAL_AMOUNT) {float(await get_setting('REFERRAL_AMOUNT'))}")
+                    logging.info(f"float(REFERRAL_AMOUNT) {referral_current_amount}")
                     logging.info(f"new_balance {new_balance}")
                     await update_user_balance(referrer_user.telegram_id, new_balance)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")

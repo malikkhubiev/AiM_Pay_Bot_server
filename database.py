@@ -60,7 +60,7 @@ class Payment(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'), nullable=False)  # Ссылка на пользователя
     transaction_id = Column(String, default=None)  # Идентификатор транзакции
     idempotence_key = Column(String, nullable=False, unique=True)
-    amout = Column(Integer, nullable=False)
+    amount = Column(Integer, nullable=False)
     status = Column(String, nullable=False) # (success|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
 
@@ -273,28 +273,6 @@ async def get_payments_frequency_db():
     )
     async with database.transaction():
         return await database.fetch_all(query)
-
-async def get_referral_statistics():
-    """ Получает список пользователей с их приглашёнными, которые оплатили курс. """
-    query = (
-        select(
-            User.telegram_id.label("telegram_id"),
-            User.username.label("username"),
-            func.count(Referral.referred_id).label("paid_referrals")
-        )
-        .join(Referral, Referral.referrer_id == User.telegram_id)
-        .join(Payment, Payment.telegram_id == Referral.referred_id)
-        .where(Payment.status == "success")  # Учитываем только оплаченные заказы
-        .group_by(User.telegram_id, User.username)
-        .order_by(func.count(Referral.referred_id).desc())  # Сортировка по убыванию оплаченных рефералов
-    )
-    async with database.transaction():
-        result = await database.fetch_all(query)
-    
-    return [
-        {"telegram_id": row["telegram_id"], "username": row["username"], "paid_referrals": row["paid_referrals"]}
-        for row in result
-    ]
 
 async def get_paid_referrals_by_user(telegram_id: str):
     """ Получает количество оплаченных рефералов по дням для пользователя """
@@ -599,11 +577,10 @@ async def update_temp_user(telegram_id: str, username: Optional[str] = None):
             update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
             await database.execute(update_query)
 
-
-async def update_payment_done(telegram_id: str, transaction_id: str):
+async def update_payment_done(telegram_id: str, transaction_id: str, income_amount: float):
     user_update_data = {'paid': True}
     user_update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(user_update_data)
-    payment_update_data = {"status": "success", "transaction_id": transaction_id}
+    payment_update_data = {"status": "success", "transaction_id": transaction_id, "amount": income_amount}
     payment_update_query = Payment.__table__.update().where(Payment.telegram_id == telegram_id).values(payment_update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(user_update_query)
