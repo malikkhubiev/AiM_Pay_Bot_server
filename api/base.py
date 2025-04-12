@@ -919,7 +919,7 @@ async def certificate_page(request: Request, cert_id: str):
     
     logging.info("called certificate_page")
 
-    pdf_url = None
+    image_url = None
 
     if cert_id:
         logging.info(f"cert_id {cert_id}")
@@ -941,19 +941,22 @@ async def certificate_page(request: Request, cert_id: str):
             shutil.copy(output_path, dst_path)
             logger.info(f"[DEBUG] Скопировали PDF: {dst_path}")
 
-            # Формируем URL для доступа к сертификату
-            pdf_url = f"/static/certificates/{cert_filename}"
+            # Конвертируем PDF в изображение
+            image_path = await convert_pdf_to_image(dst_path)
+
+            # Формируем URL для доступа к изображению
+            image_url = f"/static/certificates/{os.path.basename(image_path)}"
 
             # Логируем содержимое папки
             files = os.listdir(static_dir)
             logger.info(f"[DEBUG] Содержимое папки certificates: {files}")
         else:
-            pdf_url = "NOT_FOUND"
+            image_url = "NOT_FOUND"
 
     return templates.TemplateResponse("certificate_view.html", {
         "request": request,
         "cert_id": cert_id,
-        "pdf_url": pdf_url
+        "image_url": image_url  # Передаем URL изображения
     })
 
 @app.post("/execute_sql")

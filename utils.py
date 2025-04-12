@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from pdf2image import convert_from_path
 from responses import *
 from fastapi import HTTPException, Request, status
 import ipaddress
@@ -183,3 +184,13 @@ def format_datetime_for_excel(dt):
     if dt is None:
         return None
     return pd.Timestamp(dt)  # Pandas автоматически конвертирует в Excel-friendly формат
+
+async def convert_pdf_to_image(pdf_path):
+    # Преобразуем первую страницу PDF в изображение
+    images = convert_from_path(pdf_path, first_page=1, last_page=1)
+    
+    # Сохраняем изображение в формате PNG
+    image_path = pdf_path.replace('.pdf', '.png')  # Сохраняем как PNG
+    images[0].save(image_path, 'PNG')
+    
+    return image_path
