@@ -901,9 +901,6 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
-# Обслуживаем статические файлы
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 # Определение пути для папки с сертификатами
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(BASE_DIR, "static", "certificates")
@@ -911,6 +908,9 @@ static_dir = os.path.join(BASE_DIR, "static", "certificates")
 # Создаем папку, если она не существует
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
+
+# Обслуживаем статические файлы
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/certificate/{cert_id}", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str):
