@@ -60,6 +60,7 @@ class Payment(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'), nullable=False)  # Ссылка на пользователя
     transaction_id = Column(String, default=None)  # Идентификатор транзакции
     idempotence_key = Column(String, nullable=False, unique=True)
+    amout = Column(Integer, nullable=False)
     status = Column(String, nullable=False) # (success|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
 

@@ -175,6 +175,7 @@ async def payment_notification(request: Request):
     metadata = payment_data.get("metadata", {})
     user_telegram_id = metadata.get("telegram_id")
 
+    logging.info(f"income_amount {income_amount}")
     logging.info(payment_data)
     logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
 
