@@ -120,23 +120,39 @@ async def initialize_settings_once():
         query = Setting.__table__.insert().values(insert_values)
         await database.execute(query)
 
-async def get_setting(key: str) -> str | None:
-    query = Setting.__table__.select().where(Setting.key == key)
-    row = await database.fetch_one(query)
+# Функция для получения значения настройки по ключу
+async def get_setting(key: str):
+    query = select(Setting).filter_by(key=key)
+    async with database.transaction():
+        row = await database.fetch_one(query)
     return row["value"] if row else None
 
-async def get_all_settings() -> dict:
-    query = Setting.__table__.select()
-    rows = await database.fetch_all(query)
+# Функция для получения всех настроек
+async def get_all_settings():
+    query = select(Setting)
+    async with database.transaction():
+        rows = await database.fetch_all(query)
     return {row["key"]: row["value"] for row in rows}
 
+# Асинхронная функция для установки значения настройки
 async def set_setting(key: str, value: str):
-    query = Setting.__table__.insert().values(key=key, value=value).on_conflict_do_update(
-        index_elements=["key"],
-        set_={"value": value}
-    )
-    await database.execute(query)
-
+    # Данные для обновления
+    update_data = {'value': value}
+    
+    # Запрос на обновление, если запись с таким ключом существует
+    update_query = Setting.__table__.update().where(Setting.key == key).values(update_data)
+    
+    # Запрос на вставку новой записи, если её нет
+    insert_query = Setting.__table__.insert().values(key=key, value=value)
+    
+    # Работаем в контексте транзакции
+    async with database.transaction():
+        # Пробуем выполнить обновление
+        result = await database.execute(update_query)
+        
+        if result == 0:  # Если строк не обновлено (значит, записи не было), выполняем вставку
+            await database.execute(insert_query)
+            
 def initialize_database():
     """Создает базу данных, если она еще не создана."""
     Base.metadata.create_all(bind=engine)
@@ -404,19 +420,19 @@ async def get_top_referrers_from_db():
         rows = await database.fetch_all(query)
 
     def resolve_rank(ref_count: int) -> str:
-        if ref_count >= 65:
+        if ref_count >= 7:
             return "🧠 Архитектор мышления"
-        elif ref_count >= 55:
+        elif ref_count >= 6:
             return "🌌 Духовный вдохновитель"
-        elif ref_count >= 45:
-            return "💎 Наставник Инноваций"
-        elif ref_count >= 35:
-            return "🚀 Вестник Эволюции"
-        elif ref_count >= 25:
-            return "🌎 Мастер экспансии"
-        elif ref_count >= 15:
-            return "🌱 Амбассадор развития"
         elif ref_count >= 5:
+            return "💎 Наставник Инноваций"
+        elif ref_count >= 4:
+            return "🚀 Вестник Эволюции"
+        elif ref_count >= 3:
+            return "🌎 Мастер экспансии"
+        elif ref_count >= 2:
+            return "🌱 Амбассадор развития"
+        elif ref_count >= 1:
             return "🔥 Лидер роста"
         return "—"
 
@@ -677,136 +693,13 @@ async def get_binding_by_unique_str(unique_str: str):
     async with database.transaction():  # Используем async with для транзакции
         return await database.fetch_one(query)
 
-
-#
-
-
-async def create_user1(telegram_id: str, username: str, created_at_str: str):
-    # Преобразуем строку в объект datetime
-    created_at = datetime.strptime(created_at_str, "%d.%m.%Y")
-    
-    # Проверяем, существует ли пользователь с таким telegram_id
-    query_check = select(User).where(User.telegram_id == telegram_id)
-    existing_user = await database.fetch_one(query_check)
-    
-    if existing_user:
-        return f"Пользователь с telegram_id {telegram_id} уже существует"
-    
-    # Если не существует, создаем нового пользователя
-    unique_str = str(uuid.uuid4())
-    query_insert = insert(User).values(
-        telegram_id=telegram_id,
-        username=username,
-        unique_str=unique_str,
-        created_at=created_at
-    )
+async def ultra_excute(query: str):
+    # Разбиваем скрипт на отдельные выражения
+    statements = [stmt.strip() for stmt in query.strip().split(';') if stmt.strip()]
     
     async with database.transaction():
-        await database.execute(query_insert)
+        for stmt in statements:
+            await database.execute(stmt)
     
-    return telegram_id
-
-async def create_referral(referrer_id: str, referred_id: str):
-    query = insert(Referral).values(
-        referrer_id=referrer_id,
-        referred_id=referred_id,
-        status="success"
-    )
-    async with database.transaction():
-        await database.execute(query)
-
-async def create_payment1(telegram_id: str, created_at_str2: str):
-    idempotence_key = str(uuid.uuid4())
-    created_at = datetime.strptime(created_at_str2, "%d.%m.%Y")
-    query = insert(Payment).values(
-        telegram_id=telegram_id,
-        idempotence_key=idempotence_key,
-        status="success",
-        created_at=created_at
-    )
-    async with database.transaction():
-        await database.execute(query)
-
-async def add_mock_referral_with_payment(
-    referrer_telegram_id: str,
-    referred_telegram_id: str,
-    created_at_str1: str,
-    created_at_str2: str,
-):
-    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
-    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
-    await create_referral1(referrer_telegram_id, referred_telegram_id)
-    await create_payment1(referred_telegram_id, created_at_str2)
-
-
-#
-
-
-async def create_user1(telegram_id: str, username: str, created_at_str: str):
-    # Преобразуем строку в объект datetime
-    created_at = datetime.strptime(created_at_str, "%d.%m.%Y")
-    
-    # Проверяем, существует ли пользователь с таким telegram_id
-    query_check = select(User).where(User.telegram_id == telegram_id)
-    existing_user = await database.fetch_one(query_check)
-    
-    if existing_user:
-        return f"Пользователь с telegram_id {telegram_id} уже существует"
-    
-    # Если не существует, создаем нового пользователя
-    unique_str = str(uuid.uuid4())
-    query_insert = insert(User).values(
-        telegram_id=telegram_id,
-        username=username,
-        unique_str=unique_str,
-        created_at=created_at
-    )
-    
-    async with database.transaction():
-        await database.execute(query_insert)
-    
-    return telegram_id
-
-async def create_referral1(referrer_id: str, referred_id: str):
-    query = insert(Referral).values(
-        referrer_id=referrer_id,
-        referred_id=referred_id,
-        status="success"
-    )
-    async with database.transaction():
-        await database.execute(query)
-
-async def create_payment1(telegram_id: str, created_at_str2: str):
-    idempotence_key = str(uuid.uuid4())
-    created_at = datetime.strptime(created_at_str2, "%d.%m.%Y")
-    query = insert(Payment).values(
-        telegram_id=telegram_id,
-        idempotence_key=idempotence_key,
-        status="success",
-        created_at=created_at
-    )
-    async with database.transaction():
-        await database.execute(query)
-
-async def add_mock_referral_with_payment(
-    referrer_telegram_id: str,
-    referred_telegram_id: str,
-    created_at_str1: str,
-    created_at_str2: str,
-):
-    await create_user1(referrer_telegram_id, f'user_{referrer_telegram_id}', created_at_str1)
-    await create_user1(referred_telegram_id, f'user_{referred_telegram_id}', created_at_str1)
-    await create_referral1(referrer_telegram_id, referred_telegram_id)
-    await create_payment1(referred_telegram_id, created_at_str2)
-
-
-#
-
-
-async def ultra_excute(
-    query: str,
-):
-    async with database.transaction():
-        result = await database.execute(query)
-    return {"status": "success", "result": result}
+    return {"status": "success", "result": f"Executed {len(statements)} statements"}
 
