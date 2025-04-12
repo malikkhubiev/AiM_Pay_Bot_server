@@ -259,20 +259,19 @@ async def get_promo_users_count():
     async with database.transaction():
         return await database.fetch_all(query)
 
-
 async def get_payments_frequency_db():
-    """ Получает количество оплат, сгруппированных по датам. """
+    """ Получает количество оплат, сгруппированных по датам, где статус 'success'. """
     query = (
         select(
             func.date(Payment.created_at).label("date"),
             func.count().label("payments_count")
         )
+        .filter(Payment.status == "success")  # Фильтрация по статусу
         .group_by(func.date(Payment.created_at))
         .order_by(func.date(Payment.created_at))
     )
     async with database.transaction():
         return await database.fetch_all(query)
-
 
 async def get_referral_statistics():
     """ Получает список пользователей с их приглашёнными, которые оплатили курс. """
