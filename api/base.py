@@ -802,7 +802,7 @@ async def generate_certificate_file(user):
     output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
 
     # Генерируем QR-код
-    qr_data = f"{str(await get_setting('SERVER_URL'))}/certificate/{cert_id}"
+    qr_data = f"{str(await get_setting('SERVER_URL'))}/certifications/CERT-{cert_id}"
     qr = qrcode.make(qr_data)
 
     qr_path = os.path.join(EXPORT_FOLDER, f"qr_{cert_id}.png")
@@ -912,11 +912,9 @@ if not os.path.exists(static_path):
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
 
-# Обслуживаем статические файлы
-app = FastAPI()
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-@app.get("/certificate/{cert_id}", response_class=HTMLResponse)
+@app.get("/certifications/{cert_id}", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str):
     
     logging.info("called certificate_page")
