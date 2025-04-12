@@ -23,6 +23,16 @@ scheduler = AsyncIOScheduler()
 # Запускаем задачу на удаление устаревших записей каждые сутки
 scheduler.add_job(delete_expired_records, 'interval', hours=24)
 
+# Путь к директории статических файлов
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+# Создаем папку, если она не существует
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+    print(f"Создана папка: {static_dir}")
+else:
+    print(f"Папка уже существует: {static_dir}")
+
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 
 @app.middleware("http")

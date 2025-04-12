@@ -713,7 +713,9 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
             "message": "Такого пользователя не существует"
         })
     
-    if not(user.paid):
+    promo = await get_promo_user(telegram_id)
+    
+    if not(user.paid) and not(promo):
         return JSONResponse({
             "status": "error",
             "message": "Для прохождения теста необходимо оплатить курс"
