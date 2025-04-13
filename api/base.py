@@ -131,11 +131,11 @@ async def start(request: Request):
     temp_user = None
     if user:
         greet_message = ""
-        if user.rank:
-            greet_message = f"Здравствуй, почётный обладатель статуса {user.rank} и участник AiM course!"
+        if user.referral_rank:
+            greet_message = f"Здравствуй, почётный обладатель статуса {user.referral_rank} и участник AiM course!"
         else:
             greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
-            
+
         return_data["response_message"] = greet_message
         return_data["type"] = "user"
         logging.info(f"user есть")
