@@ -390,7 +390,7 @@ async def get_top_referrers_from_db():
         FROM referrals
         JOIN users ON users.telegram_id = referrals.referrer_id
         GROUP BY users.telegram_id, users.username
-        HAVING COUNT(referrals.id) >= 5
+        HAVING COUNT(referrals.id) >= 1
         ORDER BY total_referred DESC
     """
 
