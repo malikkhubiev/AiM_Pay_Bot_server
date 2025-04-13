@@ -132,7 +132,7 @@ async def start(request: Request):
     if user:
         greet_message = ""
         if user.referral_rank:
-            greet_message = f"Здравствуй, почётный обладатель статуса {user.referral_rank} и участник AiM course!"
+            greet_message = f"{user.referral_rank}\n\nЗдравствуй, почётный участник реферальной программы и AiM course!"
         else:
             greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
 
