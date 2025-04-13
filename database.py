@@ -198,6 +198,14 @@ async def get_user_by_unique_str(unique_str: str):
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
 
+async def get_registered_user(telegram_id: str):
+    query = select(User).filter_by(
+        telegram_id=telegram_id,
+        is_registered=True
+    )
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query)
+
 async def get_users_with_positive_balance():
     query = "SELECT * FROM users WHERE balance > 0 ORDER BY balance DESC"  # Добавляем сортировку
     async with database.transaction():  # Здесь используем async with

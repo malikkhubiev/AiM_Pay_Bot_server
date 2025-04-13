@@ -19,6 +19,7 @@ from database import (
     get_setting,
     set_setting,
     get_all_settings,
+    get_registered_user,
     get_temp_user,
     get_users_with_positive_balance,
     get_payment_date,
@@ -126,7 +127,7 @@ async def start(request: Request):
         "with_promo": None,
         "type": None
     }
-    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    user = await get_registered_user(telegram_id)
     logging.info(f"user есть {user}")
     temp_user = None
     if user:
