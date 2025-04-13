@@ -44,7 +44,10 @@ class User(Base):
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
+    referral_rank = Column(String)
+
     invite_link = Column(String, nullable=True)
+
     is_registered = Column(Boolean, default=False)
     source = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
@@ -513,6 +516,14 @@ async def update_pending_referral(telegram_id: str):
     update_query = Referral.__table__.update().where(
         Referral.referred_id == telegram_id,
         Referral.status == "pending"
+    ).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def update_referral_rank(telegram_id: str, rank: str):
+    update_data = {"referral_rank": rank}
+    update_query = User.__table__.update().where(
+        User.telegram_id == telegram_id
     ).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)

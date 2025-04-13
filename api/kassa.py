@@ -26,6 +26,7 @@ from database import (
     create_payment_db,
     mark_payout_as_notified,
     update_referral_success,
+    update_referral_rank,
     create_pending_payout,
     update_payout_transaction,
     update_payout_status,
@@ -148,6 +149,7 @@ async def check_and_notify_rank_up(user):
         logging.info(f"threshold {threshold}")
         if successful_refs == threshold:
             logging.info(f"successful_refs = threshold")
+            await update_referral_rank(user.telegram_id, title)
             message = (
                 f"🎉 Поздравляем! Вы привлекли *{successful_refs}* новых участников!\n\n"
                 f"🏆 Ваш новый статус: *{title}*\n\n"
