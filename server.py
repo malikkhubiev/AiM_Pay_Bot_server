@@ -11,7 +11,6 @@ from api.base import *
 from api.kassa import *
 from api.store_db import *
 from utils import *
-from fastapi.staticfiles import StaticFiles
 
 # Логируем, чтобы проверить, что переменные установлены
 logger.info("Account ID: %s", Configuration.account_id)
