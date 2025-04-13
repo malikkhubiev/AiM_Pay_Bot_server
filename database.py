@@ -389,6 +389,7 @@ async def get_top_referrers_from_db():
             COUNT(referrals.id) AS total_referred
         FROM referrals
         JOIN users ON users.telegram_id = referrals.referrer_id
+        WHERE referrals.status = 'success'
         GROUP BY users.telegram_id, users.username
         HAVING COUNT(referrals.id) >= 1
         ORDER BY total_referred DESC
@@ -424,7 +425,7 @@ async def get_top_referrers_from_db():
         total_referred = row["total_referred"]
         rank = resolve_rank(total_referred)
 
-        result.append(f"{index}. `{telegram_id}` | @{username} — *{total_referred}* рефералов\n🎖 {rank}")
+        result.append(f"{index}. `{telegram_id}` | @{username} — {total_referred} рефералов\n🎖 {rank}")
 
     return "\n\n".join(result)
 
