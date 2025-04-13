@@ -113,6 +113,8 @@ async def create_payment(request: Request):
         return {"status": "error", "message": "Ошибка при создании платежа. Попробуйте ещё раз"}
 
 async def send_rank_notification(tg_id: str, message: str):
+    logging.info(f"send_rank_notification called inside")
+    
     notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
     payload = {
         "telegram_id": tg_id,
@@ -125,7 +127,10 @@ async def send_rank_notification(tg_id: str, message: str):
         logging.error(f"Failed to notify about rank: {e}")
 
 async def check_and_notify_rank_up(user):
+    logging.info(f"check_and_notify_rank_up inside")
+    
     successful_refs = await get_successful_referral_count(user.telegram_id)
+    logging.info(f"successful_refs {successful_refs}")
     # Проверка на порог новых званий
     thresholds = [
         (65, "🧠 Архитектор мышления"),
@@ -139,13 +144,18 @@ async def check_and_notify_rank_up(user):
 
     for threshold, title in thresholds:
         # Если ровно достиг — поздравляем
+        logging.info(f"successful_refs {successful_refs}")
+        logging.info(f"threshold {threshold}")
         if successful_refs == threshold:
+            logging.info(f"successful_refs = threshold")
             message = (
                 f"🎉 Поздравляем! Вы привлекли *{successful_refs}* новых участников!\n\n"
                 f"🏆 Ваш новый статус: *{title}*\n\n"
                 "Продолжайте делиться ссылкой и получайте бонусы 👇"
             )
+            logging.info(f"message {message}")
             await send_rank_notification(user.telegram_id, message)
+            logging.info(f"rank_notification sent")
             break  # Поздравляем только за одно достижение за раз
 
 @app.post("/payment_notification")
@@ -225,6 +235,7 @@ async def payment_notification(request: Request):
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
                     # 🔔 Проверка и отправка поздравления при новом звании
                     await check_and_notify_rank_up(referrer_user)
+                    logging.info(f"check_and_notify_rank_up called")
 
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {
