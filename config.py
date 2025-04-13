@@ -9,6 +9,7 @@ PORT = os.getenv("PORT", 8000)
 BOT_USERNAME = os.getenv("BOT_USERNAME")
 SECRET_KEY = os.getenv("SECRET_KEY")
 SECRET_CODE = os.getenv("SECRET_CODE")
+FILE_ID = os.getenv("FILE_ID")
 YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID")
 YOOKASSA_SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY")
 YOOKASSA_PAYOUT_KEY = os.getenv("YOOKASSA_PAYOUT_KEY")
@@ -19,7 +20,6 @@ DEFAULT_SETTINGS = {
     # Project configuration
     "SERVER_URL": os.getenv("SERVER_URL"),
     "MAHIN_URL": os.getenv("MAHIN_URL"),
-    "FILE_ID": os.getenv("FILE_ID"),
     # Money configuration
     "COURSE_AMOUNT": os.getenv("COURSE_AMOUNT"),
     "REFERRAL_AMOUNT": os.getenv("REFERRAL_AMOUNT"),
