@@ -19,7 +19,7 @@
             font-family: 'Jura', sans-serif;
             /* Чистый шрифт без засечек */
             margin: 0;
-            padding: 0;
+            padding: 0 15px;
             overflow-x: hidden;
         }
 
@@ -54,6 +54,7 @@
             /* Прозрачный фон */
             border: none;
             padding: 20px;
+            padding-left: 0;
             margin: 20px 0;
             font-size: 1.1em;
             color: #bbb;
@@ -62,20 +63,21 @@
 
         /* Заголовок блока details (summary) */
         summary {
-            font-size: 1.8em;
+            font-size: 30px;
             color: #ffffff;
             /* Неоново-фиолетовый цвет */
             cursor: pointer;
             text-transform: uppercase;
             letter-spacing: 1px;
             transition: all 0.3s ease;
-            line-height: 70px;
+            line-height: 60px;
         }
 
         .main {
             background-color: #fff;
             padding: 10px 20px;
             color: black;
+            text-align: center;
         }
 
 
@@ -153,17 +155,13 @@
 
         h1 {
             color: #fff;
-            font-size: 70px;
+            font-size: 50px;
             text-align: center;
         }
 
         .ins {
             display: inline-block;
             max-width: 1200px;
-        }
-
-        h2 {
-            margin-left: 100px;
         }
 
         form {
@@ -175,6 +173,7 @@
 
         input {
             width: 500px;
+            max-width: 70%;
             height: 50px;
             border: 0;
             background-color: transparent;
@@ -198,24 +197,38 @@
             height: 50px;
         }
 
-        .certificate-details {
-            margin-left: 100px;
+        .error {
+            font-size: 30px;
+            text-align: center;
+        }
+
+        ul {
+            padding-left: 8px;
+        }
+
+        .certificate-details{
+            margin-top: 30px;
+            display: flex;
+            justify-content: start;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        p{
+            text-align: center;
         }
 
         .certificate-details>p {
-            font-size: 30px;
-        }
-
-        .error {
-            margin-left: 100px;
-            font-size: 30px;
+            font-size: 23px;
+            margin: 10px 0;
+            line-height: 50px;
         }
     </style>
 </head>
 
 <body>
     <h1>
-        Страница подтверждения<br>результатов сертификации по курсу<br>"Разработка моделей ML и нейронных сетей"
+        Результаты сертификации<br>по курсу<br>"Разработка моделей ML и нейронных сетей"
     </h1>
     <form method="get">
         <input type="text" name="cert_id" placeholder="Введите CERT-ID" required>
@@ -224,9 +237,9 @@
 
     {% if certificate %}
     <div class="certificate-details">
-        <p><span class="main">Идентификационный номер:</span> {{ certificate.id }}</p>
-        <p><span class="main">ФИО:</span> {{ certificate.fio }}</p>
-        <p><span class="main">Дата выдачи:</span> {{ certificate.date }}</p>
+        <p><span class="main">Идентификационный номер:</span><br> {{ certificate.id }}</p>
+        <p><span class="main">ФИО:</span><br> {{ certificate.name }}</p>
+        <p><span class="main">Дата выдачи:</span><br> {{ certificate.date }}</p>
     </div>
     {% else %}
     <p class="error">Сертификат не найден или неверный ID.</p>
