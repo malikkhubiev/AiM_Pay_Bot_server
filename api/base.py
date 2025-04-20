@@ -926,7 +926,7 @@ async def certificate_page(request: Request, cert_id: str):
             certificate = {
                 "id": cert_id,
                 "name": user.fio,
-                "date": user.date_of_certificate
+                "date": user.date_of_certificate.strftime("%d.%m.%Y")
             }
             # Передаем cert_id, данные сертификата и URL изображения в шаблон
             return templates.TemplateResponse("certificate_view.html", {
