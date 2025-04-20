@@ -908,8 +908,8 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
-@app.get("/certifications/?cert_id={cert_id}", response_class=HTMLResponse)
-async def certificate_page(request: Request, cert_id: str):
+@app.get("/certifications", response_class=HTMLResponse)
+async def certificate_page(request: Request, cert_id: str = None):
     
     logging.info("called certificate_page")
 
