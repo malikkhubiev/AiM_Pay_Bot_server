@@ -908,25 +908,10 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-static_path = os.path.join(BASE_DIR, "static")
-static_dir = os.path.join(BASE_DIR, "static", "certificates")
-
-# Создаем папки, если они не существуют
-if not os.path.exists(static_path):
-    os.makedirs(static_path)
-
-if not os.path.exists(static_dir):
-    os.makedirs(static_dir)
-
-app.mount("/static", StaticFiles(directory=static_path), name="static")
-
 @app.get("/certifications/{cert_id}", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str):
     
     logging.info("called certificate_page")
-
-    image_url = None
 
     if cert_id:
         logging.info(f"cert_id {cert_id}")
@@ -938,33 +923,16 @@ async def certificate_page(request: Request, cert_id: str):
         logging.info(f"passed_exam {user.passed_exam}")
 
         if user and user.passed_exam:
-            output_path, qr_path, _ = await generate_certificate_file(user)  # Генерация сертификата
-
-            # Имя для итогового PDF
-            cert_filename = f"certificate_{cert_id}.pdf"
-            dst_path = os.path.join(static_dir, cert_filename)
-
-            # Копируем PDF
-            shutil.copy(output_path, dst_path)
-            logger.info(f"[DEBUG] Скопировали PDF: {dst_path}")
-
-            # Конвертируем PDF в изображение
-            image_path = await convert_pdf_to_image(dst_path)
-
-            # Формируем URL для доступа к изображению
-            image_url = f"/static/certificates/{os.path.basename(image_path)}"
-
-            # Логируем содержимое папки
-            files = os.listdir(static_dir)
-            logger.info(f"[DEBUG] Содержимое папки certificates: {files}")
-        else:
-            image_url = "NOT_FOUND"
-
-    return templates.TemplateResponse("certificate_view.html", {
-        "request": request,
-        "cert_id": cert_id,
-        "image_url": image_url  # Передаем URL изображения
-    })
+            certificate = {
+                "id": cert_id,
+                "name": user.fio,
+                "date": user.date_of_certificate
+            }
+            # Передаем cert_id, данные сертификата и URL изображения в шаблон
+            return templates.TemplateResponse("certificate_view.html", {
+                "request": request,
+                "certificate": certificate
+            })
 
 @app.post("/execute_sql")
 async def execute_sql(request: Request):
