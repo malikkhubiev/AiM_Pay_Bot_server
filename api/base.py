@@ -14,12 +14,14 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 import logging
+from fastapi.staticfiles import StaticFiles
 from database import (
     get_setting,
     set_setting,
     get_all_settings,
+    get_registered_user,
     get_temp_user,
-    get_referral_statistics,
+    get_users_with_positive_balance,
     get_payment_date,
     get_start_working_date,
     get_user_by_cert_id,
@@ -125,11 +127,17 @@ async def start(request: Request):
         "with_promo": None,
         "type": None
     }
-    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    user = await get_registered_user(telegram_id)
     logging.info(f"user есть {user}")
     temp_user = None
     if user:
-        return_data["response_message"] = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
+        greet_message = ""
+        if user.referral_rank:
+            greet_message = f"{user.referral_rank}\n\nЗдравствуй, почётный участник реферальной программы и AiM course!"
+        else:
+            greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
+
+        return_data["response_message"] = greet_message
         return_data["type"] = "user"
         logging.info(f"user есть")
         if not(user.paid):
@@ -454,7 +462,7 @@ async def get_referral_link(request: Request):
 async def get_payout_balance(request: Request):
     verify_secret_code(request)
     logging.info("inside_payout_balance")
-    referral_statistics = await get_referral_statistics()
+    referral_statistics = await get_users_with_positive_balance()
 
     logging.info(f"referral_statistics {referral_statistics}")
 
@@ -462,12 +470,10 @@ async def get_payout_balance(request: Request):
     users = []
 
     for user in referral_statistics:
-        payout_amount = user['paid_referrals'] * float(await get_setting("REFERRAL_AMOUNT"))
-        total_balance += payout_amount
+        total_balance += user['balance']
         users.append({
             "id": user["telegram_id"],
-            "name": user["username"],
-            "paid_referrals": user['paid_referrals']
+            "name": user["username"]
         })
 
     logging.info(f"referral_statistics {referral_statistics}")
@@ -717,7 +723,9 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
             "message": "Такого пользователя не существует"
         })
     
-    if not(user.paid):
+    promo = await get_promo_user(telegram_id)
+    
+    if not(user.paid) and not(promo):
         return JSONResponse({
             "status": "error",
             "message": "Для прохождения теста необходимо оплатить курс"
@@ -801,7 +809,7 @@ async def generate_certificate_file(user):
     output_path = os.path.join(EXPORT_FOLDER, f"certificate_{cert_id}.pdf")
 
     # Генерируем QR-код
-    qr_data = f"{str(await get_setting('SERVER_URL'))}/certificate/{cert_id}"
+    qr_data = f"{str(await get_setting('SERVER_URL'))}/certifications/CERT-{cert_id}"
     qr = qrcode.make(qr_data)
 
     qr_path = os.path.join(EXPORT_FOLDER, f"qr_{cert_id}.png")
@@ -900,37 +908,31 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
-@app.get("/certificate/{cert_id}", response_class=HTMLResponse)
-async def certificate_page(request: Request, cert_id: str):
-    pdf_url = None
+@app.get("/certifications", response_class=HTMLResponse)
+async def certificate_page(request: Request, cert_id: str = None):
+    
+    logging.info("called certificate_page")
 
     if cert_id:
+        logging.info(f"cert_id {cert_id}")
+        
         user = await get_user_by_cert_id(cert_id)  # Получаем пользователя по cert_id
+        
+        logging.info(f"user getting query is done")
+        logging.info(f"user {user}")
+        logging.info(f"passed_exam {user.passed_exam}")
+
         if user and user.passed_exam:
-            output_path, qr_path, _ = await generate_certificate_file(user)  # Генерация сертификата
-
-            # Имя для итогового PDF
-            cert_filename = f"certificate_{cert_id}.pdf"
-            dst_path = os.path.join(static_dir, cert_filename)
-
-            # Копируем PDF
-            shutil.copy(output_path, dst_path)
-            logger.info(f"[DEBUG] Скопировали PDF: {dst_path}")
-
-            # Формируем URL для доступа к сертификату
-            pdf_url = f"/static/certificates/{cert_filename}"
-
-            # Логируем содержимое папки
-            files = os.listdir(static_dir)
-            logger.info(f"[DEBUG] Содержимое папки certificates: {files}")
-        else:
-            pdf_url = "NOT_FOUND"
-
-    return templates.TemplateResponse("certificate_view.html", {
-        "request": request,
-        "cert_id": cert_id,
-        "pdf_url": pdf_url
-    })
+            certificate = {
+                "id": cert_id,
+                "name": user.fio,
+                "date": user.date_of_certificate.strftime("%d.%m.%Y")
+            }
+            # Передаем cert_id, данные сертификата и URL изображения в шаблон
+            return templates.TemplateResponse("certificate_view.html", {
+                "request": request,
+                "certificate": certificate
+            })
 
 @app.post("/execute_sql")
 async def execute_sql(request: Request):

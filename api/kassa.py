@@ -26,10 +26,13 @@ from database import (
     create_payment_db,
     mark_payout_as_notified,
     update_referral_success,
+    update_referral_rank,
     create_pending_payout,
     update_payout_transaction,
     update_payout_status,
     update_user_balance,
+    get_all_settings,
+    set_setting
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -111,6 +114,8 @@ async def create_payment(request: Request):
         return {"status": "error", "message": "Ошибка при создании платежа. Попробуйте ещё раз"}
 
 async def send_rank_notification(tg_id: str, message: str):
+    logging.info(f"send_rank_notification called inside")
+    
     notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
     payload = {
         "telegram_id": tg_id,
@@ -123,27 +128,36 @@ async def send_rank_notification(tg_id: str, message: str):
         logging.error(f"Failed to notify about rank: {e}")
 
 async def check_and_notify_rank_up(user):
+    logging.info(f"check_and_notify_rank_up inside")
+    
     successful_refs = await get_successful_referral_count(user.telegram_id)
+    logging.info(f"successful_refs {successful_refs}")
     # Проверка на порог новых званий
     thresholds = [
-        (65, "🧠 Архитектор мышления"),
-        (55, "🌌 Духовный вдохновитель"),
-        (45, "💎 Наставник Инноваций"),
-        (35, "🚀 Вестник Эволюции"),
-        (25, "🌎 Мастер экспансии"),
-        (15, "🌱 Амбассадор развития"),
-        (5, "🔥 Лидер роста"),
+        (60, "🧠 Архитектор мышления"),
+        (50, "🌌 Духовный вдохновитель"),
+        (40, "💎 Наставник Инноваций"),
+        (30, "🚀 Вестник Эволюции"),
+        (20, "🌎 Мастер экспансии"),
+        (10, "🌱 Амбассадор развития"),
+        (1, "🔥 Лидер роста"),
     ]
 
     for threshold, title in thresholds:
         # Если ровно достиг — поздравляем
+        logging.info(f"successful_refs {successful_refs}")
+        logging.info(f"threshold {threshold}")
         if successful_refs == threshold:
+            logging.info(f"successful_refs = threshold")
+            await update_referral_rank(user.telegram_id, title)
             message = (
                 f"🎉 Поздравляем! Вы привлекли *{successful_refs}* новых участников!\n\n"
                 f"🏆 Ваш новый статус: *{title}*\n\n"
                 "Продолжайте делиться ссылкой и получайте бонусы 👇"
             )
+            logging.info(f"message {message}")
             await send_rank_notification(user.telegram_id, message)
+            logging.info(f"rank_notification sent")
             break  # Поздравляем только за одно достижение за раз
 
 @app.post("/payment_notification")
@@ -171,10 +185,11 @@ async def payment_notification(request: Request):
     payment_data = data["object"]
     payment_id = payment_data.get("id")
     status = payment_data.get("status")
-    income_amount = payment_data.get("income_amount")["value"]
+    income_amount = float(payment_data.get("income_amount")["value"])
     metadata = payment_data.get("metadata", {})
     user_telegram_id = metadata.get("telegram_id")
 
+    logging.info(f"income_amount {income_amount}")
     logging.info(payment_data)
     logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
 
@@ -190,7 +205,14 @@ async def payment_notification(request: Request):
 
         if payment:
             logging.info(f"Есть платёж в режиме ожидания. Завершаем операцию")
-            await update_payment_done(user_telegram_id, payment_id)
+            await update_payment_done(
+                user_telegram_id,
+                payment_id,
+                income_amount
+            )
+            all_settings = await get_all_settings()
+            current_money = float(all_settings["MY_MONEY"])
+            await set_setting("MY_MONEY", current_money + income_amount)
 
             user = await get_user(user_telegram_id)
             logging.info(f"user {user}")
@@ -204,16 +226,18 @@ async def payment_notification(request: Request):
                 referrer_user = await get_user_by_telegram_id(referrer.referrer_id, to_throw=False)
                 logging.info(f"referrer_user {referrer_user}")
                 if referrer_user:
+                    referral_current_amount = float(await get_setting("REFERRAL_AMOUNT"))
                     await update_referral_success(user_telegram_id, referrer_user.telegram_id)
                     logging.info(f"referrer_user есть")
-                    new_balance = int((referrer_user.balance or 0) + float(await get_setting("REFERRAL_AMOUNT")))
+                    new_balance = int((referrer_user.balance or 0) + referral_current_amount)
                     logging.info(f"referrer_user.balance {referrer_user.balance or 0}")
-                    logging.info(f"float(REFERRAL_AMOUNT) {float(await get_setting('REFERRAL_AMOUNT'))}")
+                    logging.info(f"float(REFERRAL_AMOUNT) {referral_current_amount}")
                     logging.info(f"new_balance {new_balance}")
                     await update_user_balance(referrer_user.telegram_id, new_balance)
                     logging.info(f"баланс для {referrer_user.telegram_id} обновили")
                     # 🔔 Проверка и отправка поздравления при новом звании
                     await check_and_notify_rank_up(referrer_user)
+                    logging.info(f"check_and_notify_rank_up called")
 
             logging.info("Статус оплаты пользователя обновлен: %s", user_telegram_id)
             notification_data = {

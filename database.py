@@ -44,7 +44,10 @@ class User(Base):
     paid = Column(Boolean, default=False)
     balance = Column(Integer, default=0)
     card_synonym = Column(String, unique=True, nullable=True)
+    referral_rank = Column(String)
+
     invite_link = Column(String, nullable=True)
+
     is_registered = Column(Boolean, default=False)
     source = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
@@ -60,6 +63,7 @@ class Payment(Base):
     telegram_id = Column(String, ForeignKey('users.telegram_id'), nullable=False)  # Ссылка на пользователя
     transaction_id = Column(String, default=None)  # Идентификатор транзакции
     idempotence_key = Column(String, nullable=False, unique=True)
+    amount = Column(Integer, default=0)
     status = Column(String, nullable=False) # (success|pending)
     created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
 
@@ -194,6 +198,14 @@ async def get_user_by_unique_str(unique_str: str):
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
 
+async def get_registered_user(telegram_id: str):
+    query = select(User).filter_by(
+        telegram_id=telegram_id,
+        is_registered=True
+    )
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query)
+
 async def get_users_with_positive_balance():
     query = "SELECT * FROM users WHERE balance > 0 ORDER BY balance DESC"  # Добавляем сортировку
     async with database.transaction():  # Здесь используем async with
@@ -259,42 +271,19 @@ async def get_promo_users_count():
     async with database.transaction():
         return await database.fetch_all(query)
 
-
 async def get_payments_frequency_db():
-    """ Получает количество оплат, сгруппированных по датам. """
+    """ Получает количество оплат, сгруппированных по датам, где статус 'success'. """
     query = (
         select(
             func.date(Payment.created_at).label("date"),
             func.count().label("payments_count")
         )
+        .filter(Payment.status == "success")  # Фильтрация по статусу
         .group_by(func.date(Payment.created_at))
         .order_by(func.date(Payment.created_at))
     )
     async with database.transaction():
         return await database.fetch_all(query)
-
-
-async def get_referral_statistics():
-    """ Получает список пользователей с их приглашёнными, которые оплатили курс. """
-    query = (
-        select(
-            User.telegram_id.label("telegram_id"),
-            User.username.label("username"),
-            func.count(Referral.referred_id).label("paid_referrals")
-        )
-        .join(Referral, Referral.referrer_id == User.telegram_id)
-        .join(Payment, Payment.telegram_id == Referral.referred_id)
-        .where(Payment.status == "success")  # Учитываем только оплаченные заказы
-        .group_by(User.telegram_id, User.username)
-        .order_by(func.count(Referral.referred_id).desc())  # Сортировка по убыванию оплаченных рефералов
-    )
-    async with database.transaction():
-        result = await database.fetch_all(query)
-    
-    return [
-        {"telegram_id": row["telegram_id"], "username": row["username"], "paid_referrals": row["paid_referrals"]}
-        for row in result
-    ]
 
 async def get_paid_referrals_by_user(telegram_id: str):
     """ Получает количество оплаченных рефералов по дням для пользователя """
@@ -411,8 +400,9 @@ async def get_top_referrers_from_db():
             COUNT(referrals.id) AS total_referred
         FROM referrals
         JOIN users ON users.telegram_id = referrals.referrer_id
+        WHERE referrals.status = 'success'
         GROUP BY users.telegram_id, users.username
-        HAVING COUNT(referrals.id) >= 5
+        HAVING COUNT(referrals.id) >= 1
         ORDER BY total_referred DESC
     """
 
@@ -420,17 +410,17 @@ async def get_top_referrers_from_db():
         rows = await database.fetch_all(query)
 
     def resolve_rank(ref_count: int) -> str:
-        if ref_count >= 7:
+        if ref_count >= 60:
             return "🧠 Архитектор мышления"
-        elif ref_count >= 6:
+        elif ref_count >= 50:
             return "🌌 Духовный вдохновитель"
-        elif ref_count >= 5:
+        elif ref_count >= 40:
             return "💎 Наставник Инноваций"
-        elif ref_count >= 4:
+        elif ref_count >= 30:
             return "🚀 Вестник Эволюции"
-        elif ref_count >= 3:
+        elif ref_count >= 20:
             return "🌎 Мастер экспансии"
-        elif ref_count >= 2:
+        elif ref_count >= 10:
             return "🌱 Амбассадор развития"
         elif ref_count >= 1:
             return "🔥 Лидер роста"
@@ -446,7 +436,7 @@ async def get_top_referrers_from_db():
         total_referred = row["total_referred"]
         rank = resolve_rank(total_referred)
 
-        result.append(f"{index}. `{telegram_id}` | @{username} — *{total_referred}* рефералов\n🎖 {rank}")
+        result.append(f"{index}. `{telegram_id}` | @{username} — {total_referred} рефералов\n🎖 {rank}")
 
     return "\n\n".join(result)
 
@@ -538,6 +528,14 @@ async def update_pending_referral(telegram_id: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
+async def update_referral_rank(telegram_id: str, rank: str):
+    update_data = {"referral_rank": rank}
+    update_query = User.__table__.update().where(
+        User.telegram_id == telegram_id
+    ).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
 async def update_passed_exam_in_db(telegram_id: str):
     update_data = {'passed_exam': True}
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
@@ -599,11 +597,10 @@ async def update_temp_user(telegram_id: str, username: Optional[str] = None):
             update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
             await database.execute(update_query)
 
-
-async def update_payment_done(telegram_id: str, transaction_id: str):
+async def update_payment_done(telegram_id: str, transaction_id: str, income_amount: float):
     user_update_data = {'paid': True}
     user_update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(user_update_data)
-    payment_update_data = {"status": "success", "transaction_id": transaction_id}
+    payment_update_data = {"status": "success", "transaction_id": transaction_id, "amount": income_amount}
     payment_update_query = Payment.__table__.update().where(Payment.telegram_id == telegram_id).values(payment_update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(user_update_query)
