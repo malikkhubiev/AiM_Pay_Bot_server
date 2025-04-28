@@ -974,3 +974,103 @@ async def update_and_get_settings(request: Request):
         "status": "success",
         "data": all_settings
     })
+
+
+
+
+
+
+
+
+
+
+
+
+# Insta
+
+# Верификация вебхука Instagram
+@app.get("/webhook")
+async def verify_webhook(request: Request):
+    params = dict(request.query_params)
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
+        return int(params["hub.challenge"])
+    return {"status": "Invalid verification"}
+
+# Обработка входящих сообщений
+@app.post("/webhook")
+async def receive_message(request: Request):
+    payload = await request.json()
+
+    try:
+        entry = payload['entry'][0]
+        changes = entry['changes'][0]
+        value = changes['value']
+        messages = value.get('messages')
+
+        if messages:
+            for message in messages:
+                sender_id = message['from']
+                text = message['text']['body']
+
+                print(f"Получено сообщение от {sender_id}: {text}")
+
+                # Генерируем ответ через DeepSeek
+                response_text = await get_deepseek_response(text)
+
+                # Отправляем обратно в Instagram
+                await send_text_message(sender_id, response_text)
+
+    except Exception as e:
+        print(f"Ошибка обработки: {e}")
+
+    return {"status": "ok"}
+
+# Генерация ответа через DeepSeek (через httpx)
+async def get_deepseek_response(user_message):
+    url = "https://api.intelligence.io.solutions/api/v1/chat/completions"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_TOKEN}",
+    }
+
+    data = {
+        "model": "deepseek-ai/DeepSeek-R1",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": user_message}
+        ],
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            response_data = response.json()
+            text = response_data['choices'][0]['message']['content']
+            bot_text = text.split('</think>\n\n')[1] if '</think>\n\n' in text else text
+        except Exception as e:
+            print(f"Ошибка DeepSeek: {e}")
+            bot_text = "Произошла ошибка при получении ответа от нейросети."
+
+    return bot_text
+
+# Отправка сообщения в Instagram (через httpx)
+async def send_text_message(to_id, message_text):
+    url = "https://graph.facebook.com/v19.0/me/messages"
+    params = {
+        "access_token": ACCESS_TOKEN
+    }
+    data = {
+        "messaging_type": "RESPONSE",
+        "recipient": {"id": to_id},
+        "message": {"text": message_text}
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, params=params, json=data)
+            response.raise_for_status()
+            print(f"Ответ от Instagram: {response.json()}")
+        except Exception as e:
+            print(f"Ошибка отправки сообщения в Instagram: {e}")
