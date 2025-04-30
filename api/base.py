@@ -1002,52 +1002,120 @@ async def verify_webhook(request: Request):
 
 @app.post("/webhook")
 async def receive_message(request: Request):
-    payload = await request.json()
+    data = await request.json()
     try:
-        for entry in payload.get("entry", []):
+        for entry in data.get("entry", []):
             for change in entry.get("changes", []):
-                value = change.get("value", {})
+                field = change.get("field")
+                value = change.get("value") or {}
 
-                # Обработка комментариев
-                for comment in value.get("comments", []):
-                    print(f"New comment: {comment.get('text')}")
-
-                # Упоминания
-                for mention in value.get("mentions", []):
-                    print(f"New mention: {mention.get('mention_text')}")
-
-                # Реакции
-                for reaction in value.get("message_reactions", []):
-                    print(f"New reaction: {reaction.get('reaction_type')}")
-
-                # Сообщения
+                # WhatsApp messages (array of messages)
                 for message in value.get("messages", []):
                     sender_id = message.get("from")
                     text = message.get("text", {}).get("body")
 
-                    print(f"Сообщение от {sender_id}: {text}")
+                    logging.info(f"📥 WA-сообщение от {sender_id}: '{text}'")
 
                     if sender_id and text:
                         response_text = await get_deepseek_response(text)
                         await send_text_message(sender_id, response_text)
 
-                # Остальные события (просто логируем)
-                if value.get("messaging_handover"):
-                    print(f"Handover: {value['messaging_handover']}")
-                if value.get("messaging_postbacks"):
-                    print(f"Postback: {value['messaging_postbacks']}")
-                if value.get("messaging_referral"):
-                    print(f"Referral: {value['messaging_referral']}")
-                if value.get("messaging_seen"):
-                    print(f"Seen: {value['messaging_seen']}")
-                if value.get("standby"):
-                    print(f"Standby: {value['standby']}")
-                if value.get("story_insights"):
-                    for insight in value["story_insights"]:
-                        print(f"Story insight: {insight}")
+                if field == "comments":
+                    comment_id = value.get("id")
+                    parent_id = value.get("parent_id")
+                    comment_text = value.get("text")
+                    username = value.get("from", {}).get("username")
+
+                    logging.info(f"💬 Новый комментарий от @{username}: '{comment_text}' (comment_id={comment_id}, parent_id={parent_id})")
+
+                elif field == "live_comments":
+                    comment_id = value.get("id")
+                    comment_text = value.get("text")
+                    username = value.get("from", {}).get("username")
+                    media_id = value.get("media", {}).get("id")
+
+                    logging.info(f"🎥 Live-комментарий от @{username}: '{comment_text}' (comment_id={comment_id}, media_id={media_id})")
+
+                elif field == "mentions":
+                    media_id = value.get("media_id")
+                    comment_id = value.get("comment_id")
+
+                    logging.info(f"🔔 Упоминание в комментарии {comment_id} (media_id={media_id})")
+
+                elif field == "message_reactions":
+                    sender_id = value.get("sender", {}).get("id")
+                    reaction = value.get("reaction", {})
+                    emoji = reaction.get("emoji")
+                    reaction_type = reaction.get("reaction")
+                    mid = reaction.get("mid")
+
+                    logging.info(f"👍 Реакция от пользователя {sender_id}: '{reaction_type}' ({emoji}) на сообщение {mid}")
+
+                elif field == "messages":
+                    sender_id = value.get("sender", {}).get("id")
+                    text = value.get("message", {}).get("text")
+
+                    logging.info(f"📩 Сообщение от пользователя {sender_id}: '{text}'")
+
+                    if sender_id and text:
+                        response_text = await get_deepseek_response(text)
+                        await send_text_message(sender_id, response_text)
+
+                elif field == "messaging_handover":
+                    sender_id = value.get("sender", {}).get("id")
+                    pass_thread = value.get("pass_thread_control", {})
+                    prev_app = pass_thread.get("previous_owner_app_id")
+                    new_app = pass_thread.get("new_owner_app_id")
+                    metadata = pass_thread.get("metadata")
+
+                    logging.info(f"📤 Handover от {sender_id}: передача от {prev_app} к {new_app} (мета: {metadata})")
+
+                elif field == "messaging_postbacks":
+                    sender_id = value.get("sender", {}).get("id")
+                    postback = value.get("postback", {})
+                    title = postback.get("title")
+                    payload_data = postback.get("payload")
+
+                    logging.info(f"🔁 Postback от {sender_id}: кнопка '{title}' (payload: {payload_data})")
+
+                elif field == "messaging_referral":
+                    sender_id = value.get("sender", {}).get("id")
+                    referral = value.get("referral", {})
+                    ref = referral.get("ref")
+                    source = referral.get("source")
+                    ref_type = referral.get("type")
+
+                    logging.info(f"🔗 Referral от {sender_id}: source={source}, type={ref_type}, ref={ref}")
+
+                elif field == "messaging_seen":
+                    sender_id = value.get("sender", {}).get("id")
+                    recipient_id = value.get("recipient", {}).get("id")
+                    timestamp = value.get("timestamp")
+                    last_message_id = value.get("read", {}).get("mid")
+
+                    logging.info(f"👀 Сообщение прочитано пользователем {sender_id} (получатель: {recipient_id}) — ID последнего прочитанного: {last_message_id}, время: {timestamp}")
+
+                elif field == "standby":
+                    logging.info("⏸ Вошли в режим ожидания (standby).")
+
+                elif field == "story_insights":
+                    media_id = value.get("media_id")
+                    impressions = value.get("impressions")
+                    reach = value.get("reach")
+                    taps_forward = value.get("taps_forward")
+                    taps_back = value.get("taps_back")
+                    exits = value.get("exits")
+                    replies = value.get("replies")
+
+                    logging.info(
+                        f"📊 Story insights (media_id: {media_id}) — "
+                        f"Impressions: {impressions}, Reach: {reach}, "
+                        f"Taps Forward: {taps_forward}, Back: {taps_back}, "
+                        f"Exits: {exits}, Replies: {replies}"
+                    )
 
     except Exception as e:
-        print(f"Ошибка обработки webhook: {e}")
+        logging.exception("❌ Ошибка при обработке webhook")
 
     return {"status": "ok"}
 
