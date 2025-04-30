@@ -1002,12 +1002,17 @@ async def verify_webhook(request: Request):
 
 @app.post("/webhook")
 async def receive_message(request: Request):
+    logging.info(f"receive_message called")
     data = await request.json()
+    logging.info(f"data {data}")
     try:
         for entry in data.get("entry", []):
+            logging.info(f"in cycle")
             for change in entry.get("changes", []):
                 field = change.get("field")
                 value = change.get("value") or {}
+                logging.info(f"field {field}")
+                logging.info(f"value {value}")
 
                 # WhatsApp messages (array of messages)
                 for message in value.get("messages", []):
