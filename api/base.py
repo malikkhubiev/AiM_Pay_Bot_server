@@ -1000,32 +1000,54 @@ async def verify_webhook(request: Request):
         return int(params["hub.challenge"])
     return {"status": "Invalid verification"}
 
-# Обработка входящих сообщений
 @app.post("/webhook")
 async def receive_message(request: Request):
     payload = await request.json()
-
     try:
-        entry = payload['entry'][0]
-        changes = entry['changes'][0]
-        value = changes['value']
-        messages = value.get('messages')
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
 
-        if messages:
-            for message in messages:
-                sender_id = message['from']
-                text = message['text']['body']
+                # Обработка комментариев
+                for comment in value.get("comments", []):
+                    print(f"New comment: {comment.get('text')}")
 
-                print(f"Получено сообщение от {sender_id}: {text}")
+                # Упоминания
+                for mention in value.get("mentions", []):
+                    print(f"New mention: {mention.get('mention_text')}")
 
-                # Генерируем ответ через DeepSeek
-                response_text = await get_deepseek_response(text)
+                # Реакции
+                for reaction in value.get("message_reactions", []):
+                    print(f"New reaction: {reaction.get('reaction_type')}")
 
-                # Отправляем обратно в Instagram
-                await send_text_message(sender_id, response_text)
+                # Сообщения
+                for message in value.get("messages", []):
+                    sender_id = message.get("from")
+                    text = message.get("text", {}).get("body")
+
+                    print(f"Сообщение от {sender_id}: {text}")
+
+                    if sender_id and text:
+                        response_text = await get_deepseek_response(text)
+                        await send_text_message(sender_id, response_text)
+
+                # Остальные события (просто логируем)
+                if value.get("messaging_handover"):
+                    print(f"Handover: {value['messaging_handover']}")
+                if value.get("messaging_postbacks"):
+                    print(f"Postback: {value['messaging_postbacks']}")
+                if value.get("messaging_referral"):
+                    print(f"Referral: {value['messaging_referral']}")
+                if value.get("messaging_seen"):
+                    print(f"Seen: {value['messaging_seen']}")
+                if value.get("standby"):
+                    print(f"Standby: {value['standby']}")
+                if value.get("story_insights"):
+                    for insight in value["story_insights"]:
+                        print(f"Story insight: {insight}")
 
     except Exception as e:
-        print(f"Ошибка обработки: {e}")
+        print(f"Ошибка обработки webhook: {e}")
 
     return {"status": "ok"}
 
