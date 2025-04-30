@@ -976,3 +976,48 @@ async def update_and_get_settings(request: Request):
         "status": "success",
         "data": all_settings
     })
+
+
+
+
+# Inst
+
+VERIFY_TOKEN = "AiMcourseEducation"
+ACCESS_TOKEN = "EAAY..."  # твой Facebook Page access token
+IG_USER_ID = "1784..."     # id твоего IG business аккаунта
+
+@app.get("/webhook")
+async def verify(request: Request):
+    params = dict(request.query_params)
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
+        return int(params["hub.challenge"])
+    return "Invalid verification", 403
+
+@app.post("/webhook")
+async def webhook_handler(request: Request):
+    data = await request.json()
+
+    # Проверка события комментария
+    for entry in data.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            if value.get("item") == "comment":
+                comment_text = value.get("message")
+                commenter_id = value.get("from", {}).get("id")
+                media_id = value.get("post_id")
+
+                if comment_text and "ai" in comment_text.lower():
+                    await send_dm(commenter_id, "привет")
+
+    return {"status": "ok"}
+
+async def send_dm(user_id: str, message: str):
+    url = f"https://graph.facebook.com/v19.0/me/messages"
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
+    payload = {
+        "recipient": {"id": user_id},
+        "message": {"text": message}
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers, json=payload)
+        print(response.status_code, response.text)
