@@ -913,7 +913,9 @@ async def landing_page(request: Request):
     
     logging.info("called landing_page")
 
-    return templates.TemplateResponse("landing.html")
+    return templates.TemplateResponse("landing.html", {
+        "request": request
+    })
 
 @app.get("/certifications", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str = None):
