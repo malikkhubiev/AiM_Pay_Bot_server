@@ -908,6 +908,13 @@ async def generate_certificate(request: Request, background_tasks: BackgroundTas
         filename=f"certificate_{cert_id}.pdf"
     )
 
+@app.get("/", response_class=HTMLResponse)
+async def landing_page(request: Request):
+    
+    logging.info("called landing_page")
+
+    return templates.TemplateResponse("landing.html")
+
 @app.get("/certifications", response_class=HTMLResponse)
 async def certificate_page(request: Request, cert_id: str = None):
     
