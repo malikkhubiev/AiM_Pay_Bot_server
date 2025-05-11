@@ -488,18 +488,19 @@ async def get_expired_users():
     Возвращает список telegram_id пользователей, у которых истёк пробный период.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    query = select(User.telegram_id).filter(
+    query = select(User).filter(
         User.date_of_trial_ends <= now,
         User.date_of_trial_ends.is_not(None),
-        User.paid == False  # Проверяем, что пользователь не оплатил
+        User.paid == False 
     )
     async with database.transaction():
         rows = await database.fetch_all(query)
     
+    print(rows)
     # Возвращаем список telegram_id
     return {
         "now": now,
-        "rows": [row.telegram_id for row in rows]
+        "rows": rows
     } 
         
 
