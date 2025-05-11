@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = {
     "MAHIN_URL": os.getenv("MAHIN_URL"),
     # Money configuration
     "COURSE_AMOUNT": os.getenv("COURSE_AMOUNT"),
+    "COURSE_CEILING": os.getenv("COURSE_CEILING"),
     "REFERRAL_AMOUNT": os.getenv("REFERRAL_AMOUNT"),
     "PROMO_NUM_LIMIT": os.getenv("PROMO_NUM_LIMIT"),
     "MY_MONEY": 0

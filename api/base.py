@@ -913,8 +913,13 @@ async def landing_page(request: Request):
     
     logging.info("called landing_page")
 
+    price = await get_setting("COURSE_AMOUNT")
+    ceiling = await get_setting("COURSE_CEILING")
+
     return templates.TemplateResponse("landing.html", {
-        "request": request
+        "request": request,
+        "price": int(price),
+        "ceiling": int(ceiling)
     })
 
 @app.get("/certifications", response_class=HTMLResponse)
