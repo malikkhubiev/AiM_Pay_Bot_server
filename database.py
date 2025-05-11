@@ -487,7 +487,7 @@ async def get_expired_users():
     """
     Возвращает список telegram_id пользователей, у которых истёк пробный период.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     query = select(User.telegram_id).filter(
         User.date_of_trial_ends <= now,
         User.date_of_trial_ends != None,
