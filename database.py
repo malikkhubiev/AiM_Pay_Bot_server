@@ -38,6 +38,7 @@ class User(Base):
     username = Column(String, unique=True, nullable=True)
     telegram_id = Column(String, unique=True, nullable=True)
     fio = Column(String(255), unique=False, nullable=True)
+    date_of_trial_ends = Column(DateTime, nullable=True)
     date_of_certificate = Column(DateTime, nullable=True)
     unique_str = Column(String, unique=True, nullable=False)
     passed_exam = Column(Boolean, default=False)
@@ -480,7 +481,23 @@ async def get_payout(transaction_id: str):
 async def get_pending_payout(telegram_id: str):
     query = "SELECT * FROM payouts WHERE telegram_id = :telegram_id AND status = 'pending'"
     async with database.transaction():  # Здесь используем async with
-        return await database.fetch_one(query, {"telegram_id": telegram_id}) 
+        return await database.fetch_one(query, {"telegram_id": telegram_id})
+    
+async def get_expired_users():
+    """
+    Возвращает список telegram_id пользователей, у которых истёк пробный период.
+    """
+    now = datetime.utcnow()
+    query = select(User.telegram_id).filter(
+        User.date_of_trial_ends <= now,
+        User.date_of_trial_ends != None,
+        User.paid == False  # Проверяем, что пользователь не оплатил
+    )
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+    
+    # Возвращаем список telegram_id
+    return [row.telegram_id for row in rows]
 
 async def add_promo_user(telegram_id: str):
     query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"
@@ -530,6 +547,24 @@ async def update_pending_referral(telegram_id: str):
 
 async def update_referral_rank(telegram_id: str, rank: str):
     update_data = {"referral_rank": rank}
+    update_query = User.__table__.update().where(
+        User.telegram_id == telegram_id
+    ).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def set_user_trial_end(telegram_id: str, trial_end):
+    update_data = {
+        "date_of_trial_ends": datetime.now(timezone.utc)
+    }
+    update_query = User.__table__.update().where(
+        User.telegram_id == telegram_id
+    ).values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
+async def set_user_fake_paid(telegram_id: str):
+    update_data = {"paid": True}
     update_query = User.__table__.update().where(
         User.telegram_id == telegram_id
     ).values(update_data)

@@ -39,10 +39,13 @@ from database import (
     get_conversion_stats_by_source,
     get_referral_conversion_stats,
     get_top_referrers_from_db,
+    get_expired_users,
     save_invite_link_db,
     create_referral,
     create_temp_user,
     add_promo_user,
+    set_user_fake_paid,
+    set_user_trial_end,
     update_pending_referral,
     update_temp_user_registered,
     update_temp_user,
@@ -143,6 +146,9 @@ async def start(request: Request):
         if not(user.paid):
             logging.info(f"user не платил")
             return_data["to_show"] = "pay_course"
+        if not(user.date_of_trial_ends):
+            logging.info(f"пробный период не использовался")
+            return_data["to_show"] = "trial"
         
         promo_user = await get_promo_user(user.telegram_id)
         number_of_promo = await get_promo_user_count() 
@@ -1187,3 +1193,100 @@ async def send_text_message(to_id, message_text):
             print(f"Ответ от Instagram: {response.json()}")
         except Exception as e:
             print(f"Ошибка отправки сообщения в Instagram: {e}")
+
+
+
+
+
+
+@app.post("/start_trial")
+@exception_handler
+async def start_trial(request: Request): 
+    logging.info(f"start_trial called")
+    verify_secret_code(request)
+
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    logging.info(f"чекнули")
+
+    user = await get_user_by_telegram_id(telegram_id)
+    
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
+    if user.date_of_trial_ends:
+        return {"status": "error", "message": "Ваш пробный период уже был использован"}
+
+    await set_user_trial_end(telegram_id)
+    notification_data = {
+        "telegram_id": telegram_id,
+    }
+    send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
+    await send_request(send_invite_link_url, notification_data)
+    
+    return JSONResponse({"status": "success"})
+
+@app.post("/fake_payment")
+@exception_handler
+async def fake_payment(request: Request): 
+    logging.info(f"fake_payment called")
+    verify_secret_code(request)
+
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegram_id {telegram_id}")
+
+    check = check_parameters(telegram_id=telegram_id)
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
+    
+    logging.info(f"чекнули")
+
+    user = await get_user_by_telegram_id(telegram_id)
+    
+    if not(user):
+        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
+
+    await set_user_fake_paid(telegram_id)
+    notification_data = {
+        "telegram_id": telegram_id,
+    }
+    send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
+    await send_request(send_invite_link_url, notification_data)
+    
+    return JSONResponse({"status": "success"})
+
+@app.post("/delete_expired_users")
+@exception_handler
+async def delete_expired_users(request: Request): 
+    logging.info(f"delete_expired_users called")
+    verify_secret_code(request)
+
+    expired_users = await get_expired_users()
+    
+    for tg_id in expired_users:
+        notification_data = {
+            "telegram_id": tg_id,
+        }
+        kick_user_url = f"{str(await get_setting('MAHIN_URL'))}/kick_user"
+        await send_request(kick_user_url, notification_data)
+    
+    return JSONResponse({"status": "success"})
+
+@app.post("/get_price")
+@exception_handler
+async def get_price(request: Request): 
+    logging.info(f"get_price called")
+    verify_secret_code(request)
+
+    price = await get_setting("COURSE_AMOUNT")
+    
+    return JSONResponse({
+        "status": "success",
+        "price": int(price)
+    })

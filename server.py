@@ -21,6 +21,8 @@ scheduler = AsyncIOScheduler()
 
 # Запускаем задачу на удаление устаревших записей каждые сутки
 scheduler.add_job(delete_expired_records, 'interval', hours=24)
+# Запускаем задачу на удаление пользователей пробного периода из группы
+scheduler.add_job(delete_expired_users, 'interval', hours=1)
 
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
