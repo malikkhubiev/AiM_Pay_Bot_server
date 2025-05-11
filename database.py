@@ -492,7 +492,7 @@ async def get_expired_users():
         User.date_of_trial_ends <= now
     )
     async with database.transaction():  # Здесь используем async with
-        return await database.fetch_one(query)
+        return await database.fetch_all(query)
         
 
 async def add_promo_user(telegram_id: str):
