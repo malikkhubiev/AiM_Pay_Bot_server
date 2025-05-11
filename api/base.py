@@ -1274,12 +1274,13 @@ async def delete_expired_users():
     logging.info(f"is enough {data['now'] > user['date_of_trial_ends']}")
     logging.info(f"expired_users {expired_users}")
     
-    for tg_id in expired_users:
-        notification_data = {
-            "telegram_id": tg_id,
-        }
-        kick_user_url = f"{str(await get_setting('MAHIN_URL'))}/kick_user"
-        await send_request(kick_user_url, notification_data)
+    for user in expired_users:
+        if not(user.paid) and user.date_of_trial_ends:
+            notification_data = {
+                "telegram_id": user.telegram_id,
+            }
+            kick_user_url = f"{str(await get_setting('MAHIN_URL'))}/kick_user"
+            await send_request(kick_user_url, notification_data)
     
     return JSONResponse({"status": "success"})
 

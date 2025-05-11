@@ -485,23 +485,14 @@ async def get_pending_payout(telegram_id: str):
     
 async def get_expired_users():
     """
-    Возвращает список telegram_id пользователей, у которых истёк пробный период.
+    Возвращает список пользователей, у которых истёк пробный период.
     """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     query = select(User).filter(
-        User.date_of_trial_ends <= now,
-        User.date_of_trial_ends.is_not(None),
-        User.paid == False 
+        User.date_of_trial_ends <= now
     )
-    async with database.transaction():
-        rows = await database.fetch_all(query)
-    
-    print(rows)
-    # Возвращаем список telegram_id
-    return {
-        "now": now,
-        "rows": rows
-    } 
+    async with database.transaction():  # Здесь используем async with
+        return await database.fetch_one(query)
         
 
 async def add_promo_user(telegram_id: str):
