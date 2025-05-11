@@ -1266,8 +1266,13 @@ async def fake_payment(request: Request):
 async def delete_expired_users(): 
     logging.info(f"delete_expired_users called")
 
-    expired_users = await get_expired_users()
-    logging.info(expired_users)
+    data = await get_expired_users()
+    expired_users = data["rows"]
+    user = await get_user_by_telegram_id("7173805673", to_throw=False)
+    logging.info(f"user data {user["date_of_trial_ends"]}")
+    logging.info(f"now {data["now"]}")
+    logging.info(f"is enough {data["now"] > user["date_of_trial_ends"]}")
+    logging.info(f"expired_users {expired_users}")
     
     for tg_id in expired_users:
         notification_data = {

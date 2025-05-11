@@ -497,7 +497,11 @@ async def get_expired_users():
         rows = await database.fetch_all(query)
     
     # Возвращаем список telegram_id
-    return [row.telegram_id for row in rows]
+    return {
+        "now": now,
+        "rows": [row.telegram_id for row in rows]
+    } 
+        
 
 async def add_promo_user(telegram_id: str):
     query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"
