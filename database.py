@@ -487,7 +487,7 @@ async def get_expired_users():
     """
     Возвращает список telegram_id пользователей, у которых истёк пробный период.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     query = select(User.telegram_id).filter(
         User.date_of_trial_ends <= now,
         User.date_of_trial_ends != None,
@@ -558,12 +558,9 @@ async def update_referral_rank(telegram_id: str, rank: str):
         await database.execute(update_query)
 
 async def set_user_trial_end(telegram_id: str):
-    # Получаем текущее время в UTC
-    current_time = datetime.now(timezone.utc)
-    
     # Добавляем 24 часа и 15 секунд к текущему времени
     # new_end_time = current_time + timedelta(hours=24)
-    new_end_time = current_time + timedelta(minutes=2)
+    new_end_time = datetime.now(timezone.utc) + timedelta(minutes=2)
 
     update_data = {
         "date_of_trial_ends": new_end_time
