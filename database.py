@@ -554,8 +554,15 @@ async def update_referral_rank(telegram_id: str, rank: str):
         await database.execute(update_query)
 
 async def set_user_trial_end(telegram_id: str):
+    # Получаем текущее время в UTC
+    current_time = datetime.now(timezone.utc)
+    
+    # Добавляем 24 часа и 15 секунд к текущему времени
+    # new_end_time = current_time + timedelta(hours=24)
+    new_end_time = current_time + timedelta(seconds=15)
+
     update_data = {
-        "date_of_trial_ends": datetime.now(timezone.utc)
+        "date_of_trial_ends": new_end_time
     }
     update_query = User.__table__.update().where(
         User.telegram_id == telegram_id
