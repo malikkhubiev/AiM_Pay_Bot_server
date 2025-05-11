@@ -553,7 +553,7 @@ async def update_referral_rank(telegram_id: str, rank: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
-async def set_user_trial_end(telegram_id: str, trial_end):
+async def set_user_trial_end(telegram_id: str):
     update_data = {
         "date_of_trial_ends": datetime.now(timezone.utc)
     }
