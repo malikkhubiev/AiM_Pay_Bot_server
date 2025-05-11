@@ -490,7 +490,7 @@ async def get_expired_users():
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     query = select(User.telegram_id).filter(
         User.date_of_trial_ends <= now,
-        User.date_of_trial_ends != None,
+        User.date_of_trial_ends.is_not(None),
         User.paid == False  # Проверяем, что пользователь не оплатил
     )
     async with database.transaction():
