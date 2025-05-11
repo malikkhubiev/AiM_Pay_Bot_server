@@ -1267,6 +1267,7 @@ async def delete_expired_users():
     logging.info(f"delete_expired_users called")
 
     expired_users = await get_expired_users()
+    logging.info(expired_users)
     
     for tg_id in expired_users:
         notification_data = {
