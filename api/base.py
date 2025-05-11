@@ -1263,9 +1263,8 @@ async def fake_payment(request: Request):
 
 @app.post("/delete_expired_users")
 @exception_handler
-async def delete_expired_users(request: Request): 
+async def delete_expired_users(): 
     logging.info(f"delete_expired_users called")
-    verify_secret_code(request)
 
     expired_users = await get_expired_users()
     
