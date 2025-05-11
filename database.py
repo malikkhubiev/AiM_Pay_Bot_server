@@ -559,7 +559,7 @@ async def set_user_trial_end(telegram_id: str):
     
     # Добавляем 24 часа и 15 секунд к текущему времени
     # new_end_time = current_time + timedelta(hours=24)
-    new_end_time = current_time + timedelta(seconds=15)
+    new_end_time = current_time + timedelta(minutes=15)
 
     update_data = {
         "date_of_trial_ends": new_end_time
