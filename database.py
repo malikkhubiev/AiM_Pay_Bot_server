@@ -532,6 +532,12 @@ async def update_referrer(telegram_id: str, referrer_id: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
+async def update_cards(telegram_id: str, new_value: str):
+    update_data = {'value': new_value}
+    update_query = Setting.__table__.update().where(Setting.key == "CARD").values(update_data)
+    async with database.transaction():  # Используем async with для транзакции
+        await database.execute(update_query)
+
 async def update_pending_referral(telegram_id: str):
     update_data = {"status": "registered"}
     update_query = Referral.__table__.update().where(

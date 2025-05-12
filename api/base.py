@@ -1279,15 +1279,19 @@ async def delete_expired_users():
     
     return JSONResponse({"status": "success"})
 
-@app.post("/get_price")
+@app.post("/get_payment_data")
 @exception_handler
-async def get_price(request: Request): 
-    logging.info(f"get_price called")
+async def get_payment_data(request: Request): 
+    logging.info(f"get_payment_data called")
     verify_secret_code(request)
 
     price = await get_setting("COURSE_AMOUNT")
+    raw = await get_setting("CARDS")
+    exec(raw)
+    card_number = random.choice(cards)
     
     return JSONResponse({
         "status": "success",
-        "price": int(price)
+        "price": int(price),
+        "card_number": card_number
     })

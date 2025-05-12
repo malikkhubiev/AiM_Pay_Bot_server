@@ -17,6 +17,7 @@ YOOKASSA_PAYMENTS_URL = os.getenv("YOOKASSA_PAYMENTS_URL")
 YOOKASSA_AGENT_ID = os.getenv("YOOKASSA_AGENT_ID")
 
 DEFAULT_SETTINGS = {
+    "MY_MONEY": 0,
     # Project configuration
     "SERVER_URL": os.getenv("SERVER_URL"),
     "MAHIN_URL": os.getenv("MAHIN_URL"),
@@ -25,5 +26,5 @@ DEFAULT_SETTINGS = {
     "COURSE_CEILING": os.getenv("COURSE_CEILING"),
     "REFERRAL_AMOUNT": os.getenv("REFERRAL_AMOUNT"),
     "PROMO_NUM_LIMIT": os.getenv("PROMO_NUM_LIMIT"),
-    "MY_MONEY": 0
+    "CARDS": "cards = ['2200 3005 6476 2126', '2200 7702 9733 5855', '2202 2050 3989 7050']"
 }
