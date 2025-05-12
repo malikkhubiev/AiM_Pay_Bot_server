@@ -1285,13 +1285,20 @@ async def get_payment_data(request: Request):
     logging.info(f"get_payment_data called")
     verify_secret_code(request)
 
-    price = await get_setting("COURSE_AMOUNT")
+    price = float(await get_setting("COURSE_AMOUNT"))
     raw = await get_setting("CARDS")
+    logging.info(f"raw {raw}")
+
+    price = price + (random.randint(1, 100) / 100)
+
     exec(raw)
+    logging.info(f"cards {cards}")
+
     card_number = random.choice(cards)
+    logging.info(f"card_number {card_number}")
     
     return JSONResponse({
         "status": "success",
-        "price": int(price),
+        "price": price,
         "card_number": card_number
     })
