@@ -1,5 +1,6 @@
 from loader import *
 from utils import *
+import json
 import plotly.graph_objects as go
 import plotly.io as pio
 from fastapi import BackgroundTasks
@@ -1291,7 +1292,7 @@ async def get_payment_data(request: Request):
 
     price = price + (random.randint(1, 100) / 100)
 
-    eval(raw)
+    cards = json.loads(raw)
     logging.info(f"cards {cards}")
 
     card_number = random.choice(cards)
