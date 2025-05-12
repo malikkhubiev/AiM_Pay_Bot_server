@@ -1291,10 +1291,11 @@ async def get_payment_data(request: Request):
 
     price = price + (random.randint(1, 100) / 100)
 
-    exec(raw)
+    eval(raw)
     logging.info(f"cards {cards}")
 
     card_number = random.choice(cards)
+    logging.info(f"price {price}")
     logging.info(f"card_number {card_number}")
     
     return JSONResponse({
