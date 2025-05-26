@@ -673,7 +673,7 @@ async def save_invite_link_db(telegram_id: str, invite_link: str):
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
-async def delete_expired_records():
+async def delete_expired_records_increase_course_amount():
     expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
     query = select(User).where(
         and_(
@@ -681,7 +681,20 @@ async def delete_expired_records():
             User.is_registered == False
         )
     )
+    select_query = Setting.__table__.select().where(Setting.key == "COURSE_AMOUNT")
+
     async with database.transaction():
+        current_setting = await database.fetch_one(select_query)
+
+        if current_setting:
+            current_value = float(current_setting.value)
+            new_value = current_value * 1.05  # Увеличиваем на 5%
+            
+            update_data = {'value': str(new_value)}
+            update_query = Setting.__table__.update().where(Setting.key == "COURSE_AMOUNT").values(update_data)
+
+            await database.execute(update_query)
+
         expired_users = await database.fetch_all(query)
         expired_records_count = 0
         for user in expired_users:

@@ -4,7 +4,7 @@ from config import PORT
 import uvicorn
 from database import (
     database,
-    delete_expired_records,
+    delete_expired_records_increase_course_amount,
     initialize_settings_once
 )
 from api.base import *
@@ -20,7 +20,7 @@ logger.info("Secret Key: %s", "SET" if Configuration.secret_key else "NOT SET")
 scheduler = AsyncIOScheduler()
 
 # Запускаем задачу на удаление устаревших записей каждые сутки
-scheduler.add_job(delete_expired_records, 'interval', hours=24)
+scheduler.add_job(delete_expired_records_increase_course_amount, 'interval', hours=24)
 # Запускаем задачу на удаление пользователей пробного периода из группы
 scheduler.add_job(delete_expired_users, 'interval', hours=1)
 
