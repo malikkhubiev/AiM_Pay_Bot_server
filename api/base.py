@@ -925,7 +925,7 @@ async def landing_page(request: Request):
 
     return templates.TemplateResponse("landing.html", {
         "request": request,
-        "price": int(price),
+        "price": float(price),
         "ceiling": int(ceiling)
     })
 
