@@ -20,39 +20,46 @@ db_path = os.path.join(current_dir, 'bot_database.db')
 
 async def init_db():
     """
-    Импорт базы данных:
-    - Если файл существует на Google Drive, он скачивается.
-    - Если файла нет, создается новая база данных.
+    Import database:
+    - If file exists on Google Drive, download it.
+    - If file doesn't exist, create a new database.
     """
-    logging.info("Начинаем процесс импорта базы данных.")
+    logging.info("Starting database import process.")
     
     try:
-        # Формируем URL для скачивания файла
-        url = f"https://drive.google.com/uc?id={str(await get_setting('FILE_ID'))}"
-        logging.info(f"Готов URL: {url}")
+        file_id = await get_setting('FILE_ID')
+        if not file_id:
+            logging.info("No FILE_ID setting found, skipping import.")
+            initialize_database()
+            return
+            
+        # Form URL for file download
+        url = f"https://drive.google.com/uc?id={file_id}"
+        logging.info(f"URL ready: {url}")
 
-        # Создаём клиент с разрешением редиректов
+        # Create client with redirect permission
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            # Отправляем запрос для скачивания файла
+            # Send request to download file
             download_response = await client.get(url)
 
         logging.info(f"response.status_code {download_response.status_code}")
 
-        # Проверяем статус ответа
+        # Check response status
         if download_response.status_code == 200:
-            logging.info("Файл найден на Google Drive, начинаем скачивание.")
+            logging.info("File found on Google Drive, starting download.")
             with open(db_path, "wb") as f:
                 f.write(download_response.content)
-            logging.info("Файл успешно скачан.")
+            logging.info("File successfully downloaded.")
         else:
-            logging.error(f"Ошибка скачивания. Статус: {download_response.status_code}")
-            # Если не удалось скачать файл, создаём базу данных
+            logging.error(f"Download error. Status: {download_response.status_code}")
+            # If couldn't download file, create database
+            initialize_database()
 
     except Exception as e:
-        logging.error(f"Ошибка при импорте базы данных: {e}")
-
-    initialize_database()
-
+        logging.error(f"Error during database import: {e}")
+        # Initialize database if import fails
+        initialize_database()
+        
 @app.post("/export_db")
 async def export_db(request: Request):
     logging.info("Запрос на экспорт базы данных")
