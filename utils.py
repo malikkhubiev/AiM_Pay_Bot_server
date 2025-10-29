@@ -15,13 +15,21 @@ from config import (
     YOOKASSA_PAYOUT_KEY,
     YOOKASSA_AGENT_ID,
     YOOKASSA_SHOP_ID,
-    SECRET_CODE
+    SECRET_CODE,
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_USER,
+    SMTP_PASSWORD,
+    FROM_EMAIL
 )
 from yookassa import Configuration
 import logging
 from database import (
     get_user
 )
+import smtplib
+import ssl
+from email.message import EmailMessage
 
 load_dotenv()
 
@@ -194,3 +202,28 @@ async def convert_pdf_to_image(pdf_path):
     images[0].save(image_path, 'PNG')
     
     return image_path
+
+def send_email_sync(to_email: str, subject: str, html_body: str, text_body: str = None):
+    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASSWORD and FROM_EMAIL):
+        raise HTTPException(status_code=500, detail="SMTP is not configured on the server")
+
+    message = EmailMessage()
+    message["From"] = FROM_EMAIL
+    message["To"] = to_email
+    message["Subject"] = subject
+
+    if text_body:
+        message.set_content(text_body)
+        message.add_alternative(html_body, subtype="html")
+    else:
+        message.set_content(html_body, subtype="html")
+
+    context = ssl.create_default_context()
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls(context=context)
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(message)
+    except Exception as e:
+        logger.error(f"SMTP send error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send email")

@@ -28,3 +28,10 @@ DEFAULT_SETTINGS = {
     "PROMO_NUM_LIMIT": os.getenv("PROMO_NUM_LIMIT"),
     "CARDS": json.dumps(['2200 3005 6476 2126', '2200 7702 9733 5855', '2202 2050 3989 7050'])
 }
+
+# SMTP/Email configuration for sending demo links
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)

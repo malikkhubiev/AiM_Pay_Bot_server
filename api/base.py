@@ -193,6 +193,35 @@ async def start(request: Request):
                 logging.info(f"Сделали реферала в бд")
     return JSONResponse(return_data)
 
+@app.post("/send_demo_link")
+@exception_handler
+async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
+    # Публичная форма — без verify_secret_code
+    data = await request.json()
+    name = data.get("name")
+    email = data.get("email")
+    phone = data.get("phone")
+    if not (name and email and phone):
+        return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
+
+    subject = "AiM Course — ссылка на демо"
+    channel_url = "https://rutube.ru/channel/62003781/"
+    html = (
+        f"<p>Здравствуйте, {name}!</p>"
+        f"<p>Вот ваша ссылка на демо-канал: <a href=\"{channel_url}\">RUTUBE канал</a>.</p>"
+        f"<p>Телефон для связи: {phone}</p>"
+        f"<p>Хорошего дня!</p>"
+    )
+    text = (
+        f"Здравствуйте, {name}!\n\n"
+        f"Ссылка на демо-канал: {channel_url}\n"
+        f"Телефон для связи: {phone}\n\n"
+        f"Хорошего дня!"
+    )
+
+    background_tasks.add_task(send_email_sync, email, subject, html, text)
+    return JSONResponse({"status": "success"})
+
 @app.post("/getting_started")
 @exception_handler
 async def getting_started(request: Request):
