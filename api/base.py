@@ -195,7 +195,7 @@ async def start(request: Request):
 
 @app.post("/send_demo_link")
 @exception_handler
-async def send_demo_link(request: Request):
+async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
     # Публичная форма — без verify_secret_code
     data = await request.json()
     name = data.get("name")
@@ -219,9 +219,10 @@ async def send_demo_link(request: Request):
         f"Хорошего дня!"
     )
 
-    # Отправляем синхронно, чтобы дождаться результата отправки
-    send_email_sync(email, subject, html, text)
-    return JSONResponse({"status": "success"})
+    # Асинхронная отправка в фоне, чтобы не держать запрос в pending
+    background_tasks.add_task(send_email_async, email, subject, html, text)
+    logging.info(f"Email queued to send asynchronously to {email}")
+    return JSONResponse({"status": "success", "queued": True})
 
 @app.post("/getting_started")
 @exception_handler

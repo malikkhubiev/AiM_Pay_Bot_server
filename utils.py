@@ -20,7 +20,8 @@ from config import (
     SMTP_PORT,
     SMTP_USER,
     SMTP_PASSWORD,
-    FROM_EMAIL
+    FROM_EMAIL,
+    SMTP_TIMEOUT
 )
 from yookassa import Configuration
 import logging
@@ -30,6 +31,7 @@ from database import (
 import smtplib
 import ssl
 from email.message import EmailMessage
+import asyncio
 
 load_dotenv()
 
@@ -220,10 +222,27 @@ def send_email_sync(to_email: str, subject: str, html_body: str, text_body: str 
 
     context = ssl.create_default_context()
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        logger.debug(f"SMTP prepare: host={SMTP_HOST} port={SMTP_PORT} from={FROM_EMAIL} to={to_email} subject={subject}")
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
+            # Enable low-level SMTP protocol logs to stderr (captured by process logs)
+            server.set_debuglevel(1)
+            logger.debug("SMTP connection opened")
             server.starttls(context=context)
+            logger.debug("SMTP STARTTLS negotiated")
             server.login(SMTP_USER, SMTP_PASSWORD)
+            logger.debug("SMTP authenticated successfully")
             server.send_message(message)
+            logger.info(f"SMTP message sent to {to_email}")
     except Exception as e:
-        logger.error(f"SMTP send error: {e}")
+        logger.exception(f"SMTP send error: {e}")
         raise HTTPException(status_code=500, detail="Failed to send email")
+
+async def send_email_async(to_email: str, subject: str, html_body: str, text_body: str = None):
+    logger.info(f"send_email_async scheduled for {to_email}")
+    # Run sync sender in a thread to avoid blocking event loop
+    try:
+        await asyncio.to_thread(send_email_sync, to_email, subject, html_body, text_body)
+        logger.info(f"send_email_async completed for {to_email}")
+    except Exception as e:
+        # Ensure we log full details without raising to the HTTP layer (since this is background)
+        logger.exception(f"send_email_async failed for {to_email}: {e}")
