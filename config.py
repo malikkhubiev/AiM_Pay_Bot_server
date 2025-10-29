@@ -36,3 +36,10 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
 SMTP_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", "15"))
+
+# Email provider selection: SMTP (default) or RESEND
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "SMTP").upper()
+
+# Resend (HTTP API) configuration
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM = os.getenv("RESEND_FROM", FROM_EMAIL)

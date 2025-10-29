@@ -21,7 +21,10 @@ from config import (
     SMTP_USER,
     SMTP_PASSWORD,
     FROM_EMAIL,
-    SMTP_TIMEOUT
+    SMTP_TIMEOUT,
+    EMAIL_PROVIDER,
+    RESEND_API_KEY,
+    RESEND_FROM
 )
 from yookassa import Configuration
 import logging
@@ -238,11 +241,43 @@ def send_email_sync(to_email: str, subject: str, html_body: str, text_body: str 
         raise HTTPException(status_code=500, detail="Failed to send email")
 
 async def send_email_async(to_email: str, subject: str, html_body: str, text_body: str = None):
-    logger.info(f"send_email_async scheduled for {to_email}")
-    # Run sync sender in a thread to avoid blocking event loop
+    logger.info(f"send_email_async scheduled for {to_email} via {EMAIL_PROVIDER}")
     try:
-        await asyncio.to_thread(send_email_sync, to_email, subject, html_body, text_body)
+        if EMAIL_PROVIDER == "RESEND":
+            await send_email_via_resend(to_email, subject, html_body, text_body)
+        else:
+            # Default: SMTP (same sync function in a thread)
+            await asyncio.to_thread(send_email_sync, to_email, subject, html_body, text_body)
         logger.info(f"send_email_async completed for {to_email}")
     except Exception as e:
-        # Ensure we log full details without raising to the HTTP layer (since this is background)
         logger.exception(f"send_email_async failed for {to_email}: {e}")
+
+async def send_email_via_resend(to_email: str, subject: str, html_body: str, text_body: str = None):
+    if not RESEND_API_KEY:
+        raise HTTPException(status_code=500, detail="RESEND_API_KEY is not configured on the server")
+
+    payload = {
+        "from": RESEND_FROM,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body,
+    }
+    if text_body:
+        payload["text"] = text_body
+
+    headers = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    logger.debug(f"RESEND prepare: from={RESEND_FROM} to={to_email} subject={subject}")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post("https://api.resend.com/emails", headers=headers, json=payload)
+            if response.is_error:
+                logger.error(f"Resend API error {response.status_code}: {response.text}")
+                raise HTTPException(status_code=502, detail="Resend API error")
+            logger.info(f"Resend message accepted for {to_email}: {response.text}")
+        except Exception as e:
+            logger.exception(f"Resend send error: {e}")
+            raise
