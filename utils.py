@@ -22,6 +22,7 @@ from config import (
     SMTP_PASSWORD,
     FROM_EMAIL,
     SMTP_TIMEOUT,
+    SMTP_USE_SSL,
     EMAIL_PROVIDER,
     RESEND_API_KEY,
     RESEND_FROM
@@ -35,6 +36,8 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 import asyncio
+import socket
+import time
 
 load_dotenv()
 
@@ -224,21 +227,55 @@ def send_email_sync(to_email: str, subject: str, html_body: str, text_body: str 
         message.set_content(html_body, subtype="html")
 
     context = ssl.create_default_context()
+
+    # DNS resolve debug
     try:
-        logger.debug(f"SMTP prepare: host={SMTP_HOST} port={SMTP_PORT} from={FROM_EMAIL} to={to_email} subject={subject}")
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
-            # Enable low-level SMTP protocol logs to stderr (captured by process logs)
-            server.set_debuglevel(1)
-            logger.debug("SMTP connection opened")
-            server.starttls(context=context)
-            logger.debug("SMTP STARTTLS negotiated")
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            logger.debug("SMTP authenticated successfully")
-            server.send_message(message)
-            logger.info(f"SMTP message sent to {to_email}")
+        dns_info = socket.getaddrinfo(SMTP_HOST, SMTP_PORT)
+        resolved = ", ".join({f"{ai[4][0]}" for ai in dns_info})
+        logger.debug(f"SMTP DNS: {SMTP_HOST} -> {resolved}:{SMTP_PORT}")
     except Exception as e:
-        logger.exception(f"SMTP send error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to send email")
+        logger.warning(f"SMTP DNS resolve failed for {SMTP_HOST}:{SMTP_PORT}: {e}")
+
+    # Retries with backoff for transient network issues
+    attempts = 3
+    last_err = None
+    for attempt in range(1, attempts + 1):
+        try:
+            logger.debug(
+                f"SMTP connect attempt {attempt}/{attempts}: host={SMTP_HOST} port={SMTP_PORT} ssl={SMTP_USE_SSL} from={FROM_EMAIL} to={to_email}"
+            )
+            if SMTP_USE_SSL or int(SMTP_PORT) == 465:
+                with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT, context=context) as server:
+                    server.set_debuglevel(1)
+                    logger.debug("SMTP_SSL connection opened")
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                    logger.debug("SMTP authenticated successfully")
+                    server.send_message(message)
+                    logger.info(f"SMTP message sent to {to_email}")
+                    return
+            else:
+                with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
+                    server.set_debuglevel(1)
+                    logger.debug("SMTP connection opened")
+                    server.starttls(context=context)
+                    logger.debug("SMTP STARTTLS negotiated")
+                    server.login(SMTP_USER, SMTP_PASSWORD)
+                    logger.debug("SMTP authenticated successfully")
+                    server.send_message(message)
+                    logger.info(f"SMTP message sent to {to_email}")
+                    return
+        except Exception as e:
+            last_err = e
+            # Log errno if available
+            err_no = getattr(e, 'errno', None)
+            logger.warning(f"SMTP attempt {attempt} failed (errno={err_no}): {e}")
+            if attempt < attempts:
+                # Exponential backoff
+                sleep_sec = 2 ** (attempt - 1)
+                time.sleep(sleep_sec)
+
+    logger.exception(f"SMTP send error after {attempts} attempts: {last_err}")
+    raise HTTPException(status_code=500, detail="Failed to send email")
 
 async def send_email_async(to_email: str, subject: str, html_body: str, text_body: str = None):
     logger.info(f"send_email_async scheduled for {to_email} via {EMAIL_PROVIDER}")

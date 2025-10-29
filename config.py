@@ -29,17 +29,10 @@ DEFAULT_SETTINGS = {
     "CARDS": json.dumps(['2200 3005 6476 2126', '2200 7702 9733 5855', '2202 2050 3989 7050'])
 }
 
-# SMTP/Email configuration for sending demo links
-SMTP_HOST = os.getenv("SMTP_HOST")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
-FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
-SMTP_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", "15"))
-
-# Email provider selection: SMTP (default) or RESEND
-EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "SMTP").upper()
+# Email provider selection: SMTP or RESEND (default to RESEND for render.com)
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "RESEND").upper()
 
 # Resend (HTTP API) configuration
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-RESEND_FROM = os.getenv("RESEND_FROM", FROM_EMAIL)
+# Prefer RESEND_API (as requested), fallback to legacy RESEND_API_KEY if present
+RESEND_API_KEY = os.getenv("RESEND_API") or os.getenv("RESEND_API_KEY")
+RESEND_FROM = os.getenv("RESEND_FROM")
