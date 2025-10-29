@@ -26,10 +26,16 @@ scheduler.add_job(delete_expired_users, 'interval', hours=1)
 
 @app.middleware("http")
 async def db_session_middleware(request: Request, call_next):
+    # Не открываем соединение с БД на preflight запросах CORS
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     await database.connect()
     request.state.db = database
-    response = await call_next(request)
-    await database.disconnect()
+    try:
+        response = await call_next(request)
+    finally:
+        await database.disconnect()
     return response
 
 @app.on_event("startup")
