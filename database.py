@@ -115,11 +115,15 @@ async def initialize_settings_once():
     existing_keys_result = await database.fetch_all(existing_keys_query)
     existing_keys = {row["key"] for row in existing_keys_result}
 
-    insert_values = [
-        {"key": key, "value": value}
-        for key, value in DEFAULT_SETTINGS.items()
-        if key not in existing_keys
-    ]
+    # Insert only non-None values and cast to string to satisfy NOT NULL String column
+    insert_values = []
+    for key, value in DEFAULT_SETTINGS.items():
+        if key in existing_keys:
+            continue
+        if value is None:
+            # skip undefined env-backed settings to avoid NOT NULL violation
+            continue
+        insert_values.append({"key": key, "value": str(value)})
 
     if insert_values:
         query = Setting.__table__.insert().values(insert_values)

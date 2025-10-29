@@ -27,10 +27,12 @@ async def init_db():
     logging.info("Starting database import process.")
     
     try:
+        # Ensure DB schema exists before any selects
+        initialize_database()
+
         file_id = await get_setting('FILE_ID')
         if not file_id:
             logging.info("No FILE_ID setting found, skipping import.")
-            initialize_database()
             return
             
         # Form URL for file download
