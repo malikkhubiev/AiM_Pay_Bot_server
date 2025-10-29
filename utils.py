@@ -16,14 +16,6 @@ from config import (
     YOOKASSA_AGENT_ID,
     YOOKASSA_SHOP_ID,
     SECRET_CODE,
-    SMTP_HOST,
-    SMTP_PORT,
-    SMTP_USER,
-    SMTP_PASSWORD,
-    FROM_EMAIL,
-    SMTP_TIMEOUT,
-    SMTP_USE_SSL,
-    EMAIL_PROVIDER,
     RESEND_API_KEY,
     RESEND_FROM
 )
@@ -32,12 +24,7 @@ import logging
 from database import (
     get_user
 )
-import smtplib
-import ssl
-from email.message import EmailMessage
 import asyncio
-import socket
-import time
 
 load_dotenv()
 
@@ -211,80 +198,10 @@ async def convert_pdf_to_image(pdf_path):
     
     return image_path
 
-def send_email_sync(to_email: str, subject: str, html_body: str, text_body: str = None):
-    if not (SMTP_HOST and SMTP_PORT and SMTP_USER and SMTP_PASSWORD and FROM_EMAIL):
-        raise HTTPException(status_code=500, detail="SMTP is not configured on the server")
-
-    message = EmailMessage()
-    message["From"] = FROM_EMAIL
-    message["To"] = to_email
-    message["Subject"] = subject
-
-    if text_body:
-        message.set_content(text_body)
-        message.add_alternative(html_body, subtype="html")
-    else:
-        message.set_content(html_body, subtype="html")
-
-    context = ssl.create_default_context()
-
-    # DNS resolve debug
-    try:
-        dns_info = socket.getaddrinfo(SMTP_HOST, SMTP_PORT)
-        resolved = ", ".join({f"{ai[4][0]}" for ai in dns_info})
-        logger.debug(f"SMTP DNS: {SMTP_HOST} -> {resolved}:{SMTP_PORT}")
-    except Exception as e:
-        logger.warning(f"SMTP DNS resolve failed for {SMTP_HOST}:{SMTP_PORT}: {e}")
-
-    # Retries with backoff for transient network issues
-    attempts = 3
-    last_err = None
-    for attempt in range(1, attempts + 1):
-        try:
-            logger.debug(
-                f"SMTP connect attempt {attempt}/{attempts}: host={SMTP_HOST} port={SMTP_PORT} ssl={SMTP_USE_SSL} from={FROM_EMAIL} to={to_email}"
-            )
-            if SMTP_USE_SSL or int(SMTP_PORT) == 465:
-                with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT, context=context) as server:
-                    server.set_debuglevel(1)
-                    logger.debug("SMTP_SSL connection opened")
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                    logger.debug("SMTP authenticated successfully")
-                    server.send_message(message)
-                    logger.info(f"SMTP message sent to {to_email}")
-                    return
-            else:
-                with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT) as server:
-                    server.set_debuglevel(1)
-                    logger.debug("SMTP connection opened")
-                    server.starttls(context=context)
-                    logger.debug("SMTP STARTTLS negotiated")
-                    server.login(SMTP_USER, SMTP_PASSWORD)
-                    logger.debug("SMTP authenticated successfully")
-                    server.send_message(message)
-                    logger.info(f"SMTP message sent to {to_email}")
-                    return
-        except Exception as e:
-            last_err = e
-            # Log errno if available
-            err_no = getattr(e, 'errno', None)
-            logger.warning(f"SMTP attempt {attempt} failed (errno={err_no}): {e}")
-            if attempt < attempts:
-                # Exponential backoff
-                sleep_sec = 2 ** (attempt - 1)
-                time.sleep(sleep_sec)
-
-    logger.exception(f"SMTP send error after {attempts} attempts: {last_err}")
-    raise HTTPException(status_code=500, detail="Failed to send email")
-
 async def send_email_async(to_email: str, subject: str, html_body: str, text_body: str = None):
-    logger.info(f"send_email_async scheduled for {to_email} via {EMAIL_PROVIDER}")
+    logger.info(f"send_email_async scheduled for {to_email} via RESEND")
     try:
-        if EMAIL_PROVIDER == "RESEND":
-            await send_email_via_resend(to_email, subject, html_body, text_body)
-        else:
-            # Default: SMTP (same sync function in a thread)
-            await asyncio.to_thread(send_email_sync, to_email, subject, html_body, text_body)
+        await send_email_via_resend(to_email, subject, html_body, text_body)
         logger.info(f"send_email_async completed for {to_email}")
     except Exception as e:
         logger.exception(f"send_email_async failed for {to_email}: {e}")
