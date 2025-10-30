@@ -52,6 +52,7 @@ class User(Base):
     is_registered = Column(Boolean, default=False)
     source = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
+    pay_email = Column(String, nullable=True)  # Новое поле для email оплаты
 
     payments = relationship("Payment", back_populates="user")
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")
@@ -107,6 +108,16 @@ class Binding(Base):
     id = Column(Integer, primary_key=True, index=True)
     telegram_id = Column(String, ForeignKey('users.telegram_id'))  
     unique_str = Column(String, unique=True, nullable=False)
+
+class Lead(Base):
+    __tablename__ = 'leads'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    notified = Column(Boolean, default=False)  # Новый флаг рассылки
 
 engine = create_engine(DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"))
 
@@ -756,4 +767,45 @@ async def ultra_excute(query: str):
             await database.execute(stmt)
     
     return {"status": "success", "result": f"Executed {len(statements)} statements"}
+
+async def create_lead(name: str, email: str, phone: str):
+    lead = Lead(name=name, email=email, phone=phone)
+    async with database.transaction():
+        query = Lead.__table__.insert().values(
+            name=name,
+            email=email,
+            phone=phone
+        )
+        await database.execute(query)
+
+async def set_lead_notified(email: str):
+    # Отметить лид как notified
+    update_query = Lead.__table__.update().where(Lead.email == email).values(notified=True)
+    async with database.transaction():
+        await database.execute(update_query)
+
+async def get_unnotified_abandoned_leads():
+    # Лиды >1 суток, не notified, и email не встречается у User.pay_email
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    # Подзапрос на все pay_email
+    from sqlalchemy import select as sql_select
+    user_email_subquery = sql_select(User.pay_email).subquery()
+    query = sql_select(Lead).where(
+        Lead.notified == False,
+        Lead.created_at < yesterday,
+        ~Lead.email.in_(user_email_subquery)
+    )
+    async with database.transaction():
+        return await database.fetch_all(query)
+
+async def set_user_pay_email(telegram_id: str, email: str):
+    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(pay_email=email)
+    async with database.transaction():
+        await database.execute(update_query)
+
+async def get_user_pay_email(telegram_id: str):
+    query = select(User.pay_email).filter_by(telegram_id=telegram_id)
+    async with database.transaction():
+        result = await database.fetch_one(query)
+        return result[0] if result else None
 

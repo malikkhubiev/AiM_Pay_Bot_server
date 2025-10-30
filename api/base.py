@@ -54,18 +54,48 @@ from database import (
     ultra_excute,
     update_fio_and_date_of_cert,
     update_passed_exam_in_db,
-    get_all_settings
+    get_all_settings,
+    create_lead,
+    set_user_pay_email,
+    get_user_pay_email,
+    get_unnotified_abandoned_leads,
+    set_lead_notified,
+    get_user
 )
 from config import (
-    BOT_USERNAME
+    BOT_USERNAME,
+    SMTP_PASSWORD
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi import Query
+import httpx
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import re
+
+TG_BOT_LINK = "https://t.me/AiM_Pay_Bot"  # TODO: поменять на вашего бота
+FROM_EMAIL = "01_AiM_01@mail.ru"
+SMTP_SERVER = "smtp.mail.ru"
+SMTP_PORT = 587
+SMTP_USER = "AiM"
+
+WHAPI_TOKEN = "YOUR_WHAPI_TOKEN"  # TODO: поставить ваш токен
+WHAPI_URL = "https://api.whapi.cloud/v1/messages"  # базовый URL
+WHAPI_PHONE_ID = "YOUR_PHONE_ID"  # TODO: ваш ID номера в Whapi
 
 templates = Jinja2Templates(directory="templates")
+
+def is_valid_email(email):
+    # примитивный, но разумный валидатор
+    return re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email) is not None
+
+def is_valid_phone_wa(phone):
+    phone_digits = ''.join([c for c in phone if c.isdigit()])
+    return len(phone_digits) >= 10
 
 @app.post("/check_user")
 @exception_handler
@@ -1322,3 +1352,118 @@ async def get_payment_data(request: Request):
         "price": price,
         "card_number": card_number
     })
+
+@app.post("/leads")
+async def create_lead_and_notify(request: Request):
+    data = await request.json()
+    name = data.get("name")
+    email = data.get("email")
+    phone = data.get("phone")
+
+    if not (email and phone and name):
+        return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
+
+    await create_lead(name, email, phone)
+
+    # Отправить WhatsApp сообщение через Whapi.Cloud
+    wa_message = "Здравствуйте, мы очень рады с вами познакомиться!"
+
+    # Привести номер к международному формату (например, 79999999999)
+    wa_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+    headers = {
+        "Authorization": f"Bearer {WHAPI_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "to": wa_phone,
+        "type": "text",
+        "text": {"body": wa_message}
+    }
+    # Дополнительно: в конфиге можно хранить токен и id
+    sent = False
+    try:
+        if not is_valid_phone_wa(wa_phone):
+            raise Exception("Невалидный номер телефона для WhatsApp")
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(WHAPI_URL, headers=headers, json=payload)
+            resp.raise_for_status()
+        sent = True
+    except Exception as e:
+        logging.error(f"Ошибка при отправке WhatsApp: {e}")
+    # Пометить лид как notified независимо от успеха WA
+    await set_lead_notified(email)
+    return JSONResponse({"status": "success", "wa_sent": sent})
+
+@app.post("/set_pay_email")
+async def set_pay_email(request: Request):
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    email = data.get("email")
+    if not (telegram_id and email):
+        return JSONResponse({"status": "error", "message": "Нужен telegram_id и email"}, status_code=400)
+    if not is_valid_email(email):
+        return JSONResponse({"status": "error", "message": "Некорректный email"}, status_code=400)
+    await set_user_pay_email(telegram_id, email)
+    return JSONResponse({"status": "success"})
+
+@app.post("/get_pay_email")
+async def get_pay_email(request: Request):
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    if not telegram_id:
+        return JSONResponse({"status": "error", "message": "Нужен telegram_id"}, status_code=400)
+    email = await get_user_pay_email(telegram_id)
+    return JSONResponse({"status": "success", "email": email})
+
+@app.post("/get_payment_status")
+async def get_payment_status(request: Request):
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    email = data.get("email")
+    user = None
+    if telegram_id:
+        user = await get_user(telegram_id)
+    if not user and email:
+        # ищем по email
+        from database import User, database
+        from sqlalchemy import select as sql_select
+        query = sql_select(User).where(User.pay_email == email)
+        async with database.transaction():
+            user = await database.fetch_one(query)
+    status = "not set"
+    if user:
+        if user['paid']:
+            status = "paid"
+        elif user['pay_email']:
+            status = "pending"
+    return JSONResponse({"status": "success", "payment_status": status})
+
+async def notify_abandoned_leads():
+    leads = await get_unnotified_abandoned_leads()
+    for lead in leads:
+        email = lead['email']
+        name = lead['name'] or ""
+        msg = MIMEMultipart()
+        msg['From'] = FROM_EMAIL
+        msg['To'] = email
+        msg['Subject'] = "Напоминание: получите полный доступ к материалам в Telegram!"
+        html = f"""
+        <p>Здравствуйте, {name or ''}!</p>
+        <p>Вы недавно оставляли заявку на бесплатные материалы курса. Чтобы получить полный доступ, присоединяйтесь к нашему Telegram-боту и приобретите полный курс.</p>
+        <a href=\"{TG_BOT_LINK}\"><button>Перейти в Telegram-бот</button></a>
+        <p style='color:#666;font-size:10px'>Игнорируйте это письмо, если уже оплатили курс.</p>
+        """
+        msg.attach(MIMEText(html, 'html'))
+        try:
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(FROM_EMAIL, email, msg.as_string())
+            await set_lead_notified(email)
+        except Exception as e:
+            logging.error(f"Ошибка отправки напоминания лидy {email}: {e}")
+
+@app.post("/run_leads_reminder")
+async def run_leads_reminder():
+    await notify_abandoned_leads()
+    return JSONResponse({"status": "success"})
