@@ -1362,7 +1362,9 @@ async def create_lead_and_notify(request: Request):
     if not (email and phone and name):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
 
+    logging.info(f"data: {name}, {email}, {phone}")
     await create_lead(name, email, phone)
+    logging.info(f"lead created")
 
     # Отправить WhatsApp сообщение через Whapi.Cloud
     wa_message = "Здравствуйте, мы очень рады с вами познакомиться!"
@@ -1378,6 +1380,7 @@ async def create_lead_and_notify(request: Request):
         "type": "text",
         "text": {"body": wa_message}
     }
+    logging.info(f"payload {payload}")
     # Дополнительно: в конфиге можно хранить токен и id
     sent = False
     try:
