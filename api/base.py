@@ -1307,7 +1307,7 @@ async def get_payment_data(request: Request):
     raw = await get_setting("CARDS")
     logging.info(f"raw {raw}")
 
-    price = price + (random.randint(1, 100) / 100)
+    # price = price + (random.randint(1, 100) / 100)
 
     cards = json.loads(raw)
     logging.info(f"cards {cards}")
