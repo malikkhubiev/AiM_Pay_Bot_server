@@ -84,7 +84,7 @@ SMTP_SERVER = "smtp.mail.ru"
 SMTP_PORT = 587
 SMTP_USER = "AiM"
 
-WHAPI_URL = "https://gate.whapi.cloud/messages"  # базовый URL Whapi.Cloud
+WHAPI_URL = "https://gate.whapi.cloud/messages/text"  # отправка текстового сообщения Whapi.Cloud
 
 templates = Jinja2Templates(directory="templates")
 
@@ -270,8 +270,7 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
     }
     payload = {
         "to": wa_phone,
-        "type": "text",
-        "text": {"body": wa_message}
+        "body": wa_message
     }
     logging.info(f"payload {payload}")
     try:
