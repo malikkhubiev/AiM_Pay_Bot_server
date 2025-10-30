@@ -17,6 +17,9 @@ YOOKASSA_PAYOUT_KEY = os.getenv("YOOKASSA_PAYOUT_KEY")
 YOOKASSA_PAYMENTS_URL = os.getenv("YOOKASSA_PAYMENTS_URL")
 YOOKASSA_AGENT_ID = os.getenv("YOOKASSA_AGENT_ID")
 
+# Whapi.Cloud API token (supports WHAPI_TOKEN or WHAPI_API_KEY)
+WHAPI_TOKEN = os.getenv("WHAPI_TOKEN") or os.getenv("WHAPI_API_KEY")
+
 DEFAULT_SETTINGS = {
     "MY_MONEY": 0,
     # Project configuration

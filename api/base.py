@@ -64,7 +64,8 @@ from database import (
 )
 from config import (
     BOT_USERNAME,
-    SMTP_PASSWORD
+    SMTP_PASSWORD,
+    WHAPI_TOKEN
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
@@ -83,9 +84,7 @@ SMTP_SERVER = "smtp.mail.ru"
 SMTP_PORT = 587
 SMTP_USER = "AiM"
 
-WHAPI_TOKEN = "YOUR_WHAPI_TOKEN"  # TODO: поставить ваш токен
-WHAPI_URL = "https://api.whapi.cloud/v1/messages"  # базовый URL
-WHAPI_PHONE_ID = "YOUR_PHONE_ID"  # TODO: ваш ID номера в Whapi
+WHAPI_URL = "https://gate.whapi.cloud/messages"  # базовый URL Whapi.Cloud
 
 templates = Jinja2Templates(directory="templates")
 
