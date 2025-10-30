@@ -92,9 +92,27 @@ def is_valid_email(email):
     # примитивный, но разумный валидатор
     return re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email) is not None
 
-def is_valid_phone_wa(phone):
-    phone_digits = ''.join([c for c in phone if c.isdigit()])
-    return len(phone_digits) >= 10
+def normalize_and_validate_phone_for_whapi(phone: str) -> str:
+    """Normalize input phone to digits for Whapi (E.164 without '+').
+    Rules:
+    - Strip all non-digits
+    - If starts with '00' → drop leading international prefix
+    - If 11 digits starting with '8' → replace leading '8' with '7' (RU)
+    - If 10 digits → assume RU, prefix '7'
+    - Validate length 11..15
+    Returns only digits.
+    """
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
+    if digits.startswith('00'):
+        digits = digits[2:]
+    if len(digits) == 11 and digits.startswith('8'):
+        digits = '7' + digits[1:]
+    if len(digits) == 10:
+        # Assume RU if no country code provided
+        digits = '7' + digits
+    if not (11 <= len(digits) <= 15):
+        raise ValueError("Некорректный номер телефона: ожидался международный формат")
+    return digits
 
 @app.post("/check_user")
 @exception_handler
@@ -262,8 +280,8 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
     await create_lead(name, email, phone)
     logging.info("lead created (internal)")
 
-    wa_message = "Здравствуйте, мы очень рады с вами познакомиться!"
-    wa_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+    wa_message = f"Здравствуйте, {name}! Мы очень рады с вами познакомиться!"
+    wa_phone = normalize_and_validate_phone_for_whapi(phone)
     headers = {
         "Authorization": f"Bearer {WHAPI_TOKEN}",
         "Content-Type": "application/json"
@@ -274,8 +292,6 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
     }
     logging.info(f"payload {payload}")
     try:
-        if not is_valid_phone_wa(wa_phone):
-            raise Exception("Невалидный номер телефона для WhatsApp")
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(WHAPI_URL, headers=headers, json=payload)
             resp.raise_for_status()
