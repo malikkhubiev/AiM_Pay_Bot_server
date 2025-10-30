@@ -1304,6 +1304,7 @@ async def get_payment_data(request: Request):
     verify_secret_code(request)
 
     price = float(await get_setting("COURSE_AMOUNT"))
+    logging.info(f"price {price}")
     raw = await get_setting("CARDS")
     logging.info(f"raw {raw}")
 
