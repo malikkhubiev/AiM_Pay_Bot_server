@@ -250,8 +250,40 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
 
     # Асинхронная отправка в фоне, чтобы не держать запрос в pending
     background_tasks.add_task(send_email_async, email, subject, html, text)
-    logging.info(f"Email queued to send asynchronously to {email}")
+    # Также создадим лида и отправим привет в WhatsApp в фоне
+    background_tasks.add_task(_create_lead_and_notify_internal, name, email, phone)
+    logging.info(f"Email and lead creation queued for {email} / {phone}")
     return JSONResponse({"status": "success", "queued": True})
+
+async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
+    if not (email and phone and name):
+        return
+    logging.info(f"creating lead (internal): {name}, {email}, {phone}")
+    await create_lead(name, email, phone)
+    logging.info("lead created (internal)")
+
+    wa_message = "Здравствуйте, мы очень рады с вами познакомиться!"
+    wa_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+    headers = {
+        "Authorization": f"Bearer {WHAPI_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "to": wa_phone,
+        "type": "text",
+        "text": {"body": wa_message}
+    }
+    logging.info(f"payload {payload}")
+    try:
+        if not is_valid_phone_wa(wa_phone):
+            raise Exception("Невалидный номер телефона для WhatsApp")
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(WHAPI_URL, headers=headers, json=payload)
+            resp.raise_for_status()
+        logging.info("WhatsApp sent (internal)")
+    except Exception as e:
+        logging.error(f"Ошибка при отправке WhatsApp (internal): {e}")
+    await set_lead_notified(email)
 
 @app.post("/getting_started")
 @exception_handler
@@ -1362,39 +1394,8 @@ async def create_lead_and_notify(request: Request):
     if not (email and phone and name):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
 
-    logging.info(f"data: {name}, {email}, {phone}")
-    await create_lead(name, email, phone)
-    logging.info(f"lead created")
-
-    # Отправить WhatsApp сообщение через Whapi.Cloud
-    wa_message = "Здравствуйте, мы очень рады с вами познакомиться!"
-
-    # Привести номер к международному формату (например, 79999999999)
-    wa_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
-    headers = {
-        "Authorization": f"Bearer {WHAPI_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "to": wa_phone,
-        "type": "text",
-        "text": {"body": wa_message}
-    }
-    logging.info(f"payload {payload}")
-    # Дополнительно: в конфиге можно хранить токен и id
-    sent = False
-    try:
-        if not is_valid_phone_wa(wa_phone):
-            raise Exception("Невалидный номер телефона для WhatsApp")
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(WHAPI_URL, headers=headers, json=payload)
-            resp.raise_for_status()
-        sent = True
-    except Exception as e:
-        logging.error(f"Ошибка при отправке WhatsApp: {e}")
-    # Пометить лид как notified независимо от успеха WA
-    await set_lead_notified(email)
-    return JSONResponse({"status": "success", "wa_sent": sent})
+    await _create_lead_and_notify_internal(name, email, phone)
+    return JSONResponse({"status": "success"})
 
 @app.post("/set_pay_email")
 async def set_pay_email(request: Request):
