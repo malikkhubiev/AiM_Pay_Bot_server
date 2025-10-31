@@ -210,6 +210,7 @@ async def start(request: Request):
         if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
             return_data["with_promo"] = True
 
+        logging.info(f"/start in base api return_data {return_data}")
         return JSONResponse(return_data)
     else:
         return_data["type"] = "temp_user"
