@@ -278,12 +278,23 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
     logging.info(f"Email and lead creation queued for {email} / {phone}")
     return JSONResponse({"status": "success", "queued": True})
 
-async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
+async def _create_lead_and_notify_internal(name: str, email: str, phone: str, lead_id: int = None):
     if not (email and phone and name):
         return
-    logging.info(f"creating lead (internal): {name}, {email}, {phone}")
-    lead_id = await create_lead(name, email, phone)
-    logging.info("lead created (internal)")
+    logging.info(f"notifying lead (internal): {name}, {email}, {phone}, lead_id={lead_id}")
+    
+    # Если lead_id не передан, пытаемся создать лид
+    if lead_id is None:
+        try:
+            lead_id = await create_lead(name, email, phone)
+            logging.info("lead created (internal)")
+        except ValueError as e:
+            # Дубликат лида - логируем, но не падаем
+            logging.warning(f"Лид с такими данными уже существует: {e}")
+            return
+        except Exception as e:
+            logging.error(f"Ошибка при создании лида: {e}")
+            return
 
     # Compose link to personalized landing
     server_url = "https://mind-testing.vercel.app"
@@ -1419,8 +1430,17 @@ async def create_lead_and_notify(request: Request):
     if not (email and phone and name):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
 
-    await _create_lead_and_notify_internal(name, email, phone)
-    return JSONResponse({"status": "success"})
+    try:
+        lead_id = await create_lead(name, email, phone)
+        # После успешного создания вызываем уведомления
+        await _create_lead_and_notify_internal(name, email, phone, lead_id=lead_id)
+        return JSONResponse({"status": "success", "lead_id": lead_id})
+    except ValueError as e:
+        # Дубликат лида
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=409)
+    except Exception as e:
+        logging.error(f"Ошибка при создании лида: {e}")
+        return JSONResponse({"status": "error", "message": "Ошибка при создании лида"}, status_code=500)
 
 @app.post("/set_pay_email")
 async def set_pay_email(request: Request):

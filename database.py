@@ -778,8 +778,22 @@ async def ultra_excute(query: str):
     return {"status": "success", "result": f"Executed {len(statements)} statements"}
 
 async def create_lead(name: str, email: str, phone: str) -> int:
-    lead = Lead(name=name, email=email, phone=phone)
+    # Проверка на дубликаты по email и phone
     async with database.transaction():
+        # Проверяем существующий лид с таким же email или phone
+        if email:
+            email_query = select(Lead).where(Lead.email == email)
+            existing_email = await database.fetch_one(email_query)
+            if existing_email:
+                raise ValueError(f"Лид с email {email} уже существует (ID: {existing_email['id']})")
+        
+        if phone:
+            phone_query = select(Lead).where(Lead.phone == phone)
+            existing_phone = await database.fetch_one(phone_query)
+            if existing_phone:
+                raise ValueError(f"Лид с телефоном {phone} уже существует (ID: {existing_phone['id']})")
+        
+        # Если дубликатов нет, создаем новый лид
         query = Lead.__table__.insert().values(
             name=name,
             email=email,
