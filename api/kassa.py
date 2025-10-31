@@ -32,7 +32,8 @@ from database import (
     update_payout_status,
     update_user_balance,
     get_all_settings,
-    set_setting
+    set_setting,
+    get_user_pay_email
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -245,7 +246,47 @@ async def payment_notification(request: Request):
                 "payment_id": payment_id
             }
             send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
-            await send_request(send_invite_link_url, notification_data)
+            try:
+                invite_response = await send_request(send_invite_link_url, notification_data)
+                
+                # Получаем email пользователя и отправляем ссылку на email
+                user_email = await get_user_pay_email(user_telegram_id)
+                if user_email and invite_response and isinstance(invite_response, dict) and invite_response.get("invite_link"):
+                    invite_link = invite_response.get("invite_link")
+                    subject = "Поздравляем! Ваша оплата прошла успешно 🎉"
+                    html = f"""
+                    <p>Здравствуйте!</p>
+                    <p>Ваша оплата курса прошла успешно! 🎉</p>
+                    <p>Вот ссылка для присоединения к нашей группе в Telegram:</p>
+                    <p><a href="{invite_link}">{invite_link}</a></p>
+                    <p><b>Важно:</b> Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!</p>
+                    <p>Если возникнут вопросы, обращайтесь к нам.</p>
+                    <p>С уважением,<br>Команда AiM Course</p>
+                    """
+                    text = f"""
+Здравствуйте!
+
+Ваша оплата курса прошла успешно! 🎉
+
+Вот ссылка для присоединения к нашей группе в Telegram:
+{invite_link}
+
+Важно: Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!
+
+Если возникнут вопросы, обращайтесь к нам.
+
+С уважением,
+Команда AiM Course
+                    """
+                    try:
+                        from utils import send_email_async
+                        await send_email_async(user_email, subject, html, text)
+                        logging.info(f"Email со ссылкой отправлен на {user_email}")
+                    except Exception as e:
+                        logging.error(f"Ошибка при отправке email на {user_email}: {e}")
+            except Exception as e:
+                logging.error(f"Ошибка при получении ссылки от бота: {e}")
+            
             await mark_payout_as_notified(payment_id)
             return JSONResponse({"status": "success"})
     
