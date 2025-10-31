@@ -291,7 +291,8 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
     except Exception:
         server_url = None
     link_part = f"\n\nСсылка была отправлена Вам на почту, дополнительно дублируем здесь: {server_url}/Form_warm/index.html?lead_id={lead_id}" if server_url else ""
-    wa_message = f"Здравствуйте, {name}!\nМы очень рады с Вами познакомиться, name!\nНапоминаем:\nВаша почта: {email}\nНомер телефона: {phone}{link_part}"
+    wa_message = f"Здравствуйте, {name}!\nМы очень рады с Вами познакомиться!\nНапоминаем:\nВаша почта: {email}\nНомер телефона: {phone}{link_part}"
+    logging.info(f"wa_message (full): {repr(wa_message)}")
     wa_phone = normalize_and_validate_phone_for_whapi(phone)
     headers = {
         "Authorization": f"Bearer {WHAPI_TOKEN}",
@@ -302,6 +303,7 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
         "body": wa_message
     }
     logging.info(f"payload {payload}")
+    logging.info(f"payload['body'] (full): {repr(payload['body'])}")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(WHAPI_URL, headers=headers, json=payload)
