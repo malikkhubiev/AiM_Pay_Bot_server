@@ -1509,9 +1509,13 @@ async def notify_abandoned_leads():
                     "to": digits,
                     "body": f"Здравствуйте, {name or ''}! Ваша анкета: {landing_link}"
                 }
+                logging.info(f"payload {payload}")
+                logging.info(f"token {WHAPI_TOKEN}")
+                logging.info(f"payload {WHAPI_URL}")
                 headers = {"Authorization": f"Bearer {WHAPI_TOKEN}", "Content-Type": "application/json"}
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.post(WHAPI_URL, json=payload, headers=headers)
+                    logging.info(f"resp {resp}")
                     if resp.status_code >= 300:
                         logging.error(f"WHAPI send failed {resp.status_code} {resp.text}")
         except Exception as e:
