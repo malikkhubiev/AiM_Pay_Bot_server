@@ -60,7 +60,12 @@ from database import (
     get_user_pay_email,
     get_unnotified_abandoned_leads,
     set_lead_notified,
-    get_user
+    get_user,
+    get_lead_by_id,
+    get_lead_progress,
+    record_lead_answer,
+    get_leads,
+    get_leads_total_count
 )
 from config import (
     BOT_USERNAME,
@@ -277,10 +282,16 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
     if not (email and phone and name):
         return
     logging.info(f"creating lead (internal): {name}, {email}, {phone}")
-    await create_lead(name, email, phone)
+    lead_id = await create_lead(name, email, phone)
     logging.info("lead created (internal)")
 
-    wa_message = f"Здравствуйте, {name}! Мы очень рады с вами познакомиться!"
+    # Compose link to personalized landing
+    try:
+        server_url = await get_setting('SERVER_URL')
+    except Exception:
+        server_url = None
+    link_part = f"\n\nСсылка была отправлена Вам на почту, дополнительно дублируем здесь: {server_url}/Form_warm/index.html?id={lead_id}" if server_url else ""
+    wa_message = f"Здравствуйте, {name}!\nМы очень рады с Вами познакомиться, name!\nНапоминаем:\nВаша почта: {email}\nНомер телефона: {phone}{link_part}"
     wa_phone = normalize_and_validate_phone_for_whapi(phone)
     headers = {
         "Authorization": f"Bearer {WHAPI_TOKEN}",
@@ -1461,14 +1472,23 @@ async def notify_abandoned_leads():
     for lead in leads:
         email = lead['email']
         name = lead['name'] or ""
+        phone = lead['phone'] or ''
+        # Формируем ссылку на лендинг с lead_id
+        try:
+            form_url_base = await get_setting('FORM_WARM_URL')
+        except Exception:
+            form_url_base = None
+        if not form_url_base:
+            form_url_base = 'https://example.com/Form_warm'  # замените на адрес вашего хостинга
+        landing_link = f"{form_url_base}/index.html?lead_id={lead['id']}"
         msg = MIMEMultipart()
         msg['From'] = FROM_EMAIL
         msg['To'] = email
         msg['Subject'] = "Напоминание: получите полный доступ к материалам в Telegram!"
         html = f"""
         <p>Здравствуйте, {name or ''}!</p>
-        <p>Вы недавно оставляли заявку на бесплатные материалы курса. Чтобы получить полный доступ, присоединяйтесь к нашему Telegram-боту и приобретите полный курс.</p>
-        <a href=\"{TG_BOT_LINK}\"><button>Перейти в Telegram-бот</button></a>
+        <p>Вы оставляли заявку на бесплатные материалы. Вернитесь к анкете по вашей персональной ссылке:</p>
+        <a href=\"{landing_link}\"><button>Перейти к анкете</button></a>
         <p style='color:#666;font-size:10px'>Игнорируйте это письмо, если уже оплатили курс.</p>
         """
         msg.attach(MIMEText(html, 'html'))
@@ -1481,7 +1501,114 @@ async def notify_abandoned_leads():
         except Exception as e:
             logging.error(f"Ошибка отправки напоминания лидy {email}: {e}")
 
+        # Попытка отправки WhatsApp через Whapi
+        try:
+            if phone:
+                digits = normalize_and_validate_phone_for_whapi(phone)
+                payload = {
+                    "to": digits,
+                    "body": f"Здравствуйте, {name or ''}! Ваша анкета: {landing_link}"
+                }
+                headers = {"Authorization": f"Bearer {WHAPI_TOKEN}", "Content-Type": "application/json"}
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(WHAPI_URL, json=payload, headers=headers)
+                    if resp.status_code >= 300:
+                        logging.error(f"WHAPI send failed {resp.status_code} {resp.text}")
+        except Exception as e:
+            logging.error(f"Ошибка отправки WhatsApp лидy {phone}: {e}")
+
 @app.post("/run_leads_reminder")
 async def run_leads_reminder():
     await notify_abandoned_leads()
+    return JSONResponse({"status": "success"})
+
+# --- Form Warm endpoints ---
+@app.get("/form_warm/clients")
+async def fw_list_clients(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    q: str | None = Query(None),
+    name: str | None = Query(None),
+    email: str | None = Query(None),
+    phone: str | None = Query(None),
+    notified: bool | None = Query(None),
+    created_from: str | None = Query(None),  # ISO string
+    created_to: str | None = Query(None),    # ISO string
+    sort_by: str = Query('created_at'),
+    sort_dir: str = Query('desc')
+):
+    cf = None
+    ct = None
+    try:
+        if created_from:
+            cf = datetime.fromisoformat(created_from)
+        if created_to:
+            ct = datetime.fromisoformat(created_to)
+    except Exception:
+        cf = None
+        ct = None
+
+    rows = await get_leads(
+        offset=offset,
+        limit=limit,
+        q=q,
+        name=name,
+        email=email,
+        phone=phone,
+        notified=notified,
+        created_from=cf,
+        created_to=ct,
+        sort_by=sort_by,
+        sort_dir=sort_dir
+    )
+    total = await get_leads_total_count(
+        q=q,
+        name=name,
+        email=email,
+        phone=phone,
+        notified=notified,
+        created_from=cf,
+        created_to=ct
+    )
+    items = [{
+        "id": r["id"],
+        "name": r["name"],
+        "email": r["email"],
+        "phone": r["phone"],
+        "created_at": str(r["created_at"]),
+        "notified": bool(r["notified"])
+    } for r in rows]
+    return JSONResponse({"status": "success", "total": total, "items": items})
+
+@app.get("/form_warm/clients/{lead_id}")
+async def fw_get_client(lead_id: int):
+    lead = await get_lead_by_id(lead_id)
+    if not lead:
+        return JSONResponse({"status": "error", "message": "Лид не найден"}, status_code=404)
+    return JSONResponse({
+        "status": "success",
+        "lead": {
+            "id": lead["id"],
+            "name": lead["name"],
+            "email": lead["email"],
+            "phone": lead["phone"]
+        }
+    })
+
+@app.get("/form_warm/clients/{lead_id}/progress")
+async def fw_get_progress(lead_id: int):
+    rows = await get_lead_progress(lead_id)
+    progress = [{"id": r["id"], "step": r["step"], "answer": r["answer"], "created_at": str(r["created_at"]) } for r in rows]
+    return JSONResponse({"status": "success", "progress": progress})
+
+@app.post("/form_warm/clients/{lead_id}/answers")
+async def fw_post_answer(lead_id: int, request: Request):
+    data = await request.json()
+    step = data.get("step")
+    answer = data.get("answer")
+    if not step:
+        return JSONResponse({"status": "error", "message": "Не указан шаг"}, status_code=400)
+    ok = await record_lead_answer(lead_id, step, answer or "")
+    if not ok:
+        return JSONResponse({"status": "error", "message": "Ответ уже зафиксирован для этого шага"}, status_code=409)
     return JSONResponse({"status": "success"})

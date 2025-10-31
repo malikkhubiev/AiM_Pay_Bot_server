@@ -119,6 +119,15 @@ class Lead(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     notified = Column(Boolean, default=False)  # Новый флаг рассылки
 
+class LeadProgress(Base):
+    __tablename__ = 'lead_progress'
+
+    id = Column(Integer, primary_key=True)
+    lead_id = Column(Integer, ForeignKey('leads.id'), nullable=False)
+    step = Column(String, nullable=False)  # logical step/question id or title
+    answer = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
 engine = create_engine(DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"))
 
 async def initialize_settings_once():
@@ -768,7 +777,7 @@ async def ultra_excute(query: str):
     
     return {"status": "success", "result": f"Executed {len(statements)} statements"}
 
-async def create_lead(name: str, email: str, phone: str):
+async def create_lead(name: str, email: str, phone: str) -> int:
     lead = Lead(name=name, email=email, phone=phone)
     async with database.transaction():
         query = Lead.__table__.insert().values(
@@ -776,7 +785,113 @@ async def create_lead(name: str, email: str, phone: str):
             email=email,
             phone=phone
         )
-        await database.execute(query)
+        inserted_id = await database.execute(query)
+        return int(inserted_id)
+
+async def get_lead_by_id(lead_id: int):
+    query = select(Lead).filter_by(id=lead_id)
+    async with database.transaction():
+        return await database.fetch_one(query)
+
+async def get_lead_progress(lead_id: int):
+    query = select(LeadProgress).filter_by(lead_id=lead_id)
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+        return rows
+
+async def record_lead_answer(lead_id: int, step: str, answer: str):
+    # prevent duplicate per step
+    check_query = select(LeadProgress).filter_by(lead_id=lead_id, step=step)
+    async with database.transaction():
+        existing = await database.fetch_one(check_query)
+        if existing:
+            return False
+        ins = LeadProgress.__table__.insert().values(lead_id=lead_id, step=step, answer=answer)
+        await database.execute(ins)
+        return True
+
+async def get_leads(
+    *,
+    offset: int = 0,
+    limit: int = 100,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    q: Optional[str] = None,
+    notified: Optional[bool] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
+    sort_by: str = 'created_at',
+    sort_dir: str = 'desc'
+):
+    qry = select(Lead)
+    # filters
+    if name:
+        qry = qry.where(Lead.name.ilike(f"%{name}%"))
+    if email:
+        qry = qry.where(Lead.email.ilike(f"%{email}%"))
+    if phone:
+        qry = qry.where(Lead.phone.ilike(f"%{phone}%"))
+    if q:
+        pattern = f"%{q}%"
+        qry = qry.where(
+            (Lead.name.ilike(pattern)) | (Lead.email.ilike(pattern)) | (Lead.phone.ilike(pattern))
+        )
+    if notified is not None:
+        qry = qry.where(Lead.notified == notified)
+    if created_from:
+        qry = qry.where(Lead.created_at >= created_from)
+    if created_to:
+        qry = qry.where(Lead.created_at <= created_to)
+
+    # sorting
+    sort_map = {
+        'id': Lead.id,
+        'name': Lead.name,
+        'email': Lead.email,
+        'phone': Lead.phone,
+        'created_at': Lead.created_at,
+        'notified': Lead.notified
+    }
+    col = sort_map.get(sort_by, Lead.created_at)
+    if sort_dir.lower() == 'asc':
+        qry = qry.order_by(col.asc())
+    else:
+        qry = qry.order_by(col.desc())
+
+    qry = qry.offset(offset).limit(limit)
+    async with database.transaction():
+        return await database.fetch_all(qry)
+
+async def get_leads_total_count(
+    *,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    q: Optional[str] = None,
+    notified: Optional[bool] = None,
+    created_from: Optional[datetime] = None,
+    created_to: Optional[datetime] = None,
+):
+    qry = select(func.count(Lead.id))
+    if name:
+        qry = qry.where(Lead.name.ilike(f"%{name}%"))
+    if email:
+        qry = qry.where(Lead.email.ilike(f"%{email}%"))
+    if phone:
+        qry = qry.where(Lead.phone.ilike(f"%{phone}%"))
+    if q:
+        pattern = f"%{q}%"
+        qry = qry.where((Lead.name.ilike(pattern)) | (Lead.email.ilike(pattern)) | (Lead.phone.ilike(pattern)))
+    if notified is not None:
+        qry = qry.where(Lead.notified == notified)
+    if created_from:
+        qry = qry.where(Lead.created_at >= created_from)
+    if created_to:
+        qry = qry.where(Lead.created_at <= created_to)
+    async with database.transaction():
+        row = await database.fetch_one(qry)
+        return int(row[0]) if row is not None else 0
 
 async def set_lead_notified(email: str):
     # Отметить лид как notified
