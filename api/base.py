@@ -286,12 +286,9 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
     logging.info("lead created (internal)")
 
     # Compose link to personalized landing
-    try:
-        server_url = await get_setting('SERVER_URL')
-    except Exception:
-        server_url = None
-    link_part = f"\n\nСсылка была отправлена Вам на почту, дополнительно дублируем здесь: {server_url}/Form_warm/index.html?lead_id={lead_id}" if server_url else ""
-    wa_message = f"Здравствуйте, {name}!\nМы очень рады с Вами познакомиться!\nНапоминаем:\nВаша почта: {email}\nНомер телефона: {phone}{link_part}"
+    server_url = "https://mind-testing.vercel.app"
+    link_part = f"\n\n✅ Ссылка на 150+ видео-уроков была отправлена тебе на почту.\n🎁 Чтобы принести тебе максимальную пользу, отправляем тест (10 вопросов) на мышление инженера ML как небольшой подарок: {server_url}/lead_id={lead_id}" if server_url else ""
+    wa_message = f"Здравствуйте, {name}!\nКоманда AiM очень рада с тобой познакомиться!)\nНапоминаем, твои данные:\nТвоя почта: {email}\nНомер телефона: {phone}{link_part}"
     logging.info(f"wa_message (full): {repr(wa_message)}")
     wa_phone = normalize_and_validate_phone_for_whapi(phone)
     headers = {
