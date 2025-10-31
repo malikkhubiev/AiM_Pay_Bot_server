@@ -290,7 +290,7 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str):
         server_url = await get_setting('SERVER_URL')
     except Exception:
         server_url = None
-    link_part = f"\n\nСсылка была отправлена Вам на почту, дополнительно дублируем здесь: {server_url}/Form_warm/index.html?id={lead_id}" if server_url else ""
+    link_part = f"\n\nСсылка была отправлена Вам на почту, дополнительно дублируем здесь: {server_url}/Form_warm/index.html?lead_id={lead_id}" if server_url else ""
     wa_message = f"Здравствуйте, {name}!\nМы очень рады с Вами познакомиться, name!\nНапоминаем:\nВаша почта: {email}\nНомер телефона: {phone}{link_part}"
     wa_phone = normalize_and_validate_phone_for_whapi(phone)
     headers = {
@@ -1537,6 +1537,8 @@ async def fw_list_clients(
     sort_by: str = Query('created_at'),
     sort_dir: str = Query('desc')
 ):
+    logging.info("[FW] list_clients called")
+    logging.info(f"[FW] params offset={offset} limit={limit} q={q} name={name} email={email} phone={phone} notified={notified} created_from={created_from} created_to={created_to} sort_by={sort_by} sort_dir={sort_dir}")
     cf = None
     ct = None
     try:
@@ -1578,13 +1580,17 @@ async def fw_list_clients(
         "created_at": str(r["created_at"]),
         "notified": bool(r["notified"])
     } for r in rows]
+    logging.info(f"[FW] list_clients result total={total} items={len(items)}")
     return JSONResponse({"status": "success", "total": total, "items": items})
 
 @app.get("/form_warm/clients/{lead_id}")
 async def fw_get_client(lead_id: int):
+    logging.info(f"[FW] get_client lead_id={lead_id}")
     lead = await get_lead_by_id(lead_id)
     if not lead:
+        logging.info("[FW] get_client not found")
         return JSONResponse({"status": "error", "message": "Лид не найден"}, status_code=404)
+    logging.info(f"[FW] get_client ok email={lead['email']} phone={lead['phone']}")
     return JSONResponse({
         "status": "success",
         "lead": {
@@ -1597,18 +1603,25 @@ async def fw_get_client(lead_id: int):
 
 @app.get("/form_warm/clients/{lead_id}/progress")
 async def fw_get_progress(lead_id: int):
+    logging.info(f"[FW] get_progress lead_id={lead_id}")
     rows = await get_lead_progress(lead_id)
     progress = [{"id": r["id"], "step": r["step"], "answer": r["answer"], "created_at": str(r["created_at"]) } for r in rows]
+    logging.info(f"[FW] get_progress count={len(progress)}")
     return JSONResponse({"status": "success", "progress": progress})
 
 @app.post("/form_warm/clients/{lead_id}/answers")
 async def fw_post_answer(lead_id: int, request: Request):
+    logging.info(f"[FW] post_answer lead_id={lead_id}")
     data = await request.json()
     step = data.get("step")
     answer = data.get("answer")
+    logging.info(f"[FW] post_answer payload step={step} answer={answer}")
     if not step:
+        logging.info("[FW] post_answer missing step")
         return JSONResponse({"status": "error", "message": "Не указан шаг"}, status_code=400)
     ok = await record_lead_answer(lead_id, step, answer or "")
     if not ok:
+        logging.info("[FW] post_answer duplicate")
         return JSONResponse({"status": "error", "message": "Ответ уже зафиксирован для этого шага"}, status_code=409)
+    logging.info("[FW] post_answer ok")
     return JSONResponse({"status": "success"})
