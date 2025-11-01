@@ -97,6 +97,11 @@ async def create_payment(request: Request):
     else:
         idempotence_key = existing_payment.idempotence_key
 
+    # Получаем email пользователя для чека
+    user_email = getattr(user, 'pay_email', None) if hasattr(user, 'pay_email') else (user.get('pay_email') if isinstance(user, dict) else None)
+    if not user_email:
+        user_email = await get_user_pay_email(telegram_id)
+
     payment_data = {
         "amount": {
             "value": f"{amount:.2f}",
@@ -112,6 +117,28 @@ async def create_payment(request: Request):
             "telegram_id": telegram_id
         }
     }
+
+    # Добавляем данные для автоматического формирования чека, если есть email
+    if user_email:
+        payment_data["receipt"] = {
+            "customer": {
+                "email": user_email
+            },
+            "items": [
+                {
+                    "description": "Доступ к курсу",
+                    "quantity": 1,
+                    "amount": {
+                        "value": f"{amount:.2f}",
+                        "currency": "RUB"
+                    },
+                    "vat_code": 1
+                }
+            ]
+        }
+        logging.info(f"Добавлены данные для чека с email: {user_email}")
+    else:
+        logging.warning(f"Email пользователя не найден, чек не будет сформирован автоматически для telegram_id: {telegram_id}")
     
     try:
         logger.info("Отправка запроса на создание платежа для пользователя с Telegram ID: %s", telegram_id)
