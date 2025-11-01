@@ -64,8 +64,10 @@ from database import (
     get_lead_by_id,
     get_lead_progress,
     record_lead_answer,
+    update_lead_answer,
     get_leads,
-    get_leads_total_count
+    get_leads_total_count,
+    get_or_create_lead_by_email
 )
 from config import (
     BOT_USERNAME,
@@ -357,6 +359,20 @@ async def getting_started(request: Request):
         await update_pending_referral(telegram_id)
         logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}")
         logging.info(f"Пользователь {username} зарегистрирован")
+        
+        # Создаем или обновляем лид для действия getting_started
+        try:
+            lead_id = await get_or_create_lead_by_email(
+                email=None,  # Email пока нет, будет при set_pay_email
+                telegram_id=str(telegram_id),
+                username=username
+            )
+            # Записываем действие getting_started
+            if lead_id:
+                await record_lead_answer(lead_id, 'bot_action_getting_started', 'true')
+            logging.info(f"Лид создан/обновлен для telegram_id={telegram_id}")
+        except Exception as e:
+            logging.error(f"Ошибка при создании лида: {e}")
 
         promo_user = await get_promo_user(telegram_id)
         number_of_promo = await get_promo_user_count() 
@@ -1448,11 +1464,12 @@ async def set_pay_email(request: Request):
     data = await request.json()
     telegram_id = data.get("telegram_id")
     email = data.get("email")
+    action_type = data.get("action_type", "entered")  # "entered" или "confirmed"
     if not (telegram_id and email):
         return JSONResponse({"status": "error", "message": "Нужен telegram_id и email"}, status_code=400)
     if not is_valid_email(email):
         return JSONResponse({"status": "error", "message": "Некорректный email"}, status_code=400)
-    await set_user_pay_email(telegram_id, email)
+    await set_user_pay_email(telegram_id, email, action_type)
     return JSONResponse({"status": "success"})
 
 @app.post("/get_pay_email")
@@ -1486,65 +1503,6 @@ async def get_payment_status(request: Request):
         elif user['pay_email']:
             status = "pending"
     return JSONResponse({"status": "success", "payment_status": status})
-
-async def notify_abandoned_leads():
-    leads = await get_unnotified_abandoned_leads()
-    for lead in leads:
-        email = lead['email']
-        name = lead['name'] or ""
-        phone = lead['phone'] or ''
-        # Формируем ссылку на лендинг с lead_id
-        try:
-            form_url_base = await get_setting('FORM_WARM_URL')
-        except Exception:
-            form_url_base = None
-        if not form_url_base:
-            form_url_base = 'https://example.com/Form_warm'  # замените на адрес вашего хостинга
-        landing_link = f"{form_url_base}/index.html?lead_id={lead['id']}"
-        msg = MIMEMultipart()
-        msg['From'] = FROM_EMAIL
-        msg['To'] = email
-        msg['Subject'] = "Напоминание: получите полный доступ к материалам в Telegram!"
-        html = f"""
-        <p>Здравствуйте, {name or ''}!</p>
-        <p>Вы оставляли заявку на бесплатные материалы. Вернитесь к анкете по вашей персональной ссылке:</p>
-        <a href=\"{landing_link}\"><button>Перейти к анкете</button></a>
-        <p style='color:#666;font-size:10px'>Игнорируйте это письмо, если уже оплатили курс.</p>
-        """
-        msg.attach(MIMEText(html, 'html'))
-        try:
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASSWORD)
-                server.sendmail(FROM_EMAIL, email, msg.as_string())
-            await set_lead_notified(email)
-        except Exception as e:
-            logging.error(f"Ошибка отправки напоминания лидy {email}: {e}")
-
-        # Попытка отправки WhatsApp через Whapi
-        try:
-            if phone:
-                digits = normalize_and_validate_phone_for_whapi(phone)
-                payload = {
-                    "to": digits,
-                    "body": f"Здравствуйте, {name or ''}! Ваша анкета: {landing_link}"
-                }
-                logging.info(f"payload {payload}")
-                logging.info(f"token {WHAPI_TOKEN}")
-                logging.info(f"payload {WHAPI_URL}")
-                headers = {"Authorization": f"Bearer {WHAPI_TOKEN}", "Content-Type": "application/json"}
-                async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.post(WHAPI_URL, json=payload, headers=headers)
-                    logging.info(f"resp {resp}")
-                    if resp.status_code >= 300:
-                        logging.error(f"WHAPI send failed {resp.status_code} {resp.text}")
-        except Exception as e:
-            logging.error(f"Ошибка отправки WhatsApp лидy {phone}: {e}")
-
-@app.post("/run_leads_reminder")
-async def run_leads_reminder():
-    await notify_abandoned_leads()
-    return JSONResponse({"status": "success"})
 
 # --- Form Warm endpoints ---
 @app.get("/form_warm/clients")
@@ -1601,6 +1559,8 @@ async def fw_list_clients(
         "name": r["name"],
         "email": r["email"],
         "phone": r["phone"],
+        "telegram_id": r.get("telegram_id"),
+        "username": r.get("username"),
         "created_at": str(r["created_at"]),
         "notified": bool(r["notified"])
     } for r in rows]
@@ -1621,7 +1581,9 @@ async def fw_get_client(lead_id: int):
             "id": lead["id"],
             "name": lead["name"],
             "email": lead["email"],
-            "phone": lead["phone"]
+            "phone": lead["phone"],
+            "telegram_id": lead.get("telegram_id"),
+            "username": lead.get("username")
         }
     })
 
@@ -1648,4 +1610,21 @@ async def fw_post_answer(lead_id: int, request: Request):
         logging.info("[FW] post_answer duplicate")
         return JSONResponse({"status": "error", "message": "Ответ уже зафиксирован для этого шага"}, status_code=409)
     logging.info("[FW] post_answer ok")
+    return JSONResponse({"status": "success"})
+
+@app.put("/form_warm/clients/{lead_id}/answers")
+async def fw_update_answer(lead_id: int, request: Request):
+    logging.info(f"[FW] update_answer lead_id={lead_id}")
+    data = await request.json()
+    step = data.get("step")
+    answer = data.get("answer")
+    logging.info(f"[FW] update_answer payload step={step} answer={answer}")
+    if not step:
+        logging.info("[FW] update_answer missing step")
+        return JSONResponse({"status": "error", "message": "Не указан шаг"}, status_code=400)
+    ok = await update_lead_answer(lead_id, step, answer or "")
+    if not ok:
+        logging.info("[FW] update_answer not found")
+        return JSONResponse({"status": "error", "message": "Ответ не найден для этого шага"}, status_code=404)
+    logging.info("[FW] update_answer ok")
     return JSONResponse({"status": "success"})

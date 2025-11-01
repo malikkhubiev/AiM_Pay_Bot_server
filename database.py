@@ -116,6 +116,8 @@ class Lead(Base):
     name = Column(String, nullable=True)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
+    telegram_id = Column(String, nullable=True)  # Telegram ID пользователя
+    username = Column(String, nullable=True)  # Telegram username
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     notified = Column(Boolean, default=False)  # Новый флаг рассылки
 
@@ -824,6 +826,19 @@ async def record_lead_answer(lead_id: int, step: str, answer: str):
         await database.execute(ins)
         return True
 
+async def update_lead_answer(lead_id: int, step: str, answer: str):
+    # update existing answer for a step
+    check_query = select(LeadProgress).filter_by(lead_id=lead_id, step=step)
+    async with database.transaction():
+        existing = await database.fetch_one(check_query)
+        if not existing:
+            return False
+        upd = LeadProgress.__table__.update().where(
+            (LeadProgress.lead_id == lead_id) & (LeadProgress.step == step)
+        ).values(answer=answer)
+        await database.execute(upd)
+        return True
+
 async def get_leads(
     *,
     offset: int = 0,
@@ -927,10 +942,93 @@ async def get_unnotified_abandoned_leads():
     async with database.transaction():
         return await database.fetch_all(query)
 
-async def set_user_pay_email(telegram_id: str, email: str):
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(pay_email=email)
+async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None, username: str = None, name: str = None, phone: str = None):
+    """
+    Получить или создать лид по email или telegram_id. Если лид существует, обновить его данными.
+    Если существует лид с telegram_id, но другим email, объединить их.
+    """
     async with database.transaction():
+        # Ищем лид по email (если email указан)
+        existing_by_email = None
+        if email:
+            email_query = select(Lead).where(Lead.email == email)
+            existing_by_email = await database.fetch_one(email_query)
+        
+        if existing_by_email:
+            # Обновляем существующий лид
+            update_values = {}
+            if telegram_id and not existing_by_email['telegram_id']:
+                update_values['telegram_id'] = telegram_id
+            if username and not existing_by_email['username']:
+                update_values['username'] = username
+            if name and not existing_by_email['name']:
+                update_values['name'] = name
+            if phone and not existing_by_email['phone']:
+                update_values['phone'] = phone
+            
+            if update_values:
+                upd_query = Lead.__table__.update().where(Lead.id == existing_by_email['id']).values(**update_values)
+                await database.execute(upd_query)
+            
+            return int(existing_by_email['id'])
+        
+        # Если email не найден (или не указан), ищем по telegram_id
+        if telegram_id:
+            tg_query = select(Lead).where(Lead.telegram_id == telegram_id)
+            existing_by_tg = await database.fetch_one(tg_query)
+            
+            if existing_by_tg:
+                # Объединяем: обновляем email существующего лида (если email указан)
+                update_values = {}
+                if email and not existing_by_tg['email']:
+                    update_values['email'] = email
+                if username and not existing_by_tg['username']:
+                    update_values['username'] = username
+                if name and not existing_by_tg['name']:
+                    update_values['name'] = name
+                if phone and not existing_by_tg['phone']:
+                    update_values['phone'] = phone
+                
+                if update_values:
+                    upd_query = Lead.__table__.update().where(Lead.id == existing_by_tg['id']).values(**update_values)
+                    await database.execute(upd_query)
+                return int(existing_by_tg['id'])
+        
+        # Создаем новый лид
+        query = Lead.__table__.insert().values(
+            name=name,
+            email=email,
+            phone=phone,
+            telegram_id=telegram_id,
+            username=username
+        )
+        inserted_id = await database.execute(query)
+        return int(inserted_id)
+
+async def set_user_pay_email(telegram_id: str, email: str, action_type: str = 'entered'):
+    """Устанавливает pay_email для пользователя и схлопывает лиды по email"""
+    async with database.transaction():
+        # Обновляем pay_email у пользователя
+        update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(pay_email=email)
         await database.execute(update_query)
+        
+        # Получаем данные пользователя
+        user_query = select(User).where(User.telegram_id == telegram_id)
+        user = await database.fetch_one(user_query)
+        
+        if user:
+            # Создаем или обновляем лид с объединением по email
+            lead_id = await get_or_create_lead_by_email(
+                email=email,
+                telegram_id=telegram_id,
+                username=user.get('username') if user else None
+            )
+            # Записываем действие
+            if lead_id:
+                action_step = 'bot_action_pay_email_entered' if action_type == 'entered' else 'bot_action_pay_email_confirmed'
+                await record_lead_answer(lead_id, action_step, email)
+            return lead_id
+        return None
 
 async def get_user_pay_email(telegram_id: str):
     query = select(User.pay_email).filter_by(telegram_id=telegram_id)

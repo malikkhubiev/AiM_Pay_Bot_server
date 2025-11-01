@@ -33,7 +33,9 @@ from database import (
     update_user_balance,
     get_all_settings,
     set_setting,
-    get_user_pay_email
+    get_user_pay_email,
+    get_or_create_lead_by_email,
+    record_lead_answer
 )
 
 template_env = Environment(loader=FileSystemLoader("templates"))
@@ -61,6 +63,23 @@ async def create_payment(request: Request):
         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
     if user.paid:
         return {"status": "error", "message": "Вы уже оплатили курс и являетесь его полноценым участником. Введите команду /start, затем получите пригласительную ссылку, если вдруг потеряли группу среди чатов"}
+
+    # Создаем или обновляем лид для действия "нажатие кнопки оплатить"
+    try:
+        # user может быть объектом Row или dict в зависимости от реализации БД
+        pay_email = getattr(user, 'pay_email', None) if hasattr(user, 'pay_email') else (user.get('pay_email') if isinstance(user, dict) else None)
+        username = getattr(user, 'username', None) if hasattr(user, 'username') else (user.get('username') if isinstance(user, dict) else None)
+        lead_id = await get_or_create_lead_by_email(
+            email=pay_email,
+            telegram_id=str(telegram_id),
+            username=username
+        )
+        # Записываем действие
+        if lead_id:
+            await record_lead_answer(lead_id, 'bot_action_pay_course_clicked', 'true')
+            logging.info(f"Лид {lead_id} обновлен для действия 'нажатие кнопки оплатить'")
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении лида в create_payment: {e}")
 
     existing_payment = await get_pending_payment(telegram_id)
 
