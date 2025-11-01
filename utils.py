@@ -41,10 +41,18 @@ def exception_handler(func):
             return await func(*args, **kwargs)
         except HTTPException as e:
             logging.error(f"HTTP error: {e.detail}")
-            return JSONResponse({"status": "error", "message": e.detail}, status_code=e.status_code)
+            response = JSONResponse({"status": "error", "message": e.detail}, status_code=e.status_code)
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            return response
         except Exception as e:
-            logging.error(f"Unexpected error: {e}")
-            return JSONResponse({"status": "error", "message": "Internal server error"}, status_code=500)
+            logging.error(f"Unexpected error: {e}", exc_info=True)
+            response = JSONResponse({"status": "error", "message": "Internal server error"}, status_code=500)
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            return response
     return wrapper
 
 # Разрешённые диапазоны и адреса для Yookassa

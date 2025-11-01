@@ -1554,6 +1554,7 @@ async def get_payment_status(request: Request):
 
 # --- Form Warm endpoints ---
 @app.get("/form_warm/clients")
+@exception_handler
 async def fw_list_clients(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -1576,44 +1577,49 @@ async def fw_list_clients(
             cf = datetime.fromisoformat(created_from)
         if created_to:
             ct = datetime.fromisoformat(created_to)
-    except Exception:
+    except Exception as e:
+        logging.error(f"[FW] Error parsing dates: {e}")
         cf = None
         ct = None
 
-    rows = await get_leads(
-        offset=offset,
-        limit=limit,
-        q=q,
-        name=name,
-        email=email,
-        phone=phone,
-        notified=notified,
-        created_from=cf,
-        created_to=ct,
-        sort_by=sort_by,
-        sort_dir=sort_dir
-    )
-    total = await get_leads_total_count(
-        q=q,
-        name=name,
-        email=email,
-        phone=phone,
-        notified=notified,
-        created_from=cf,
-        created_to=ct
-    )
-    items = [{
-        "id": r["id"],
-        "name": r["name"],
-        "email": r["email"],
-        "phone": r["phone"],
-        "telegram_id": r.get("telegram_id"),
-        "username": r.get("username"),
-        "created_at": str(r["created_at"]),
-        "notified": bool(r["notified"])
-    } for r in rows]
-    logging.info(f"[FW] list_clients result total={total} items={len(items)}")
-    return JSONResponse({"status": "success", "total": total, "items": items})
+    try:
+        rows = await get_leads(
+            offset=offset,
+            limit=limit,
+            q=q,
+            name=name,
+            email=email,
+            phone=phone,
+            notified=notified,
+            created_from=cf,
+            created_to=ct,
+            sort_by=sort_by,
+            sort_dir=sort_dir
+        )
+        total = await get_leads_total_count(
+            q=q,
+            name=name,
+            email=email,
+            phone=phone,
+            notified=notified,
+            created_from=cf,
+            created_to=ct
+        )
+        items = [{
+            "id": r["id"],
+            "name": r["name"],
+            "email": r["email"],
+            "phone": r["phone"],
+            "telegram_id": r.get("telegram_id"),
+            "username": r.get("username"),
+            "created_at": str(r["created_at"]),
+            "notified": bool(r["notified"])
+        } for r in rows]
+        logging.info(f"[FW] list_clients result total={total} items={len(items)}")
+        return JSONResponse({"status": "success", "total": total, "items": items})
+    except Exception as e:
+        logging.error(f"[FW] Error in list_clients: {e}", exc_info=True)
+        raise
 
 @app.get("/form_warm/clients/{lead_id}")
 async def fw_get_client(lead_id: int):
@@ -1792,9 +1798,9 @@ async def get_chat_deepseek_response(user_message: str, chat_history: list = Non
             f"ПРАВИЛА ОТВЕТОВ:\n"
             f"1. Отвечай КРАТКО (максимум 3-4 предложения)\n"
             f"2. Отвечай КОНКРЕТНО на вопрос клиента, используя данные из каталога\n"
-            f"3. Температура: 0 (отвечай строго по данным)\n"
+            f"3. Температура: 1 (отвечай строго по данным)\n"
             f"4. НЕ выдумывай информацию\n"
-            f"5. Если вопрос не по теме курса - кратко переведи в тему курса\n"
+            f"5. Если вопрос не по теме курса - пошути и кратко переведи в тему курса\n"
             f"6. БЕЗ markdown разметки в ответе"
         )
         
@@ -1821,7 +1827,7 @@ async def get_chat_deepseek_response(user_message: str, chat_history: list = Non
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=messages,
-                temperature=0
+                temperature=1
             )
             return response.choices[0].message.content
         
@@ -1864,31 +1870,40 @@ async def chat_send(request: Request):
                 "message": "Пожалуйста, задавайте краткие вопросы (до 200 символов). Будьте лаконичны!"
             })
         
-        # Проверка лимита сообщений (10)
-        message_count = await get_chat_message_count(session_id)
-        if message_count >= 10:
+        # Получаем историю для контекста из переданных данных (если есть) или из БД
+        # Проверяем лимит сообщений из переданной истории или из БД
+        chat_history_for_context = data.get("chat_history", [])
+        
+        # Подсчитываем количество сообщений пользователя из переданной истории
+        user_messages_count = len([m for m in chat_history_for_context if m.get("is_from_user", True)])
+        # Если есть сохраненные сообщения на сервере, учитываем их
+        message_count_db = await get_chat_message_count(session_id)
+        total_message_count = user_messages_count + message_count_db
+        
+        if total_message_count >= 10:
             return JSONResponse({
                 "message": "Извините, вы исчерпали лимит сообщений (10 сообщений)."
             })
         
-        # Сохраняем сообщение пользователя только если оно короткое
-        await save_chat_message(session_id, message, is_from_user=True)
-        
-        # Получаем историю для контекста
-        history = await get_chat_history(session_id, limit=10)
-        chat_history = [
-            {
-                "message": msg["message"],
-                "is_from_user": msg["is_from_user"]
-            }
-            for msg in history
-        ]
+        # НЕ сохраняем сообщение на сервер - только в localStorage до выхода
+        # Используем переданную историю для контекста, если она есть
+        if chat_history_for_context:
+            history_for_ai = chat_history_for_context[-10:]  # Последние 10 для контекста
+        else:
+            # Если история не передана, берем из БД (для обратной совместимости)
+            history = await get_chat_history(session_id, limit=10)
+            history_for_ai = [
+                {
+                    "message": msg["message"],
+                    "is_from_user": msg["is_from_user"]
+                }
+                for msg in history
+            ]
         
         # Получаем ответ от DeepSeek
-        response_text = await get_chat_deepseek_response(message, chat_history)
+        response_text = await get_chat_deepseek_response(message, history_for_ai)
         
-        # Сохраняем ответ AI
-        await save_chat_message(session_id, response_text, is_from_user=False)
+        # НЕ сохраняем ответ AI на сервер - только в localStorage до выхода
         
         return JSONResponse({"response": response_text})
         
@@ -1912,6 +1927,58 @@ async def chat_history(request: Request, session_id: str = Query(...)):
         return JSONResponse({"messages": messages})
     except Exception as e:
         logging.exception("Ошибка в chat_history")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/api/chat/save_history")
+async def save_chat_history(request: Request):
+    """Эндпоинт для массового сохранения истории чата (используется при выходе или отправке формы)"""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        chat_history = data.get("chat_history", [])
+        
+        if not session_id:
+            return JSONResponse({"error": "session_id is required"}, status_code=400)
+        
+        if not chat_history or not isinstance(chat_history, list):
+            return JSONResponse({"error": "chat_history is required and must be a list"}, status_code=400)
+        
+        # Получаем существующие сообщения на сервере для этой сессии
+        existing_messages = await get_chat_history(session_id, limit=1000)
+        existing_messages_set = set()
+        for msg in existing_messages:
+            # Создаем уникальный ключ для сообщения
+            key = (msg["message"], msg["is_from_user"])
+            existing_messages_set.add(key)
+        
+        # Сохраняем только новые сообщения (которых еще нет на сервере)
+        saved_count = 0
+        for msg in chat_history:
+            if isinstance(msg, dict) and "message" in msg:
+                message_text = msg.get("message", "").strip()
+                is_from_user = msg.get("is_from_user", True)
+                
+                # Проверяем, нет ли такого сообщения уже на сервере
+                key = (message_text, is_from_user)
+                if key not in existing_messages_set:
+                    await save_chat_message(
+                        session_id=session_id,
+                        message=message_text,
+                        is_from_user=is_from_user
+                    )
+                    existing_messages_set.add(key)  # Добавляем в set чтобы не дублировать в этой сессии
+                    saved_count += 1
+        
+        logging.info(f"Saved {saved_count} new chat messages for session_id={session_id} (total in request: {len(chat_history)})")
+        
+        return JSONResponse({
+            "status": "success",
+            "saved_count": saved_count,
+            "total_count": len(chat_history)
+        })
+        
+    except Exception as e:
+        logging.exception("Ошибка в save_chat_history")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/api/chat/all_sessions")
