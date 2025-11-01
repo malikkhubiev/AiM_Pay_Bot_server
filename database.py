@@ -130,6 +130,15 @@ class LeadProgress(Base):
     answer = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
+class ChatMessage(Base):
+    __tablename__ = 'chat_messages'
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String, nullable=False, index=True)  # Уникальный ID сессии пользователя
+    message = Column(String, nullable=False)  # Сообщение пользователя или ответ AI
+    is_from_user = Column(Boolean, default=True)  # True - от пользователя, False - от AI
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
 engine = create_engine(DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"))
 
 async def initialize_settings_once():
@@ -1035,4 +1044,28 @@ async def get_user_pay_email(telegram_id: str):
     async with database.transaction():
         result = await database.fetch_one(query)
         return result[0] if result else None
+
+# Функции для работы с чатом
+async def save_chat_message(session_id: str, message: str, is_from_user: bool):
+    """Сохраняет сообщение чата в базу данных"""
+    query = ChatMessage.__table__.insert().values(
+        session_id=session_id,
+        message=message,
+        is_from_user=is_from_user
+    )
+    async with database.transaction():
+        await database.execute(query)
+
+async def get_chat_history(session_id: str, limit: int = 50):
+    """Получает историю сообщений для сессии"""
+    query = select(ChatMessage).filter_by(session_id=session_id).order_by(ChatMessage.created_at.asc()).limit(limit)
+    async with database.transaction():
+        return await database.fetch_all(query)
+
+async def get_chat_message_count(session_id: str):
+    """Получает количество сообщений от пользователя в сессии"""
+    query = select(func.count(ChatMessage.id)).filter_by(session_id=session_id, is_from_user=True)
+    async with database.transaction():
+        result = await database.fetch_one(query)
+        return result[0] if result else 0
 

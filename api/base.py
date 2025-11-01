@@ -67,12 +67,16 @@ from database import (
     update_lead_answer,
     get_leads,
     get_leads_total_count,
-    get_or_create_lead_by_email
+    get_or_create_lead_by_email,
+    save_chat_message,
+    get_chat_history,
+    get_chat_message_count
 )
 from config import (
     BOT_USERNAME,
     SMTP_PASSWORD,
-    WHAPI_TOKEN
+    WHAPI_TOKEN,
+    DEEPSEEK_TOKEN
 )
 import pandas as pd
 from datetime import datetime, timezone, timedelta
@@ -1138,7 +1142,6 @@ async def update_and_get_settings(request: Request):
 
 
 VERIFY_TOKEN = "AiMcourseEducation"
-DEEPSEEK_TOKEN = "1"
 ACCESS_TOKEN = "1"
 
 
@@ -1628,3 +1631,181 @@ async def fw_update_answer(lead_id: int, request: Request):
         return JSONResponse({"status": "error", "message": "Ответ не найден для этого шага"}, status_code=404)
     logging.info("[FW] update_answer ok")
     return JSONResponse({"status": "success"})
+
+# === Chat Endpoints ===
+
+# Загрузка данных сайта из data.txt
+def load_site_data():
+    """Загружает данные о сайте из файла data.txt"""
+    import os
+    data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data.txt")
+    try:
+        with open(data_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        logging.warning(f"data.txt not found at {data_path}, using default")
+        return "Информация о курсе 'Машинное обучение без математики'."
+
+SITE_DATA = load_site_data()
+
+# Функция для запроса к DeepSeek для чата
+async def get_chat_deepseek_response(user_message: str, chat_history: list = None):
+    """Генерирует ответ через DeepSeek с температурой 0 и призывом к краткости"""
+    url = "https://api.intelligence.io.solutions/api/v1/chat/completions"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {DEEPSEEK_TOKEN}",
+    }
+    
+    # Формируем системный промпт с данными о сайте
+    system_prompt = (
+        f"Ты - AI-помощник курса 'Машинное обучение без математики'. "
+        f"Используй ТОЛЬКО эти данные для ответа:\n\n{SITE_DATA}\n\n"
+        f"ПРАВИЛА ОТВЕТОВ:\n"
+        f"1. Отвечай КРАТКО (максимум 3-4 предложения)\n"
+        f"2. Отвечай КОНКРЕТНО на вопрос клиента, используя данные из каталога\n"
+        f"3. Температура: 0 (отвечай строго по данным)\n"
+        f"4. НЕ выдумывай информацию\n"
+        f"5. Если вопрос не по теме курса - кратко переведи в тему курса\n"
+        f"6. БЕЗ markdown разметки в ответе"
+    )
+    
+    # Формируем сообщения для контекста
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Добавляем историю (если есть) - последние 5 сообщений для контекста
+    if chat_history:
+        for msg in chat_history[-5:]:
+            role = "user" if msg["is_from_user"] else "assistant"
+            messages.append({"role": role, "content": msg["message"]})
+    
+    # Добавляем текущее сообщение
+    messages.append({"role": "user", "content": user_message})
+    
+    data = {
+        "model": "deepseek-ai/DeepSeek-R1",
+        "messages": messages,
+        "temperature": 0,  # Нулевая температура
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            response_data = response.json()
+            text = response_data['choices'][0]['message']['content']
+            # Убираем reasoning если есть
+            bot_text = text.split('</think>\n\n')[1] if '</think>\n\n' in text else text
+            return bot_text.strip()
+        except Exception as e:
+            logging.error(f"Ошибка DeepSeek для чата: {e}")
+            return "Произошла ошибка при получении ответа. Попробуйте позже."
+
+@app.post("/api/chat/send")
+async def chat_send(request: Request):
+    """Эндпоинт для отправки сообщения в чат"""
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        message = data.get("message", "").strip()
+        
+        if not session_id:
+            return JSONResponse({"error": "session_id is required"}, status_code=400)
+        
+        if not message:
+            return JSONResponse({"error": "message is required"}, status_code=400)
+        
+        # Проверка краткости на стороне сервера (200 символов)
+        if len(message) > 200:
+            return JSONResponse({
+                "message": "Пожалуйста, задавайте краткие вопросы (до 200 символов). Будьте лаконичны!"
+            })
+        
+        # Проверка лимита сообщений (10)
+        message_count = await get_chat_message_count(session_id)
+        if message_count >= 10:
+            return JSONResponse({
+                "message": "Извините, вы исчерпали лимит сообщений (10 сообщений)."
+            })
+        
+        # Сохраняем сообщение пользователя только если оно короткое
+        await save_chat_message(session_id, message, is_from_user=True)
+        
+        # Получаем историю для контекста
+        history = await get_chat_history(session_id, limit=10)
+        chat_history = [
+            {
+                "message": msg["message"],
+                "is_from_user": msg["is_from_user"]
+            }
+            for msg in history
+        ]
+        
+        # Получаем ответ от DeepSeek
+        response_text = await get_chat_deepseek_response(message, chat_history)
+        
+        # Сохраняем ответ AI
+        await save_chat_message(session_id, response_text, is_from_user=False)
+        
+        return JSONResponse({"response": response_text})
+        
+    except Exception as e:
+        logging.exception("Ошибка в chat_send")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/chat/history")
+async def chat_history(request: Request, session_id: str = Query(...)):
+    """Эндпоинт для получения истории чата"""
+    try:
+        history = await get_chat_history(session_id, limit=50)
+        messages = [
+            {
+                "message": msg["message"],
+                "is_from_user": msg["is_from_user"],
+                "created_at": msg["created_at"].isoformat() if msg.get("created_at") else None
+            }
+            for msg in history
+        ]
+        return JSONResponse({"messages": messages})
+    except Exception as e:
+        logging.exception("Ошибка в chat_history")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/api/chat/all_sessions")
+async def get_all_chat_sessions(request: Request, limit: int = Query(100), offset: int = Query(0)):
+    """Эндпоинт для получения всех сессий чата (для CRM)"""
+    try:
+        from database import ChatMessage, database
+        from sqlalchemy import distinct
+        
+        # Получаем уникальные session_id
+        from database import ChatMessage
+        query = """
+            SELECT DISTINCT session_id 
+            FROM chat_messages 
+            ORDER BY session_id
+            LIMIT ? OFFSET ?
+        """
+        
+        async with database.transaction():
+            rows = await database.fetch_all(query, [limit, offset])
+        
+        # Для каждой сессии получаем количество сообщений и последнее сообщение
+        result = []
+        for row in rows:
+            session_id = row["session_id"]
+            history = await get_chat_history(session_id, limit=1)
+            message_count = await get_chat_message_count(session_id)
+            
+            result.append({
+                "session_id": session_id,
+                "message_count": message_count,
+                "last_message": history[-1]["message"] if history else None,
+                "last_activity": history[-1]["created_at"].isoformat() if history and history[-1].get("created_at") else None
+            })
+        
+        return JSONResponse({"sessions": result})
+    except Exception as e:
+        logging.exception("Ошибка в get_all_chat_sessions")
+        return JSONResponse({"error": str(e)}, status_code=500)
