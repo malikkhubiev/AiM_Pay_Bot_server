@@ -1651,56 +1651,73 @@ SITE_DATA = load_site_data()
 # Функция для запроса к DeepSeek для чата
 async def get_chat_deepseek_response(user_message: str, chat_history: list = None):
     """Генерирует ответ через DeepSeek с температурой 0 и призывом к краткости"""
-    url = "https://api.intelligence.io.solutions/api/v1/chat/completions"
-    
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {DEEPSEEK_TOKEN}",
-    }
-    
-    # Формируем системный промпт с данными о сайте
-    system_prompt = (
-        f"Ты - AI-помощник курса 'Машинное обучение без математики'. "
-        f"Используй ТОЛЬКО эти данные для ответа:\n\n{SITE_DATA}\n\n"
-        f"ПРАВИЛА ОТВЕТОВ:\n"
-        f"1. Отвечай КРАТКО (максимум 3-4 предложения)\n"
-        f"2. Отвечай КОНКРЕТНО на вопрос клиента, используя данные из каталога\n"
-        f"3. Температура: 0 (отвечай строго по данным)\n"
-        f"4. НЕ выдумывай информацию\n"
-        f"5. Если вопрос не по теме курса - кратко переведи в тему курса\n"
-        f"6. БЕЗ markdown разметки в ответе"
-    )
-    
-    # Формируем сообщения для контекста
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    # Добавляем историю (если есть) - последние 5 сообщений для контекста
-    if chat_history:
-        for msg in chat_history[-5:]:
-            role = "user" if msg["is_from_user"] else "assistant"
-            messages.append({"role": role, "content": msg["message"]})
-    
-    # Добавляем текущее сообщение
-    messages.append({"role": "user", "content": user_message})
-    
-    data = {
-        "model": "deepseek-ai/DeepSeek-R1",
-        "messages": messages,
-        "temperature": 0,  # Нулевая температура
-    }
-    
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            response_data = response.json()
-            text = response_data['choices'][0]['message']['content']
-            # Убираем reasoning если есть
-            bot_text = text.split('</think>\n\n')[1] if '</think>\n\n' in text else text
-            return bot_text.strip()
-        except Exception as e:
-            logging.error(f"Ошибка DeepSeek для чата: {e}")
-            return "Произошла ошибка при получении ответа. Попробуйте позже."
+    try:
+        import asyncio
+        from openai import OpenAI
+        
+        # Проверяем наличие токена
+        if not DEEPSEEK_TOKEN:
+            logging.error("DEEPSEEK_TOKEN не установлен")
+            return "Произошла ошибка конфигурации. Попробуйте позже."
+        
+        # Формируем системный промпт с данными о сайте
+        system_prompt = (
+            f"Ты - AI-помощник курса 'Машинное обучение без математики'. "
+            f"Используй ТОЛЬКО эти данные для ответа:\n\n{SITE_DATA}\n\n"
+            f"ПРАВИЛА ОТВЕТОВ:\n"
+            f"1. Отвечай КРАТКО (максимум 3-4 предложения)\n"
+            f"2. Отвечай КОНКРЕТНО на вопрос клиента, используя данные из каталога\n"
+            f"3. Температура: 0 (отвечай строго по данным)\n"
+            f"4. НЕ выдумывай информацию\n"
+            f"5. Если вопрос не по теме курса - кратко переведи в тему курса\n"
+            f"6. БЕЗ markdown разметки в ответе"
+        )
+        
+        # Формируем сообщения для контекста
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Добавляем историю (если есть) - последние 5 сообщений для контекста
+        if chat_history:
+            for msg in chat_history[-5:]:
+                role = "user" if msg["is_from_user"] else "assistant"
+                messages.append({"role": role, "content": msg["message"]})
+        
+        # Добавляем текущее сообщение
+        messages.append({"role": "user", "content": user_message})
+        
+        # Создаем клиент OpenAI для DeepSeek
+        client = OpenAI(
+            api_key=DEEPSEEK_TOKEN,
+            base_url="https://api.deepseek.com/v1"
+        )
+        
+        # Выполняем запрос к DeepSeek API в отдельном потоке (так как клиент синхронный)
+        def make_request():
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                temperature=0
+            )
+            return response.choices[0].message.content
+        
+        # Запускаем синхронный запрос в executor
+        loop = asyncio.get_event_loop()
+        text = await loop.run_in_executor(None, make_request)
+        
+        # Убираем reasoning если есть
+        if '</think>\n\n' in text:
+            bot_text = text.split('</think>\n\n')[1]
+        elif '</think>\n\n' in text:
+            bot_text = text.split('</think>\n\n')[1]
+        else:
+            bot_text = text
+        
+        return bot_text.strip()
+        
+    except Exception as e:
+        logging.error(f"Ошибка DeepSeek для чата: {e}")
+        logging.exception("Полная трассировка ошибки")
+        return "Произошла ошибка при получении ответа. Попробуйте позже."
 
 @app.post("/api/chat/send")
 async def chat_send(request: Request):

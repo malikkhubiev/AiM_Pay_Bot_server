@@ -24,3 +24,4 @@ qrcode
 PyPDF2
 reportlab
 pdf2image
+openai
