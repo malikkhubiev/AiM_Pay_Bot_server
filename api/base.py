@@ -70,8 +70,11 @@ from database import (
     get_or_create_lead_by_email,
     save_chat_message,
     get_chat_history,
-    get_chat_message_count
+    get_chat_message_count,
+    Lead,
+    database
 )
+from sqlalchemy import select
 from config import (
     BOT_USERNAME,
     SMTP_PASSWORD,
@@ -260,6 +263,9 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
     name = data.get("name")
     email = data.get("email")
     phone = data.get("phone")
+    chat_history = data.get("chat_history", [])  # История чата из localStorage
+    chat_session_id = data.get("chat_session_id", "")  # ID сессии чата
+    
     if not (name and email and phone):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
 
@@ -280,12 +286,12 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
 
     # Асинхронная отправка в фоне, чтобы не держать запрос в pending
     background_tasks.add_task(send_email_async, email, subject, html, text)
-    # Также создадим лида и отправим привет в WhatsApp в фоне
-    background_tasks.add_task(_create_lead_and_notify_internal, name, email, phone)
-    logging.info(f"Email and lead creation queued for {email} / {phone}")
+    # Также создадим лида и отправим привет в WhatsApp в фоне, передавая историю чата
+    background_tasks.add_task(_create_lead_and_notify_internal, name, email, phone, None, chat_history, chat_session_id)
+    logging.info(f"Email and lead creation queued for {email} / {phone}, chat_history_length={len(chat_history)}")
     return JSONResponse({"status": "success", "queued": True})
 
-async def _create_lead_and_notify_internal(name: str, email: str, phone: str, lead_id: int = None):
+async def _create_lead_and_notify_internal(name: str, email: str, phone: str, lead_id: int = None, chat_history: list = None, chat_session_id: str = None):
     if not (email and phone and name):
         return
     logging.info(f"notifying lead (internal): {name}, {email}, {phone}, lead_id={lead_id}")
@@ -298,10 +304,49 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str, le
         except ValueError as e:
             # Дубликат лида - логируем, но не падаем
             logging.warning(f"Лид с такими данными уже существует: {e}")
-            return
+            # Пытаемся найти существующий лид по email или phone
+            try:
+                # Ищем по email
+                if email:
+                    email_query = select(Lead).where(Lead.email == email)
+                    async with database.transaction():
+                        existing_lead = await database.fetch_one(email_query)
+                        if existing_lead:
+                            lead_id = existing_lead["id"]
+                            logging.info(f"Found existing lead_id={lead_id} by email")
+                        else:
+                            # Ищем по phone
+                            if phone:
+                                phone_query = select(Lead).where(Lead.phone == phone)
+                                existing_lead = await database.fetch_one(phone_query)
+                                if existing_lead:
+                                    lead_id = existing_lead["id"]
+                                    logging.info(f"Found existing lead_id={lead_id} by phone")
+                                else:
+                                    logging.warning("Lead not found by email or phone")
+                                    return
+                            else:
+                                return
+            except Exception as e2:
+                logging.error(f"Error finding existing lead: {e2}")
+                return
         except Exception as e:
             logging.error(f"Ошибка при создании лида: {e}")
             return
+    
+    # Сохраняем историю чата в базу, если она передана
+    if chat_history and chat_session_id:
+        try:
+            for msg in chat_history:
+                if isinstance(msg, dict) and "message" in msg:
+                    await save_chat_message(
+                        session_id=chat_session_id,
+                        message=msg.get("message", ""),
+                        is_from_user=msg.get("is_from_user", True)
+                    )
+            logging.info(f"Saved {len(chat_history)} chat messages for lead_id={lead_id}")
+        except Exception as e:
+            logging.error(f"Error saving chat history: {e}")
 
     # Compose link to personalized landing
     server_url = "https://mind-testing.vercel.app"
@@ -1614,6 +1659,86 @@ async def fw_post_answer(lead_id: int, request: Request):
         return JSONResponse({"status": "error", "message": "Ответ уже зафиксирован для этого шага"}, status_code=409)
     logging.info("[FW] post_answer ok")
     return JSONResponse({"status": "success"})
+
+@app.post("/form_warm/schedule_final_test")
+@exception_handler
+async def schedule_final_test(request: Request, background_tasks: BackgroundTasks):
+    """Планирует отправку ссылки на финальный тест через указанное время после закрытия первого теста"""
+    try:
+        data = await request.json()
+        lead_id = data.get("lead_id")
+        delay_seconds = data.get("delay_seconds", 30)
+        
+        if not lead_id:
+            return JSONResponse({"status": "error", "message": "lead_id не указан"}, status_code=400)
+        
+        logging.info(f"[FW] schedule_final_test lead_id={lead_id}, delay={delay_seconds}s")
+        
+        # Планируем отправку через указанное время
+        background_tasks.add_task(_send_final_test_after_delay, lead_id, delay_seconds)
+        
+        return JSONResponse({"status": "success", "message": f"Финальный тест будет отправлен через {delay_seconds} секунд"})
+    except Exception as e:
+        logging.exception("Error in schedule_final_test")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+async def _send_final_test_after_delay(lead_id: int, delay_seconds: int):
+    """Отправляет ссылку на финальный тест после задержки"""
+    import asyncio
+    await asyncio.sleep(delay_seconds)
+    
+    try:
+        logging.info(f"[FW] Sending final test link for lead_id={lead_id}")
+        
+        # Получаем данные лида
+        lead = await get_lead_by_id(lead_id)
+        if not lead:
+            logging.error(f"[FW] Lead {lead_id} not found")
+            return
+        
+        name = lead.get("name", "")
+        email = lead.get("email", "")
+        phone = lead.get("phone", "")
+        
+        if not phone:
+            logging.error(f"[FW] No phone for lead {lead_id}")
+            return
+        
+        # URL финального теста
+        final_test_url = "https://mind-testing.vercel.app/final.html"
+        final_test_link = f"{final_test_url}?lead_id={lead_id}"
+        
+        # Составляем сообщение для WhatsApp
+        wa_message = (
+            f"Здравствуй, {name}!\n\n"
+            f"🎯 Ты прошёл первый тест на мышление инженера ML!\n\n"
+            f"Теперь у тебя есть возможность узнать:\n"
+            f"📊 Стоит ли тебе купить курс?\n\n"
+            f"Пройди финальный тест из 3 вопросов и получи персональный вердикт:\n"
+            f"{final_test_link}\n\n"
+            f"Это поможет тебе принять правильное решение! 💪"
+        )
+        
+        wa_phone = normalize_and_validate_phone_for_whapi(phone)
+        headers = {
+            "Authorization": f"Bearer {WHAPI_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "to": wa_phone,
+            "body": wa_message
+        }
+        
+        logging.info(f"[FW] Sending WhatsApp for lead {lead_id} to {wa_phone}")
+        
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(WHAPI_URL, headers=headers, json=payload)
+            resp.raise_for_status()
+        
+        logging.info(f"[FW] Final test link sent successfully for lead {lead_id}")
+        
+    except Exception as e:
+        logging.exception(f"[FW] Error sending final test link for lead {lead_id}: {e}")
 
 @app.put("/form_warm/clients/{lead_id}/answers")
 async def fw_update_answer(lead_id: int, request: Request):
