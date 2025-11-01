@@ -1030,7 +1030,7 @@ async def set_user_pay_email(telegram_id: str, email: str, action_type: str = 'e
             lead_id = await get_or_create_lead_by_email(
                 email=email,
                 telegram_id=telegram_id,
-                username=user.get('username') if user else None
+                username=user['username']
             )
             # Записываем действие
             if lead_id:
