@@ -71,6 +71,7 @@ from database import (
     save_chat_message,
     get_chat_history,
     get_chat_message_count,
+    get_all_referrers_for_crm,
     Lead,
     database
 )
@@ -2018,3 +2019,60 @@ async def get_all_chat_sessions(request: Request, limit: int = Query(100), offse
     except Exception as e:
         logging.exception("Ошибка в get_all_chat_sessions")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# === Referrals CRM Endpoints ===
+
+@app.get("/api/referrals/all")
+async def get_all_referrers_crm(request: Request):
+    """Эндпоинт для получения всех рефереров с их статистикой для CRM"""
+    try:
+        referrers = await get_all_referrers_for_crm()
+        return JSONResponse({"status": "success", "referrers": referrers})
+    except Exception as e:
+        logging.exception("Ошибка в get_all_referrers_crm")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+@app.post("/api/referrals/mark_paid")
+async def mark_referral_paid(request: Request):
+    """Эндпоинт для отметки выплаты рефералу"""
+    try:
+        data = await request.json()
+        telegram_id = data.get("telegram_id")
+        paid_amount = data.get("paid_amount", 0)
+        
+        if not telegram_id:
+            return JSONResponse({"status": "error", "message": "telegram_id обязателен"}, status_code=400)
+        
+        # Получаем пользователя
+        user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+        if not user:
+            return JSONResponse({"status": "error", "message": "Пользователь не найден"}, status_code=404)
+        
+        # Обновляем баланс (уменьшаем на выплаченную сумму)
+        current_balance = int(user.balance or 0)
+        new_balance = max(0, current_balance - int(paid_amount))
+        await update_user_balance(telegram_id, new_balance)
+        
+        # Создаём запись о выплате
+        from database import Payout
+        import uuid
+        idempotence_key = str(uuid.uuid4())
+        from database import database as db
+        
+        query = """
+            INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status, referral_id)
+            VALUES (:telegram_id, :card_synonym, :idempotence_key, :amount, 'success', NULL)
+        """
+        values = {
+            "telegram_id": telegram_id,
+            "card_synonym": user.card_synonym or "manual",
+            "idempotence_key": idempotence_key,
+            "amount": float(paid_amount)
+        }
+        async with db.transaction():
+            await db.execute(query, values)
+        
+        return JSONResponse({"status": "success", "message": "Выплата отмечена", "new_balance": new_balance})
+    except Exception as e:
+        logging.exception("Ошибка в mark_referral_paid")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)

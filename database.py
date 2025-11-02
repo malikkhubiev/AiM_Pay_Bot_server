@@ -489,6 +489,45 @@ async def get_successful_referral_count(telegram_id: str) -> int:
 
     return result["count"] if result else 0
 
+async def get_all_referrers_for_crm():
+    """Получает всех рефереров с их статистикой для CRM"""
+    query = """
+        SELECT 
+            u.telegram_id,
+            u.username,
+            u.balance,
+            u.referral_rank,
+            COUNT(DISTINCT r.id) AS total_referred,
+            COUNT(DISTINCT CASE WHEN r.status = 'success' THEN r.id END) AS paid_referrals,
+            COUNT(DISTINCT CASE WHEN r.status = 'pending' THEN r.id END) AS pending_referrals,
+            COUNT(DISTINCT CASE WHEN r.status = 'registered' THEN r.id END) AS registered_referrals,
+            COALESCE((SELECT SUM(amount) FROM payouts WHERE telegram_id = u.telegram_id AND status = 'success'), 0) AS total_paid_out
+        FROM users u
+        LEFT JOIN referrals r ON r.referrer_id = u.telegram_id
+        WHERE EXISTS (SELECT 1 FROM referrals WHERE referrer_id = u.telegram_id)
+        GROUP BY u.telegram_id, u.username, u.balance, u.referral_rank
+        ORDER BY total_referred DESC, paid_referrals DESC
+    """
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+    
+    results = []
+    for row in rows:
+        results.append({
+            "telegram_id": row["telegram_id"],
+            "username": row["username"] or "—",
+            "balance": row["balance"] or 0,
+            "referral_rank": row["referral_rank"] or "—",
+            "total_referred": row["total_referred"] or 0,
+            "paid_referrals": row["paid_referrals"] or 0,
+            "pending_referrals": row["pending_referrals"] or 0,
+            "registered_referrals": row["registered_referrals"] or 0,
+            "unpaid_amount": (row["balance"] or 0) - (row["total_paid_out"] or 0),
+            "total_paid_out": row["total_paid_out"] or 0
+        })
+    
+    return results
+
 
 async def get_all_paid_money(telegram_id: str):
     query = select(func.sum(Payout.amount)).filter(Payout.telegram_id == telegram_id)

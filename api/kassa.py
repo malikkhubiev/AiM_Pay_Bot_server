@@ -64,13 +64,20 @@ async def create_payment(request: Request):
     if user.paid:
         return {"status": "error", "message": "Вы уже оплатили курс и являетесь его полноценым участником. Введите команду /start, затем получите пригласительную ссылку, если вдруг потеряли группу среди чатов"}
 
+    # Проверяем наличие email перед созданием платежа
+    user_email = getattr(user, 'pay_email', None) if hasattr(user, 'pay_email') else (user.get('pay_email') if isinstance(user, dict) else None)
+    if not user_email:
+        user_email = await get_user_pay_email(telegram_id)
+    
+    if not user_email:
+        return {"status": "error", "message": "Для создания платежа необходимо указать email. Пожалуйста, введите email в боте"}
+
     # Создаем или обновляем лид для действия "нажатие кнопки оплатить"
     try:
         # user может быть объектом Row или dict в зависимости от реализации БД
-        pay_email = getattr(user, 'pay_email', None) if hasattr(user, 'pay_email') else (user.get('pay_email') if isinstance(user, dict) else None)
         username = getattr(user, 'username', None) if hasattr(user, 'username') else (user.get('username') if isinstance(user, dict) else None)
         lead_id = await get_or_create_lead_by_email(
-            email=pay_email,
+            email=user_email,
             telegram_id=str(telegram_id),
             username=username
         )
@@ -96,11 +103,6 @@ async def create_payment(request: Request):
         )
     else:
         idempotence_key = existing_payment.idempotence_key
-
-    # Получаем email пользователя для чека
-    user_email = getattr(user, 'pay_email', None) if hasattr(user, 'pay_email') else (user.get('pay_email') if isinstance(user, dict) else None)
-    if not user_email:
-        user_email = await get_user_pay_email(telegram_id)
 
     payment_data = {
         "amount": {
@@ -310,24 +312,36 @@ async def payment_notification(request: Request):
                     <p>С уважением,<br>Команда AiM Course</p>
                     """
                     text = f"""
-Здравствуйте!
+                        Здравствуйте!
 
-Ваша оплата курса прошла успешно! 🎉
+                        Ваша оплата курса прошла успешно! 🎉
 
-Вот ссылка для присоединения к нашей группе в Telegram:
-{invite_link}
+                        Вот ссылка для присоединения к нашей группе в Telegram:
+                        {invite_link}
 
-Важно: Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!
+                        Важно: Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!
 
-Если возникнут вопросы, обращайтесь к нам.
+                        Если возникнут вопросы, обращайтесь к нам.
 
-С уважением,
-Команда AiM Course
+                        С уважением,
+                        Команда AiM Course
                     """
                     try:
                         from utils import send_email_async
                         await send_email_async(user_email, subject, html, text)
                         logging.info(f"Email со ссылкой отправлен на {user_email}")
+                        
+                        # Уведомляем пользователя в Telegram о том, что чек отправлен на email и отправляем ссылку
+                        notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
+                        notification_data = {
+                            "telegram_id": user_telegram_id,
+                            "message": f"✅ Ваша оплата успешно обработана!\n\n📧 Чек об оплате отправлен на вашу электронную почту: {user_email}\n\n🔗 Пригласительная ссылка на материалы курса:\n{invite_link}\n\n<b>Важно:</b> Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!"
+                        }
+                        try:
+                            await send_request(notify_url, notification_data)
+                            logging.info(f"Уведомление с ссылкой отправлено пользователю {user_telegram_id} в Telegram")
+                        except Exception as notify_e:
+                            logging.error(f"Ошибка при отправке уведомления о чеке: {notify_e}")
                     except Exception as e:
                         logging.error(f"Ошибка при отправке email на {user_email}: {e}")
             except Exception as e:
