@@ -1646,7 +1646,30 @@ async def fw_get_client(lead_id: int):
 async def fw_get_progress(lead_id: int):
     logging.info(f"[FW] get_progress lead_id={lead_id}")
     rows = await get_lead_progress(lead_id)
-    progress = [{"id": r["id"], "step": r["step"], "answer": r["answer"], "created_at": str(r["created_at"]) } for r in rows]
+    progress = []
+    for r in rows:
+        step_raw = r["step"] or ""
+        stage = None
+        step_key = step_raw
+        step_index = None
+        # Attempt to decode compound step in format stage|step|index
+        try:
+            parts = step_raw.split("|")
+            if len(parts) >= 2:
+                stage = parts[0] or None
+                step_key = parts[1] or step_raw
+            if len(parts) >= 3 and parts[2].isdigit():
+                step_index = int(parts[2])
+        except Exception:
+            pass
+        progress.append({
+            "id": r["id"],
+            "step": step_key,
+            "stage": stage,
+            "step_index": step_index,
+            "answer": r["answer"],
+            "created_at": str(r["created_at"]) 
+        })
     logging.info(f"[FW] get_progress count={len(progress)}")
     return JSONResponse({"status": "success", "progress": progress})
 
@@ -1666,6 +1689,67 @@ async def fw_post_answer(lead_id: int, request: Request):
         return JSONResponse({"status": "error", "message": "Ответ уже зафиксирован для этого шага"}, status_code=409)
     logging.info("[FW] post_answer ok")
     return JSONResponse({"status": "success"})
+
+# Unified progress capture (stage-aware)
+@app.post("/form_warm/clients/{lead_id}/progress")
+async def fw_post_progress(lead_id: int, request: Request):
+    logging.info(f"[FW] post_progress lead_id={lead_id}")
+    data = await request.json()
+    stage = data.get("stage")  # 'quiz' | 'longrid' | 'final' | etc
+    step_key = data.get("step") or data.get("stepKey")
+    answer = data.get("answer")
+    step_index = data.get("step_index")
+    # Compose step identifier that encodes stage and index for later decode
+    if not step_key:
+        return JSONResponse({"status": "error", "message": "Не указан шаг"}, status_code=400)
+    composed_step = step_key
+    if stage:
+        composed_step = f"{stage}|{step_key}|{step_index if step_index is not None else ''}"
+    ok = await record_lead_answer(lead_id, composed_step, answer or "")
+    if not ok:
+        # If duplicate, try to update existing answer
+        await update_lead_answer(lead_id, composed_step, answer or "")
+    return JSONResponse({"status": "success"})
+
+# Touch endpoint to update last activity via a lightweight progress record
+@app.post("/form_warm/clients/{lead_id}/touch")
+async def fw_touch_progress(lead_id: int, request: Request):
+    logging.info(f"[FW] touch lead_id={lead_id}")
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    stage = data.get("stage")
+    step_key = data.get("step") or data.get("stepKey") or "view"
+    step_index = data.get("step_index")
+    composed_step = f"touch|{stage or ''}|{step_key}|{step_index if step_index is not None else ''}"
+    # Store as empty answer just to mark activity
+    try:
+        await record_lead_answer(lead_id, composed_step, "")
+    except Exception:
+        pass
+    return JSONResponse({"status": "success"})
+
+# Save referral phone (required to participate as referral)
+@app.post("/save_referral_phone")
+@exception_handler
+async def save_referral_phone(request: Request):
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    phone = data.get("phone")
+    if not telegram_id or not phone:
+        return JSONResponse({"status": "error", "message": "Нужны telegram_id и phone"}, status_code=400)
+    try:
+        norm_phone = normalize_and_validate_phone_for_whapi(phone)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+    # Attach phone to lead (create if needed)
+    try:
+        lead_id = await get_or_create_lead_by_email(email=None, telegram_id=str(telegram_id), username=None, phone=norm_phone)
+        return JSONResponse({"status": "success", "lead_id": lead_id})
+    except Exception as e:
+        logging.exception("save_referral_phone error")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 @app.post("/form_warm/schedule_final_test")
 @exception_handler
