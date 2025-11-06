@@ -79,7 +79,6 @@ from sqlalchemy import select
 from config import (
     BOT_USERNAME,
     SMTP_PASSWORD,
-    WHAPI_TOKEN,
     DEEPSEEK_TOKEN
 )
 import pandas as pd
@@ -105,8 +104,8 @@ def is_valid_email(email):
     # примитивный, но разумный валидатор
     return re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email) is not None
 
-def normalize_and_validate_phone_for_whapi(phone: str) -> str:
-    """Normalize input phone to digits for Whapi (E.164 without '+').
+def normalize_and_validate_phone(phone: str) -> str:
+    """Normalize input phone to digits (E.164 without '+').
     Rules:
     - Strip all non-digits
     - If starts with '00' → drop leading international prefix
@@ -1752,7 +1751,7 @@ async def save_referral_phone(request: Request):
     if not telegram_id or not phone:
         return JSONResponse({"status": "error", "message": "Нужны telegram_id и phone"}, status_code=400)
     try:
-        norm_phone = normalize_and_validate_phone_for_whapi(phone)
+        norm_phone = normalize_and_validate_phone(phone)
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
     # Attach phone to lead (create if needed)

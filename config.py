@@ -17,8 +17,6 @@ YOOKASSA_PAYOUT_KEY = os.getenv("YOOKASSA_PAYOUT_KEY")
 YOOKASSA_PAYMENTS_URL = os.getenv("YOOKASSA_PAYMENTS_URL")
 YOOKASSA_AGENT_ID = os.getenv("YOOKASSA_AGENT_ID")
 
-# Whapi.Cloud API token (supports WHAPI_TOKEN or WHAPI_API_KEY)
-WHAPI_TOKEN = os.getenv("WHAPI_TOKEN") or os.getenv("WHAPI_API_KEY")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 DEEPSEEK_TOKEN = os.getenv("DEEPSEEK_TOKEN")
 METRICS_GOAL = os.getenv("METRICS_GOAL", "lead_form_sent") # lead_form_sent | go_to_bot | purchase_confirmed
@@ -35,6 +33,3 @@ DEFAULT_SETTINGS = {
     "PROMO_NUM_LIMIT": os.getenv("PROMO_NUM_LIMIT"),
     "CARDS": json.dumps(['2200 3005 6476 2126', '2200 7702 9733 5855', '2202 2050 3989 7050'])
 }
-
-# Email provider selection: SMTP or RESEND (default to RESEND for render.com)
-EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "RESEND").upper()
