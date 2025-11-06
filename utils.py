@@ -223,36 +223,6 @@ async def send_email_async(to_email: str, subject: str, html_body: str, text_bod
     except Exception as e:
         logger.exception(f"send_email_async failed for {to_email}: {e}")
 
-async def send_email_via_resend(to_email: str, subject: str, html_body: str, text_body: str = None):
-    if not RESEND_API_KEY:
-        raise HTTPException(status_code=500, detail="RESEND_API_KEY is not configured on the server")
-
-    payload = {
-        "from": RESEND_FROM,
-        "to": [to_email],
-        "subject": subject,
-        "html": html_body,
-    }
-    if text_body:
-        payload["text"] = text_body
-
-    headers = {
-        "Authorization": f"Bearer {RESEND_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    logger.debug(f"RESEND prepare: from={RESEND_FROM} to={to_email} subject={subject}")
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post("https://api.resend.com/emails", headers=headers, json=payload)
-            if response.is_error:
-                logger.error(f"Resend API error {response.status_code}: {response.text}")
-                raise HTTPException(status_code=502, detail="Resend API error")
-            logger.info(f"Resend message accepted for {to_email}: {response.text}")
-        except Exception as e:
-            logger.exception(f"Resend send error: {e}")
-            raise
-
 async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_body: str | None = None):
     """Прямая отправка письма через SMTP (mail.ru).
     Требуются переменные окружения:

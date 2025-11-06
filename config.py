@@ -38,8 +38,3 @@ DEFAULT_SETTINGS = {
 
 # Email provider selection: SMTP or RESEND (default to RESEND for render.com)
 EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "RESEND").upper()
-
-# Resend (HTTP API) configuration
-# Prefer RESEND_API (as requested), fallback to legacy RESEND_API_KEY if present
-RESEND_API_KEY = os.getenv("RESEND_API") or os.getenv("RESEND_API_KEY")
-RESEND_FROM = os.getenv("RESEND_FROM")
