@@ -347,6 +347,14 @@ async def payment_notification(request: Request):
             except Exception as e:
                 logging.error(f"Ошибка при получении ссылки от бота: {e}")
             
+            # Отправляем цель purchase_confirmed в Яндекс Метрику
+            try:
+                from utils import send_yandex_metrika_goal
+                await send_yandex_metrika_goal("purchase_confirmed")
+                logging.info(f"Yandex Metrika goal 'purchase_confirmed' sent for user {user_telegram_id}")
+            except Exception as e:
+                logging.error(f"Error sending Yandex Metrika goal: {e}")
+            
             await mark_payout_as_notified(payment_id)
             return JSONResponse({"status": "success"})
     

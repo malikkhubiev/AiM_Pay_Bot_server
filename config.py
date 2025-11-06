@@ -21,6 +21,8 @@ YOOKASSA_AGENT_ID = os.getenv("YOOKASSA_AGENT_ID")
 WHAPI_TOKEN = os.getenv("WHAPI_TOKEN") or os.getenv("WHAPI_API_KEY")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 DEEPSEEK_TOKEN = os.getenv("DEEPSEEK_TOKEN")
+METRICS_GOAL = os.getenv("METRICS_GOAL", "lead_form_sent") # lead_form_sent | go_to_bot | purchase_confirmed
+YANDEX_METRIKA_ID = os.getenv("YANDEX_METRIKA_ID", "")
 
 DEFAULT_SETTINGS = {
     "MY_MONEY": 0,

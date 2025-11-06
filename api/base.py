@@ -99,8 +99,6 @@ SMTP_SERVER = "smtp.mail.ru"
 SMTP_PORT = 587
 SMTP_USER = "AiM"
 
-WHAPI_URL = "https://gate.whapi.cloud/messages/text"  # отправка текстового сообщения Whapi.Cloud
-
 templates = Jinja2Templates(directory="templates")
 
 def is_valid_email(email):
@@ -266,10 +264,43 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
     phone = data.get("phone")
     chat_history = data.get("chat_history", [])  # История чата из localStorage
     chat_session_id = data.get("chat_session_id", "")  # ID сессии чата
+    utm_source = data.get("utm_source")
     
     if not (name and email and phone):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
 
+    # 1) Создаём/находим лида синхронно
+    try:
+        try:
+            lead_id = await create_lead(name, email, phone)
+            logging.info(f"lead created sync: {lead_id}")
+        except ValueError:
+            # Дубликат — найдём существующего по email
+            email_query = select(Lead).where(Lead.email == email)
+            async with database.transaction():
+                existing_lead = await database.fetch_one(email_query)
+                lead_id = existing_lead["id"] if existing_lead else None
+            logging.info(f"lead duplicated, resolved to id={lead_id}")
+        # Сохраним историю чата, если есть
+        if chat_history and chat_session_id:
+            for msg in chat_history:
+                if isinstance(msg, dict) and "message" in msg:
+                    await save_chat_message(
+                        session_id=chat_session_id,
+                        message=msg.get("message", ""),
+                        is_from_user=msg.get("is_from_user", True)
+                    )
+        # Запишем utm_source как шаг прогресса
+        if utm_source and lead_id:
+            try:
+                await record_lead_answer(lead_id, 'utm_source', str(utm_source))
+            except Exception as e:
+                logging.warning(f"Failed to record utm_source: {e}")
+    except Exception as e:
+        logging.exception(f"Lead create/save error: {e}")
+        lead_id = None
+
+    # 2) Письмо на почту по SMTP
     subject = "AiM Course — ссылка на демо"
     channel_url = "https://rutube.ru/channel/62003781/"
     html = (
@@ -284,13 +315,16 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
         f"Если будут вопросы, пиши в любое время. Будем рады тебе помочь: 01_AiM_01@mail.ru\n\n"
         f"Мы желаем тебе отличного дня и приятного просмотра!)"
     )
-
-    # Асинхронная отправка в фоне, чтобы не держать запрос в pending
     background_tasks.add_task(send_email_async, email, subject, html, text)
-    # Также создадим лида и отправим привет в WhatsApp в фоне, передавая историю чата
-    background_tasks.add_task(_create_lead_and_notify_internal, name, email, phone, None, chat_history, chat_session_id)
-    logging.info(f"Email and lead creation queued for {email} / {phone}, chat_history_length={len(chat_history)}")
-    return JSONResponse({"status": "success", "queued": True})
+
+    # 3) Помечаем notified и логируем
+    try:
+        await set_lead_notified(email)
+    except Exception as e:
+        logging.warning(f"set_lead_notified failed: {e}")
+
+    logging.info(f"Email queued via SMTP for {email} / {phone}, chat_history_length={len(chat_history)}, lead_id={lead_id}")
+    return JSONResponse({"status": "success", "lead_id": lead_id})
 
 async def _create_lead_and_notify_internal(name: str, email: str, phone: str, lead_id: int = None, chat_history: list = None, chat_session_id: str = None):
     if not (email and phone and name):
@@ -349,29 +383,7 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str, le
         except Exception as e:
             logging.error(f"Error saving chat history: {e}")
 
-    # Compose link to personalized landing
-    server_url = "https://mind-testing.vercel.app"
-    link_part = f"\n\n✅ Ссылка на 150+ видео-уроков была отправлена тебе на почту.\n🎁 Чтобы принести тебе максимальную пользу, отправляем тест (10 вопросов) на мышление инженера ML как небольшой подарок: {server_url}/?lead_id={lead_id}" if server_url else ""
-    wa_message = f"Здравствуй, {name}!\nКоманда AiM очень рада с тобой познакомиться!)\nНапоминаем, твои данные:\nТвоя почта: {email}\nНомер телефона: {phone}{link_part}"
-    logging.info(f"wa_message (full): {repr(wa_message)}")
-    wa_phone = normalize_and_validate_phone_for_whapi(phone)
-    headers = {
-        "Authorization": f"Bearer {WHAPI_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "to": wa_phone,
-        "body": wa_message
-    }
-    logging.info(f"payload {payload}")
-    logging.info(f"payload['body'] (full): {repr(payload['body'])}")
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(WHAPI_URL, headers=headers, json=payload)
-            resp.raise_for_status()
-        logging.info("WhatsApp sent (internal)")
-    except Exception as e:
-        logging.error(f"Ошибка при отправке WhatsApp (internal): {e}")
+    # Больше не отправляем WhatsApp. Просто отмечаем notified
     await set_lead_notified(email)
 
 @app.post("/getting_started")
@@ -1795,38 +1807,29 @@ async def _send_final_test_after_delay(lead_id: int, delay_seconds: int):
             logging.error(f"[FW] No phone for lead {lead_id}")
             return
         
-        # URL финального теста
-        final_test_url = "https://mind-testing.vercel.app/final.html"
-        final_test_link = f"{final_test_url}?lead_id={lead_id}"
-        
-        # Составляем сообщение для WhatsApp
-        wa_message = (
+    # URL финального теста
+    final_test_url = "https://mind-testing.vercel.app/final.html"
+    final_test_link = f"{final_test_url}?lead_id={lead_id}"
+
+    # Отправляем ссылку на финальный тест на email (SMTP)
+    try:
+        subject = "AiM Course — финальный тест"
+        html = (
+            f"<p>Здравствуй, {name}!</p>"
+            f"<p>🎯 Ты прошёл первый тест на мышление инженера ML!</p>"
+            f"<p>Теперь пройди финальный тест из 3 вопросов и получи персональный вердикт:</p>"
+            f"<p><a href=\"{final_test_link}\">Перейти к финальному тесту</a></p>"
+        )
+        text = (
             f"Здравствуй, {name}!\n\n"
             f"🎯 Ты прошёл первый тест на мышление инженера ML!\n\n"
-            f"Теперь у тебя есть возможность узнать:\n"
-            f"📊 Стоит ли тебе купить курс?\n\n"
-            f"Пройди финальный тест из 3 вопросов и получи персональный вердикт:\n"
-            f"{final_test_link}\n\n"
-            f"Это поможет тебе принять правильное решение! 💪"
+            f"Теперь пройди финальный тест из 3 вопросов и получи персональный вердикт:\n"
+            f"{final_test_link}\n"
         )
-        
-        wa_phone = normalize_and_validate_phone_for_whapi(phone)
-        headers = {
-            "Authorization": f"Bearer {WHAPI_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "to": wa_phone,
-            "body": wa_message
-        }
-        
-        logging.info(f"[FW] Sending WhatsApp for lead {lead_id} to {wa_phone}")
-        
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(WHAPI_URL, headers=headers, json=payload)
-            resp.raise_for_status()
-        
-        logging.info(f"[FW] Final test link sent successfully for lead {lead_id}")
+        await send_email_async(email, subject, html, text)
+        logging.info(f"[FW] Final test link emailed for lead {lead_id}")
+    except Exception as e:
+        logging.exception(f"[FW] Error emailing final test link for lead {lead_id}: {e}")
         
     except Exception as e:
         logging.exception(f"[FW] Error sending final test link for lead {lead_id}: {e}")

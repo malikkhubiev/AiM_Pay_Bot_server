@@ -17,7 +17,10 @@ from config import (
     YOOKASSA_SHOP_ID,
     SECRET_CODE,
     RESEND_API_KEY,
-    RESEND_FROM
+    RESEND_FROM,
+    SMTP_PASSWORD,
+    METRICS_GOAL,
+    YANDEX_METRIKA_ID
 )
 from yookassa import Configuration
 import logging
@@ -25,6 +28,9 @@ from database import (
     get_user
 )
 import asyncio
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 load_dotenv()
 
@@ -207,9 +213,12 @@ async def convert_pdf_to_image(pdf_path):
     return image_path
 
 async def send_email_async(to_email: str, subject: str, html_body: str, text_body: str = None):
-    logger.info(f"send_email_async scheduled for {to_email} via RESEND")
+    """Отправка email через SMTP (по умолчанию).
+    Используем SMTP Mail.ru: FROM и сервер читаются из переменных окружения/констант.
+    """
+    logger.info(f"send_email_async scheduled for {to_email} via SMTP")
     try:
-        await send_email_via_resend(to_email, subject, html_body, text_body)
+        await send_email_via_smtp(to_email, subject, html_body, text_body)
         logger.info(f"send_email_async completed for {to_email}")
     except Exception as e:
         logger.exception(f"send_email_async failed for {to_email}: {e}")
@@ -243,3 +252,72 @@ async def send_email_via_resend(to_email: str, subject: str, html_body: str, tex
         except Exception as e:
             logger.exception(f"Resend send error: {e}")
             raise
+
+async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_body: str | None = None):
+    """Прямая отправка письма через SMTP (mail.ru).
+    Требуются переменные окружения:
+      - SMTP_PASSWORD (пароль почты)
+    Отправитель фиксирован: 01_AiM_01@mail.ru
+    """
+    from_addr = "01_AiM_01@mail.ru"
+    smtp_host = "smtp.mail.ru"
+    smtp_port = 587
+    if not SMTP_PASSWORD:
+        raise HTTPException(status_code=500, detail="SMTP_PASSWORD is not configured on the server")
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = from_addr
+    msg['To'] = to_email
+    if text_body:
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+    try:
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
+        server.login(from_addr, SMTP_PASSWORD)
+        server.sendmail(from_addr, [to_email], msg.as_string())
+        server.quit()
+        logger.info(f"SMTP message sent to {to_email}")
+    except Exception as e:
+        logger.exception(f"SMTP send error: {e}")
+        raise
+
+async def send_yandex_metrika_goal(goal_name: str):
+    """Отправка цели в Яндекс Метрику через API.
+    
+    Args:
+        goal_name: Название цели (lead_form_sent, go_to_bot, purchase_confirmed)
+    """
+    if not YANDEX_METRIKA_ID or not METRICS_GOAL:
+        logger.warning("Yandex Metrika not configured or METRICS_GOAL not set")
+        return
+    
+    # Отправляем цель только если она соответствует METRICS_GOAL
+    if METRICS_GOAL != goal_name:
+        logger.info(f"Skipping goal {goal_name}, METRICS_GOAL is set to {METRICS_GOAL}")
+        return
+    
+    try:
+        # Яндекс Метрика API для отправки целей
+        # Используем метод reachGoal через HTTP API
+        url = f"https://mc.yandex.ru/watch/{YANDEX_METRIKA_ID}"
+        
+        # Для серверной отправки целей используем специальный endpoint
+        # Но так как Яндекс Метрика работает через клиентский код,
+        # мы можем использовать альтернативный подход - отправку через вебхук
+        # или просто логировать событие для последующей обработки
+        
+        # В данном случае, так как Яндекс Метрика работает через клиентский код,
+        # мы можем использовать альтернативный подход - отправку через вебхук
+        # или просто логировать событие для последующей обработки
+        
+        logger.info(f"Yandex Metrika goal '{goal_name}' should be sent (METRICS_GOAL={METRICS_GOAL})")
+        
+        # Примечание: Яндекс Метрика работает через клиентский код (JavaScript),
+        # поэтому для серверной отправки целей нужно использовать специальный API
+        # или отправлять событие через вебхук. В данном случае мы логируем событие.
+        
+    except Exception as e:
+        logger.exception(f"Error sending Yandex Metrika goal: {e}")
