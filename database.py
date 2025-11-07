@@ -40,7 +40,6 @@ class User(Base):
 
     invite_link = Column(String, nullable=True)
 
-    is_registered = Column(Boolean, default=False)
     source = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     pay_email = Column(String, nullable=True)  # Новое поле для email оплаты
@@ -219,8 +218,7 @@ async def get_user_by_unique_str(unique_str: str):
 
 async def get_registered_user(telegram_id: str):
     query = select(User).filter_by(
-        telegram_id=telegram_id,
-        is_registered=True
+        telegram_id=telegram_id
     )
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
@@ -512,17 +510,6 @@ async def get_pending_payout(telegram_id: str):
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query, {"telegram_id": telegram_id})
     
-async def get_expired_users():
-    """
-    Возвращает список пользователей, у которых истёк пробный период.
-    """
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    query = select(User).filter(
-        User.date_of_trial_ends <= now
-    )
-    async with database.transaction():  # Здесь используем async with
-        return await database.fetch_all(query)
-
 async def create_referral(telegram_id: str, referrer_id: int):
     query = Referral.__table__.insert().values(referrer_id=referrer_id, referred_id=telegram_id, status="pending")
     async with database.transaction():  # Используем async with для транзакции
@@ -553,27 +540,6 @@ async def update_pending_referral(telegram_id: str):
 
 async def update_referral_rank(telegram_id: str, rank: str):
     update_data = {"referral_rank": rank}
-    update_query = User.__table__.update().where(
-        User.telegram_id == telegram_id
-    ).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
-async def set_user_trial_end(telegram_id: str):
-    # Добавляем 24 часа к текущему времени
-    new_end_time = datetime.now(timezone.utc) + timedelta(hours=24)
-
-    update_data = {
-        "date_of_trial_ends": new_end_time
-    }
-    update_query = User.__table__.update().where(
-        User.telegram_id == telegram_id
-    ).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
-async def set_user_fake_paid(telegram_id: str):
-    update_data = {"paid": True}
     update_query = User.__table__.update().where(
         User.telegram_id == telegram_id
     ).values(update_data)
@@ -659,48 +625,7 @@ async def update_fio_and_date_of_cert(telegram_id: str, fio: str):
     update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
-
-async def save_invite_link_db(telegram_id: str, invite_link: str):
-    update_data = {'invite_link': invite_link}
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
-async def delete_expired_records_increase_course_amount():
-    expiration_date = datetime.now(timezone.utc) - timedelta(days=30)
-    query = select(User).where(
-        and_(
-            User.created_at < expiration_date,
-            User.is_registered == False
-        )
-    )
-    select_query = Setting.__table__.select().where(Setting.key == "COURSE_AMOUNT")
-
-    async with database.transaction():
-        current_setting = await database.fetch_one(select_query)
-
-        if current_setting:
-            current_value = float(current_setting.value)
-            new_value = current_value * 1.05  # Увеличиваем на 5%
-            
-            update_data = {'value': str(new_value)}
-            update_query = Setting.__table__.update().where(Setting.key == "COURSE_AMOUNT").values(update_data)
-
-            await database.execute(update_query)
-
-        expired_users = await database.fetch_all(query)
-        expired_records_count = 0
-        for user in expired_users:
-            delete_query = User.__table__.update().where(
-                User.id == user['id']
-            ).values(
-                telegram_id=None,
-                username=None
-            )
-            await database.execute(delete_query)
-            expired_records_count += 1
-        return expired_records_count
-
+ 
 async def create_payment_db(
         telegram_id: str,
         payment_id: str,

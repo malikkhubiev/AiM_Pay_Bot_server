@@ -36,10 +36,7 @@ from database import (
     get_conversion_stats_by_source,
     get_referral_conversion_stats,
     get_top_referrers_from_db,
-    get_expired_users,
-    save_invite_link_db,
     create_referral,
-    set_user_fake_paid,
     set_user_trial_end,
     update_pending_referral,
     update_referrer,
@@ -106,25 +103,82 @@ async def check_user(request: Request):
     logging.info(f"user {user}")
     return {"status": "success", "user": user}
 
-# @app.post("/save_invite_link")
-# @exception_handler
-# async def save_invite_link(request: Request):
-#     verify_secret_code(request)
-#     data = await request.json()
-#     telegram_id = data.get("telegram_id")
-#     invite_link = data.get("invite_link")
+@app.post("/start")
+@exception_handler
+async def start(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    username = data.get("username")
+    referrer_id = data.get('referrer_id')
 
-#     logging.info(f"Получены данные: telegram_id={telegram_id}, invite_link={invite_link}")
+    logging.info(f"Есть telegram_id {telegram_id}")
+    logging.info(f"Есть username {username}")
 
-#     check = check_parameters(telegram_id=telegram_id, invite_link=invite_link)
-#     logging.info(f"check = {check}")
-#     if not(check["result"]):
-#         return {"status": "error", "message": check["message"]}
+    check = check_parameters(
+        telegram_id=telegram_id,
+        username=username
+    )
+    if not(check["result"]):
+        return {"status": "error", "message": check["message"]}
 
-#     logging.info(f"checknuli")
-#     await save_invite_link_db(telegram_id, invite_link)
-#     return {"status": "success"}
+    logging.info(f"Check done")
+    return_data = {
+        "status": "success",
+        "response_message": "Привет",
+        "to_show": None,
+        "type": None
+    }
+    user = await get_registered_user(telegram_id)
+    logging.info(f"user есть {user}")
+    if user:
+        greet_message = ""
+        if user.referral_rank:
+            greet_message = f"{user.referral_rank}\n\nЗдравствуй, почётный участник реферальной программы и AiM Course!"
+        else:
+            greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
 
+        return_data["response_message"] = greet_message
+        return_data["type"] = "user"
+        logging.info(f"user есть")
+        if not(user.paid):
+            logging.info(f"user не платил")
+            return_data["to_show"] = "pay_course"
+        else:
+            return_data["to_show"] = "paid"
+        
+        logging.info(f"/start in base api return_data {return_data}")
+        return JSONResponse(return_data)
+    else:
+        try:
+            lead_id = await get_or_create_lead_by_email(
+                email=None,  # Email пока нет, будет при set_pay_email
+                telegram_id=str(telegram_id),
+                username=username
+            )
+            # Записываем действие getting_started
+            if lead_id:
+                await record_lead_answer(lead_id, 'bot_action_start', 'true')
+            logging.info(f"Лид создан/обновлен для telegram_id={telegram_id}")
+        except Exception as e:
+            logging.error(f"Ошибка при создании лида: {e}")
+
+    logging.info(f"user {user}")
+    
+    if referrer_id and referrer_id != telegram_id and (user and not(user.paid)):
+        logging.info(f"Есть реферрал и сам себя не привёл")
+        existing_referrer = await get_pending_referrer(telegram_id)
+        if existing_referrer:
+            logging.info(f"Реферал уже был")
+            await update_referrer(telegram_id, referrer_id)
+        else:
+            logging.info(f"Реферала ещё не было")
+            referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
+            if referrer_user and referrer_user.card_synonym: 
+                logging.info(f"Пользователь который привёл есть")
+                await create_referral(telegram_id, referrer_id)
+                logging.info(f"Сделали реферала в бд")
+    return JSONResponse(return_data)
 
 @app.post("/send_demo_link")
 @exception_handler
@@ -257,40 +311,6 @@ async def _create_lead_and_notify_internal(name: str, email: str, phone: str, le
 
     # Больше не отправляем WhatsApp. Просто отмечаем notified
     await set_lead_notified(email)
-
-@app.post("/getting_started")
-@exception_handler
-async def getting_started(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-
-    logging.info(f"Получены данные: telegram_id={telegram_id}")
-
-    check = check_parameters(telegram_id=telegram_id)
-    logging.info(f"check = {check}")
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
-
-    logging.info(f"checknuli")
-    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
-    logging.info(f"user = {user}")
-
-        # Создаем или обновляем лид для действия getting_started
-        try:
-            lead_id = await get_or_create_lead_by_email(
-                email=None,  # Email пока нет, будет при set_pay_email
-                telegram_id=str(telegram_id),
-                username=username
-            )
-            # Записываем действие getting_started
-            if lead_id:
-                await record_lead_answer(lead_id, 'bot_action_getting_started', 'true')
-            logging.info(f"Лид создан/обновлен для telegram_id={telegram_id}")
-        except Exception as e:
-            logging.error(f"Ошибка при создании лида: {e}")
-
-        return JSONResponse(return_data)
 
 async def generate_clients_report_list_base(telegram_id, response_type):
     logging.info(f"telegram_id {telegram_id}")
@@ -1160,90 +1180,6 @@ async def send_text_message(to_id, message_text):
             print(f"Ошибка отправки сообщения в Instagram: {e}")
 
 
-
-
-
-
-# @app.post("/start_trial")
-# @exception_handler
-# async def start_trial(request: Request): 
-#     logging.info(f"start_trial called")
-#     verify_secret_code(request)
-
-#     data = await request.json()
-#     telegram_id = data.get("telegram_id")
-#     logging.info(f"telegram_id {telegram_id}")
-
-#     check = check_parameters(telegram_id=telegram_id)
-#     if not(check["result"]):
-#         return {"status": "error", "message": check["message"]}
-    
-#     logging.info(f"чекнули")
-
-#     user = await get_user_by_telegram_id(telegram_id)
-    
-#     if not(user):
-#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
-#     if user.date_of_trial_ends:
-#         return {"status": "error", "message": "Ваш пробный период уже был использован"}
-
-#     await set_user_trial_end(telegram_id)
-#     notification_data = {
-#         "telegram_id": telegram_id,
-#     }
-#     send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
-#     await send_request(send_invite_link_url, notification_data)
-    
-#     return JSONResponse({"status": "success"})
-
-# @app.post("/fake_payment")
-# @exception_handler
-# async def fake_payment(request: Request): 
-#     logging.info(f"fake_payment called")
-#     verify_secret_code(request)
-
-#     data = await request.json()
-#     telegram_id = data.get("telegram_id")
-#     logging.info(f"telegram_id {telegram_id}")
-
-#     check = check_parameters(telegram_id=telegram_id)
-#     if not(check["result"]):
-#         return {"status": "error", "message": check["message"]}
-    
-#     logging.info(f"чекнули")
-
-#     user = await get_user_by_telegram_id(telegram_id)
-    
-#     if not(user):
-#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
-
-#     await set_user_fake_paid(telegram_id)
-#     notification_data = {
-#         "telegram_id": telegram_id,
-#     }
-#     send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
-#     await send_request(send_invite_link_url, notification_data)
-    
-#     return JSONResponse({"status": "success"})
-
-# @app.post("/delete_expired_users")
-# @exception_handler
-# async def delete_expired_users(): 
-#     logging.info(f"delete_expired_users called")
-
-#     expired_users = await get_expired_users()
-#     logging.info(f"expired_users {expired_users}")
-    
-#     for user in expired_users:
-#         if not(user.paid) and user.date_of_trial_ends:
-#             notification_data = {
-#                 "telegram_id": user.telegram_id,
-#             }
-#             kick_user_url = f"{str(await get_setting('MAHIN_URL'))}/kick_user"
-#             await send_request(kick_user_url, notification_data)
-    
-#     return JSONResponse({"status": "success"})
-
 @app.post("/get_payment_data")
 @exception_handler
 async def get_payment_data(request: Request): 
@@ -1854,73 +1790,3 @@ async def mark_referral_paid(request: Request):
     except Exception as e:
         logging.exception("Ошибка в mark_referral_paid")
         return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
-
-
-# @app.post("/start")
-# @exception_handler
-# async def start(request: Request):
-#     verify_secret_code(request)
-#     data = await request.json()
-#     telegram_id = data.get("telegram_id")
-#     username = data.get("username")
-#     referrer_id = data.get('referrer_id')
-
-#     logging.info(f"Есть telegram_id {telegram_id}")
-#     logging.info(f"Есть username {username}")
-    
-#     settings = await get_all_settings()
-#     logging.info(f"settings")
-#     logging.info(settings)
-
-#     check = check_parameters(
-#         telegram_id=telegram_id,
-#         username=username
-#     )
-#     if not(check["result"]):
-#         return {"status": "error", "message": check["message"]}
-
-#     logging.info(f"Check done")
-#     return_data = {
-#         "status": "success",
-#         "response_message": "Привет",
-#         "to_show": None,
-#         "type": None
-#     }
-#     user = await get_registered_user(telegram_id)
-#     logging.info(f"user есть {user}")
-#     if user:
-#         greet_message = ""
-#         if user.referral_rank:
-#             greet_message = f"{user.referral_rank}\n\nЗдравствуй, почётный участник реферальной программы и AiM course!"
-#         else:
-#             greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
-
-#         return_data["response_message"] = greet_message
-#         return_data["type"] = "user"
-#         logging.info(f"user есть")
-#         if not(user.paid):
-#             logging.info(f"user не платил")
-#             return_data["to_show"] = "pay_course"
-#         if not(user.date_of_trial_ends):
-#             logging.info(f"пробный период не использовался")
-#             return_data["to_show"] = "trial"
-        
-#         logging.info(f"/start in base api return_data {return_data}")
-#         return JSONResponse(return_data)
-#     
-#     logging.info(f"user {user}")
-    
-#     if referrer_id and referrer_id != telegram_id and (user and not(user.paid)):
-#         logging.info(f"Есть реферрал и сам себя не привёл")
-#         existing_referrer = await get_pending_referrer(telegram_id)
-#         if existing_referrer:
-#             logging.info(f"Реферал уже был")
-#             await update_referrer(telegram_id, referrer_id)
-#         else:
-#             logging.info(f"Реферала ещё не было")
-#             referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
-#             if referrer_user and referrer_user.card_synonym: 
-#                 logging.info(f"Пользователь который привёл есть")
-#                 await create_referral(telegram_id, referrer_id)
-#                 logging.info(f"Сделали реферала в бд")
-#     return JSONResponse(return_data)
