@@ -60,6 +60,7 @@ from database import (
     get_chat_history,
     get_chat_message_count,
     get_all_referrers_for_crm,
+    create_user,
     Lead,
     database
 )
@@ -111,8 +112,7 @@ async def start(request: Request):
     username = data.get("username")
     referrer_id = data.get('referrer_id')
 
-    logging.info(f"Есть telegram_id {telegram_id}")
-    logging.info(f"Есть username {username}")
+    logging.info(f"[START] Received request: telegram_id={telegram_id}, username={username}, referrer_id={referrer_id}")
 
     check = check_parameters(
         telegram_id=telegram_id,
@@ -149,6 +149,25 @@ async def start(request: Request):
         logging.info(f"/start in base api return_data {return_data}")
         return JSONResponse(return_data)
     else:
+        # Пользователя нет - создаем его
+        logging.info(f"Пользователя нет, создаем нового пользователя для telegram_id={telegram_id}")
+        try:
+            user = await create_user(telegram_id, username)
+            logging.info(f"Пользователь создан: {user}")
+            
+            # Устанавливаем данные для нового пользователя
+            greet_message = f"Привет, {username or 'друг'}! Добро пожаловать в AiM course!"
+            return_data["response_message"] = greet_message
+            return_data["type"] = "user"
+            return_data["to_show"] = "pay_course"  # Показываем кнопку оплаты для нового пользователя
+            logging.info(f"Установлен to_show=pay_course для нового пользователя")
+        except Exception as e:
+            logging.error(f"Ошибка при создании пользователя: {e}", exc_info=True)
+            return_data["response_message"] = f"Привет, {username or 'друг'}! Добро пожаловать!"
+            return_data["type"] = "user"
+            return_data["to_show"] = "pay_course"
+        
+        # Создаем/обновляем лид
         try:
             lead_id = await get_or_create_lead_by_email(
                 email=None,  # Email пока нет, будет при set_pay_email

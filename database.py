@@ -223,6 +223,22 @@ async def get_registered_user(telegram_id: str):
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_one(query)
 
+async def create_user(telegram_id: str, username: str = None):
+    """Создает нового пользователя в базе данных"""
+    unique_str = str(uuid.uuid4())
+    query = User.__table__.insert().values(
+        telegram_id=telegram_id,
+        username=username,
+        unique_str=unique_str,
+        paid=False,
+        balance=0,
+        passed_exam=False
+    )
+    async with database.transaction():
+        await database.execute(query)
+    # Получаем созданного пользователя
+    return await get_registered_user(telegram_id)
+
 async def get_users_with_positive_balance():
     query = "SELECT * FROM users WHERE balance > 0 ORDER BY balance DESC"  # Добавляем сортировку
     async with database.transaction():  # Здесь используем async with
