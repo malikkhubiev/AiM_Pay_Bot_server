@@ -16,7 +16,7 @@
 
 Контакты:
 Email: 01_AiM_01@mail.ru
-Telegram: @AiM_Pay_Bot
+Telegram: https://t.me/AiM_Pay_Bo?start=me
 Сайт: https://ai-bot-landing.vercel.app/
 
 FAQ:

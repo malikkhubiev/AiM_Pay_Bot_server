@@ -81,7 +81,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 
-TG_BOT_LINK = "https://t.me/AiM_Pay_Bot"
+TG_BOT_LINK = "https://t.me/AiM_Pay_Bo?start=me"
 FROM_EMAIL = "01_AiM_01@mail.ru"
 SMTP_SERVER = "smtp.mail.ru"
 SMTP_PORT = 587
