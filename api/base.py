@@ -37,7 +37,6 @@ from database import (
     get_referral_conversion_stats,
     get_top_referrers_from_db,
     create_referral,
-    set_user_trial_end,
     update_pending_referral,
     update_referrer,
     ultra_excute,
