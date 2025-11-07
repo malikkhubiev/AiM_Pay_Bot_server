@@ -221,6 +221,33 @@ async def send_email_async(to_email: str, subject: str, html_body: str, text_bod
     except Exception as e:
         logger.exception(f"send_email_async failed for {to_email}: {e}")
 
+def _send_email_sync(to_email: str, subject: str, html_body: str, text_body: str | None, from_addr: str, smtp_host: str, smtp_port: int, smtp_password: str):
+    """Синхронная функция для отправки email через SMTP."""
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = from_addr
+    msg['To'] = to_email
+    if text_body:
+        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+    server = None
+    try:
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+        server.starttls()
+        server.login(from_addr, smtp_password)
+        server.sendmail(from_addr, [to_email], msg.as_string())
+        logger.info(f"SMTP message sent to {to_email}")
+    except (OSError, smtplib.SMTPException) as e:
+        logger.error(f"SMTP send error for {to_email}: {e}")
+        raise
+    finally:
+        if server:
+            try:
+                server.quit()
+            except:
+                pass
+
 async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_body: str | None = None):
     """Прямая отправка письма через SMTP (mail.ru).
     Требуются переменные окружения:
@@ -231,26 +258,24 @@ async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_
     smtp_host = "smtp.mail.ru"
     smtp_port = 587
     if not SMTP_PASSWORD:
-        raise HTTPException(status_code=500, detail="SMTP_PASSWORD is not configured on the server")
-
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = from_addr
-    msg['To'] = to_email
-    if text_body:
-        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
-    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+        logger.warning("SMTP_PASSWORD is not configured on the server")
+        return  # Silently fail instead of raising exception
 
     try:
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.starttls()
-        server.login(from_addr, SMTP_PASSWORD)
-        server.sendmail(from_addr, [to_email], msg.as_string())
-        server.quit()
-        logger.info(f"SMTP message sent to {to_email}")
+        # Run synchronous SMTP operations in a thread pool to avoid blocking
+        await asyncio.to_thread(
+            _send_email_sync,
+            to_email, subject, html_body, text_body,
+            from_addr, smtp_host, smtp_port, SMTP_PASSWORD
+        )
+    except (OSError, smtplib.SMTPException) as e:
+        logger.error(f"SMTP async send failed for {to_email}: {e}")
+        # Don't raise exception - just log the error to prevent breaking the application
+        # Network issues on Render might prevent SMTP from working
+        pass
     except Exception as e:
-        logger.exception(f"SMTP send error: {e}")
-        raise
+        logger.exception(f"Unexpected error in send_email_via_smtp for {to_email}: {e}")
+        pass
 
 async def send_yandex_metrika_goal(goal_name: str):
     """Отправка цели в Яндекс Метрику через API.

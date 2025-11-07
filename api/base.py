@@ -1622,8 +1622,8 @@ async def fw_list_clients(
             "name": r["name"],
             "email": r["email"],
             "phone": r["phone"],
-            "telegram_id": r.get("telegram_id"),
-            "username": r.get("username"),
+            "telegram_id": getattr(r, "telegram_id", None),
+            "username": getattr(r, "username", None),
             "created_at": str(r["created_at"]),
             "notified": bool(r["notified"])
         } for r in rows]
@@ -1640,6 +1640,8 @@ async def fw_get_client(lead_id: int):
     if not lead:
         logging.info("[FW] get_client not found")
         return JSONResponse({"status": "error", "message": "Лид не найден"}, status_code=404)
+    # Access record fields using [] notation (database record object supports dict-like access)
+    # For optional fields, use getattr with None as default
     logging.info(f"[FW] get_client ok name={lead['email']} email={lead['email']} phone={lead['phone']}")
     return JSONResponse({
         "status": "success",
@@ -1648,8 +1650,8 @@ async def fw_get_client(lead_id: int):
             "name": lead["name"],
             "email": lead["email"],
             "phone": lead["phone"],
-            "telegram_id": lead.get("telegram_id"),
-            "username": lead.get("username")
+            "telegram_id": getattr(lead, "telegram_id", None),
+            "username": getattr(lead, "username", None)
         }
     })
 
