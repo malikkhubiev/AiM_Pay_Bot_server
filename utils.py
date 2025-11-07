@@ -103,7 +103,32 @@ def verify_secret_code(request: Request):
     if secret_code != SECRET_CODE:
         raise HTTPException(status_code=403, detail="Вам запрещён доступ к серверу")
     return True
-        
+
+def is_valid_email(email):
+    # примитивный, но разумный валидатор
+    return re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email) is not None
+
+def normalize_and_validate_phone(phone: str) -> str:
+    """Normalize input phone to digits (E.164 without '+').
+    Rules:
+    - Strip all non-digits
+    - If starts with '00' → drop leading international prefix
+    - If 11 digits starting with '8' → replace leading '8' with '7' (RU)
+    - If 10 digits → assume RU, prefix '7'
+    - Validate length 11..15
+    Returns only digits.
+    """
+    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
+    if digits.startswith('00'):
+        digits = digits[2:]
+    if len(digits) == 11 and digits.startswith('8'):
+        digits = '7' + digits[1:]
+    if len(digits) == 10:
+        # Assume RU if no country code provided
+        digits = '7' + digits
+    if not (11 <= len(digits) <= 15):
+        raise ValueError("Некорректный номер телефона: ожидался международный формат")
+    return digits
 
 def switch_configuration(account_id, secret_key):
     logging.info(f"{account_id}, {secret_key}")

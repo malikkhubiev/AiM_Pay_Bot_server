@@ -21,20 +21,16 @@ from database import (
     set_setting,
     get_all_settings,
     get_registered_user,
-    get_temp_user,
     get_users_with_positive_balance,
     get_payment_date,
     get_start_working_date,
     get_user_by_cert_id,
-    get_promo_users_count,
     get_payments_frequency_db,
     get_pending_referrer,
     get_referred_user,
     get_all_paid_money,
     get_paid_count,
     get_all_referred,
-    get_promo_user,
-    get_promo_user_count,
     get_user_by_unique_str,
     get_paid_referrals_by_user,
     get_conversion_stats_by_source,
@@ -43,13 +39,9 @@ from database import (
     get_expired_users,
     save_invite_link_db,
     create_referral,
-    create_temp_user,
-    add_promo_user,
     set_user_fake_paid,
     set_user_trial_end,
     update_pending_referral,
-    update_temp_user_registered,
-    update_temp_user,
     update_referrer,
     ultra_excute,
     update_fio_and_date_of_cert,
@@ -92,39 +84,13 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 
-TG_BOT_LINK = "https://t.me/AiM_Pay_Bot"  # TODO: поменять на вашего бота
+TG_BOT_LINK = "https://t.me/AiM_Pay_Bot"
 FROM_EMAIL = "01_AiM_01@mail.ru"
 SMTP_SERVER = "smtp.mail.ru"
 SMTP_PORT = 587
 SMTP_USER = "AiM"
 
 templates = Jinja2Templates(directory="templates")
-
-def is_valid_email(email):
-    # примитивный, но разумный валидатор
-    return re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email) is not None
-
-def normalize_and_validate_phone(phone: str) -> str:
-    """Normalize input phone to digits (E.164 without '+').
-    Rules:
-    - Strip all non-digits
-    - If starts with '00' → drop leading international prefix
-    - If 11 digits starting with '8' → replace leading '8' with '7' (RU)
-    - If 10 digits → assume RU, prefix '7'
-    - Validate length 11..15
-    Returns only digits.
-    """
-    digits = ''.join(ch for ch in (phone or '') if ch.isdigit())
-    if digits.startswith('00'):
-        digits = digits[2:]
-    if len(digits) == 11 and digits.startswith('8'):
-        digits = '7' + digits[1:]
-    if len(digits) == 10:
-        # Assume RU if no country code provided
-        digits = '7' + digits
-    if not (11 <= len(digits) <= 15):
-        raise ValueError("Некорректный номер телефона: ожидался международный формат")
-    return digits
 
 @app.post("/check_user")
 @exception_handler
@@ -159,99 +125,6 @@ async def check_user(request: Request):
 #     await save_invite_link_db(telegram_id, invite_link)
 #     return {"status": "success"}
 
-@app.post("/start")
-@exception_handler
-async def start(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    username = data.get("username")
-    referrer_id = data.get('referrer_id')
-
-    logging.info(f"Есть telegram_id {telegram_id}")
-    logging.info(f"Есть username {username}")
-    
-    settings = await get_all_settings()
-    logging.info(f"settings")
-    logging.info(settings)
-
-    check = check_parameters(
-        telegram_id=telegram_id,
-        username=username
-    )
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
-
-    logging.info(f"Check done")
-    return_data = {
-        "status": "success",
-        "response_message": "Привет",
-        "to_show": None,
-        "with_promo": None,
-        "type": None
-    }
-    user = await get_registered_user(telegram_id)
-    logging.info(f"user есть {user}")
-    temp_user = None
-    if user:
-        greet_message = ""
-        if user.referral_rank:
-            greet_message = f"{user.referral_rank}\n\nЗдравствуй, почётный участник реферальной программы и AiM course!"
-        else:
-            greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
-
-        return_data["response_message"] = greet_message
-        return_data["type"] = "user"
-        logging.info(f"user есть")
-        if not(user.paid):
-            logging.info(f"user не платил")
-            return_data["to_show"] = "pay_course"
-        if not(user.date_of_trial_ends):
-            logging.info(f"пробный период не использовался")
-            return_data["to_show"] = "trial"
-        
-        promo_user = await get_promo_user(user.telegram_id)
-        number_of_promo = await get_promo_user_count() 
-        logging.info(f"promo_num_limit = {int(await get_setting('PROMO_NUM_LIMIT'))}")
-        logging.info(f"promo_num_left = {int(await get_setting('PROMO_NUM_LIMIT')) - number_of_promo}")
-        if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
-            return_data["with_promo"] = True
-
-        logging.info(f"/start in base api return_data {return_data}")
-        return JSONResponse(return_data)
-    else:
-        return_data["type"] = "temp_user"
-        logging.info(f"Юзера нет")
-        return_data["response_message"] = f"Добро пожаловать, {username}!"
-        temp_user = await get_temp_user(telegram_id=telegram_id)
-        if temp_user:
-            logging.info(f"Есть только временный юзер. Обновляем")
-            logging.info(f"Его зовут {temp_user.username}")
-            await update_temp_user(telegram_id=telegram_id, username=username)
-            logging.info(f"created_at {temp_user.created_at}")
-        else:
-            logging.info(f"Делаем временный юзер")
-            logging.info(f"telegram_id {telegram_id}")
-            logging.info(f"username {username}")
-            temp_user = await create_temp_user(telegram_id=telegram_id, username=username)
-    
-    logging.info(f"temp_user {temp_user}")
-    logging.info(f"user {user}")
-    
-    if referrer_id and referrer_id != telegram_id and (temp_user or (user and not(user.paid))):
-        logging.info(f"Есть реферрал и сам себя не привёл")
-        existing_referrer = await get_pending_referrer(telegram_id)
-        if existing_referrer:
-            logging.info(f"Реферал уже был")
-            await update_referrer(telegram_id, referrer_id)
-        else:
-            logging.info(f"Реферала ещё не было")
-            referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
-            if referrer_user and referrer_user.card_synonym: 
-                logging.info(f"Пользователь который привёл есть")
-                await create_referral(telegram_id, referrer_id)
-                logging.info(f"Сделали реферала в бд")
-    return JSONResponse(return_data)
 
 @app.post("/send_demo_link")
 @exception_handler
@@ -403,24 +276,6 @@ async def getting_started(request: Request):
     user = await get_user_by_telegram_id(telegram_id, to_throw=False)
     logging.info(f"user = {user}")
 
-    if user.is_registered:
-        return {"status": "error", "message": "Вы уже зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
-
-    temp_user = await get_temp_user(telegram_id)
-    logging.info(f"temp_user {temp_user}")
-    if temp_user:
-        return_data = {
-            "status": "success",
-            "with_promo": None
-        }
-        logging.info(f"Есть временный юзер")
-        username = temp_user.username
-        logging.info(f"У него есть username {username}")
-        await update_temp_user_registered(telegram_id)
-        await update_pending_referral(telegram_id)
-        logging.info(f"Получены данные: telegram_id={telegram_id}, username={username}")
-        logging.info(f"Пользователь {username} зарегистрирован")
-        
         # Создаем или обновляем лид для действия getting_started
         try:
             lead_id = await get_or_create_lead_by_email(
@@ -435,51 +290,7 @@ async def getting_started(request: Request):
         except Exception as e:
             logging.error(f"Ошибка при создании лида: {e}")
 
-        promo_user = await get_promo_user(telegram_id)
-        number_of_promo = await get_promo_user_count() 
-        if not(promo_user) and number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):
-            return_data["with_promo"] = True
-
         return JSONResponse(return_data)
-
-@app.post("/register_user_with_promo")
-@exception_handler
-async def register_user_with_promo(request: Request):
-    verify_secret_code(request)
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-
-    logging.info(f"Получены данные: telegram_id={telegram_id}")
-
-    check = check_parameters(telegram_id=telegram_id)
-    logging.info(f"check = {check}")
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
-
-    logging.info(f"checknuli")
-    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
-    logging.info(f"user = {user}")
-
-    if not(user):
-        return {"status": "error", "message": "Вы ещё не зарегистрированы в боте. Введите команду /start, затем оплатите курс для доступа к материалам или присоединяйтесь к реферальной системе"}
-    is_already_promo_user = await get_promo_user(telegram_id)
-    logging.info(f"is_already_promo_user {is_already_promo_user}")
-    if is_already_promo_user:
-        return {"status": "error", "message": "Вы уже были зарегистрированы по промокоду"}
-
-    number_of_promo = await get_promo_user_count() 
-    if number_of_promo < int(await get_setting("PROMO_NUM_LIMIT")):  
-        await add_promo_user(telegram_id)
-        notification_data = {"telegram_id": telegram_id}
-        send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
-        await send_request(send_invite_link_url, notification_data)
-
-        return JSONResponse({"status": "success"})
-    else:
-        return JSONResponse({
-            "status": "error",
-            "message": "Лимит пользователей, которые могут зарегистрироваться по промокоду, исчерпан"
-        })
 
 async def generate_clients_report_list_base(telegram_id, response_type):
     logging.info(f"telegram_id {telegram_id}")
@@ -715,36 +526,6 @@ async def get_payout_balance(request: Request):
         }
     })
 
-@app.post("/get_promo_users_frequency")
-async def get_promo_users_frequency(request: Request):
-    logging.info("inside get_promo_users_frequency")
-
-    verify_secret_code(request)
-    date = datetime.now(timezone.utc)
-    logging.info(f"date {date}")
-    
-    promo_users_frequency = await get_promo_users_count()
-    logging.info(f"promo_users_frequency {promo_users_frequency}")
-
-    if promo_users_frequency:
-        # Преобразуем объект Record в словарь или список, если нужно
-        promo_users_frequency_values = [dict(record) for record in promo_users_frequency]
-    else:
-        promo_users_frequency_values = []
-    
-    number_of_promo = await get_promo_user_count() 
-    promo_num_left = int(await get_setting("PROMO_NUM_LIMIT")) - number_of_promo
-
-    # Формируем ответ
-    return JSONResponse({
-        "status": "success",
-        "data": {
-            "number_of_promo": number_of_promo,
-            "promo_num_left": promo_num_left,
-            "promo_users_frequency": promo_users_frequency_values
-        }
-    })
-
 @app.post("/get_payments_frequency")
 async def get_payments_frequency(request: Request):
     logging.info("inside get_payments_frequency")
@@ -934,14 +715,6 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
         return JSONResponse({
             "status": "error",
             "message": "Такого пользователя не существует"
-        })
-    
-    promo = await get_promo_user(telegram_id)
-    
-    if not(user.paid) and not(promo):
-        return JSONResponse({
-            "status": "error",
-            "message": "Для прохождения теста необходимо оплатить курс"
         })
     
     if not(user.passed_exam):
@@ -1391,85 +1164,85 @@ async def send_text_message(to_id, message_text):
 
 
 
-@app.post("/start_trial")
-@exception_handler
-async def start_trial(request: Request): 
-    logging.info(f"start_trial called")
-    verify_secret_code(request)
+# @app.post("/start_trial")
+# @exception_handler
+# async def start_trial(request: Request): 
+#     logging.info(f"start_trial called")
+#     verify_secret_code(request)
 
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    logging.info(f"telegram_id {telegram_id}")
+#     data = await request.json()
+#     telegram_id = data.get("telegram_id")
+#     logging.info(f"telegram_id {telegram_id}")
 
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
+#     check = check_parameters(telegram_id=telegram_id)
+#     if not(check["result"]):
+#         return {"status": "error", "message": check["message"]}
     
-    logging.info(f"чекнули")
+#     logging.info(f"чекнули")
 
-    user = await get_user_by_telegram_id(telegram_id)
+#     user = await get_user_by_telegram_id(telegram_id)
     
-    if not(user):
-        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
-    if user.date_of_trial_ends:
-        return {"status": "error", "message": "Ваш пробный период уже был использован"}
+#     if not(user):
+#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
+#     if user.date_of_trial_ends:
+#         return {"status": "error", "message": "Ваш пробный период уже был использован"}
 
-    await set_user_trial_end(telegram_id)
-    notification_data = {
-        "telegram_id": telegram_id,
-    }
-    send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
-    await send_request(send_invite_link_url, notification_data)
+#     await set_user_trial_end(telegram_id)
+#     notification_data = {
+#         "telegram_id": telegram_id,
+#     }
+#     send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
+#     await send_request(send_invite_link_url, notification_data)
     
-    return JSONResponse({"status": "success"})
+#     return JSONResponse({"status": "success"})
 
-@app.post("/fake_payment")
-@exception_handler
-async def fake_payment(request: Request): 
-    logging.info(f"fake_payment called")
-    verify_secret_code(request)
+# @app.post("/fake_payment")
+# @exception_handler
+# async def fake_payment(request: Request): 
+#     logging.info(f"fake_payment called")
+#     verify_secret_code(request)
 
-    data = await request.json()
-    telegram_id = data.get("telegram_id")
-    logging.info(f"telegram_id {telegram_id}")
+#     data = await request.json()
+#     telegram_id = data.get("telegram_id")
+#     logging.info(f"telegram_id {telegram_id}")
 
-    check = check_parameters(telegram_id=telegram_id)
-    if not(check["result"]):
-        return {"status": "error", "message": check["message"]}
+#     check = check_parameters(telegram_id=telegram_id)
+#     if not(check["result"]):
+#         return {"status": "error", "message": check["message"]}
     
-    logging.info(f"чекнули")
+#     logging.info(f"чекнули")
 
-    user = await get_user_by_telegram_id(telegram_id)
+#     user = await get_user_by_telegram_id(telegram_id)
     
-    if not(user):
-        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
+#     if not(user):
+#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
 
-    await set_user_fake_paid(telegram_id)
-    notification_data = {
-        "telegram_id": telegram_id,
-    }
-    send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
-    await send_request(send_invite_link_url, notification_data)
+#     await set_user_fake_paid(telegram_id)
+#     notification_data = {
+#         "telegram_id": telegram_id,
+#     }
+#     send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
+#     await send_request(send_invite_link_url, notification_data)
     
-    return JSONResponse({"status": "success"})
+#     return JSONResponse({"status": "success"})
 
-@app.post("/delete_expired_users")
-@exception_handler
-async def delete_expired_users(): 
-    logging.info(f"delete_expired_users called")
+# @app.post("/delete_expired_users")
+# @exception_handler
+# async def delete_expired_users(): 
+#     logging.info(f"delete_expired_users called")
 
-    expired_users = await get_expired_users()
-    logging.info(f"expired_users {expired_users}")
+#     expired_users = await get_expired_users()
+#     logging.info(f"expired_users {expired_users}")
     
-    for user in expired_users:
-        if not(user.paid) and user.date_of_trial_ends:
-            notification_data = {
-                "telegram_id": user.telegram_id,
-            }
-            kick_user_url = f"{str(await get_setting('MAHIN_URL'))}/kick_user"
-            await send_request(kick_user_url, notification_data)
+#     for user in expired_users:
+#         if not(user.paid) and user.date_of_trial_ends:
+#             notification_data = {
+#                 "telegram_id": user.telegram_id,
+#             }
+#             kick_user_url = f"{str(await get_setting('MAHIN_URL'))}/kick_user"
+#             await send_request(kick_user_url, notification_data)
     
-    return JSONResponse({"status": "success"})
+#     return JSONResponse({"status": "success"})
 
 @app.post("/get_payment_data")
 @exception_handler
@@ -1479,22 +1252,10 @@ async def get_payment_data(request: Request):
 
     price = float(await get_setting("COURSE_AMOUNT"))
     logging.info(f"price {price}")
-    raw = await get_setting("CARDS")
-    logging.info(f"raw {raw}")
-
-    # price = price + (random.randint(1, 100) / 100)
-
-    cards = json.loads(raw)
-    logging.info(f"cards {cards}")
-
-    card_number = random.choice(cards)
-    logging.info(f"price {price}")
-    logging.info(f"card_number {card_number}")
     
     return JSONResponse({
         "status": "success",
-        "price": price,
-        "card_number": card_number
+        "price": price
     })
 
 @app.post("/leads")
@@ -2093,3 +1854,73 @@ async def mark_referral_paid(request: Request):
     except Exception as e:
         logging.exception("Ошибка в mark_referral_paid")
         return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+
+# @app.post("/start")
+# @exception_handler
+# async def start(request: Request):
+#     verify_secret_code(request)
+#     data = await request.json()
+#     telegram_id = data.get("telegram_id")
+#     username = data.get("username")
+#     referrer_id = data.get('referrer_id')
+
+#     logging.info(f"Есть telegram_id {telegram_id}")
+#     logging.info(f"Есть username {username}")
+    
+#     settings = await get_all_settings()
+#     logging.info(f"settings")
+#     logging.info(settings)
+
+#     check = check_parameters(
+#         telegram_id=telegram_id,
+#         username=username
+#     )
+#     if not(check["result"]):
+#         return {"status": "error", "message": check["message"]}
+
+#     logging.info(f"Check done")
+#     return_data = {
+#         "status": "success",
+#         "response_message": "Привет",
+#         "to_show": None,
+#         "type": None
+#     }
+#     user = await get_registered_user(telegram_id)
+#     logging.info(f"user есть {user}")
+#     if user:
+#         greet_message = ""
+#         if user.referral_rank:
+#             greet_message = f"{user.referral_rank}\n\nЗдравствуй, почётный участник реферальной программы и AiM course!"
+#         else:
+#             greet_message = f"Привет, {user.username}! Я тебя знаю. Ты участник AiM course!"
+
+#         return_data["response_message"] = greet_message
+#         return_data["type"] = "user"
+#         logging.info(f"user есть")
+#         if not(user.paid):
+#             logging.info(f"user не платил")
+#             return_data["to_show"] = "pay_course"
+#         if not(user.date_of_trial_ends):
+#             logging.info(f"пробный период не использовался")
+#             return_data["to_show"] = "trial"
+        
+#         logging.info(f"/start in base api return_data {return_data}")
+#         return JSONResponse(return_data)
+#     
+#     logging.info(f"user {user}")
+    
+#     if referrer_id and referrer_id != telegram_id and (user and not(user.paid)):
+#         logging.info(f"Есть реферрал и сам себя не привёл")
+#         existing_referrer = await get_pending_referrer(telegram_id)
+#         if existing_referrer:
+#             logging.info(f"Реферал уже был")
+#             await update_referrer(telegram_id, referrer_id)
+#         else:
+#             logging.info(f"Реферала ещё не было")
+#             referrer_user = await get_user_by_telegram_id(referrer_id, to_throw=False)
+#             if referrer_user and referrer_user.card_synonym: 
+#                 logging.info(f"Пользователь который привёл есть")
+#                 await create_referral(telegram_id, referrer_id)
+#                 logging.info(f"Сделали реферала в бд")
+#     return JSONResponse(return_data)

@@ -21,16 +21,7 @@ class Setting(Base):
     key = Column(String, primary_key=True)
     value = Column(String, nullable=False)
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
-    
-class PromoUser(Base):
-    __tablename__ = 'promousers'
-
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(String, ForeignKey('users.telegram_id'), unique=True, nullable=False)  # Внешний ключ
-    created_at = Column(DateTime, nullable=False, server_default=func.now())  # Дата создания
-
-    user = relationship("User", back_populates="promousers")  # Связь с пользователем
-
+ 
 class User(Base):
     __tablename__ = 'users'
 
@@ -56,7 +47,6 @@ class User(Base):
 
     payments = relationship("Payment", back_populates="user")
     payouts = relationship("Payout", back_populates="user", foreign_keys="[Payout.telegram_id]")
-    promousers = relationship("PromoUser", back_populates="user")
 
 class Payment(Base):
     __tablename__ = 'payments'
@@ -197,13 +187,6 @@ def initialize_database():
     """Создает базу данных, если она еще не создана."""
     Base.metadata.create_all(bind=engine)
 
-# Асинхронные функции с типами
-async def update_temp_user_registered(telegram_id: str):
-    update_data = {'is_registered': True}
-    update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
 async def create_pending_payout(
         telegram_id: str,
         card_synonym: str,
@@ -283,29 +266,6 @@ async def get_start_working_date(referred_id: int):
     async with database.transaction():
         result = await database.fetch_one(query)
         return result['created_at'] if result else None
-    
-async def get_promo_user(referred_id: int):
-    query = select(PromoUser).filter_by(telegram_id=referred_id)
-    async with database.transaction():
-        return await database.fetch_one(query)
-
-async def get_promo_user_count():
-    query = "SELECT COUNT(*) FROM promousers"
-    async with database.transaction():
-        return await database.fetch_val(query)
-
-async def get_promo_users_count():
-    """ Получает количество промокодеров, сгруппированных по датам. """
-    query = (
-        select(
-            func.date(PromoUser.created_at).label("date"),
-            func.count().label("promo_users_count")
-        )
-        .group_by(func.date(PromoUser.created_at))
-        .order_by(func.date(PromoUser.created_at))
-    )
-    async with database.transaction():
-        return await database.fetch_all(query)
 
 async def get_payments_frequency_db():
     """ Получает количество оплат, сгруппированных по датам, где статус 'success'. """
@@ -345,11 +305,6 @@ async def get_user_by_cert_id(cert_id: str):
     short_id = cert_id.replace("CERT-", "")
     query = select(User).where(User.telegram_id.like(f"{short_id}%")).limit(1)
     return await database.fetch_one(query)
-
-async def get_temp_user(telegram_id: str):
-    query = select(User).filter_by(telegram_id=telegram_id, is_registered=False)
-    async with database.transaction():
-        return await database.fetch_one(query)
 
 async def get_conversion_stats_by_source():
     query = """ 
@@ -567,13 +522,6 @@ async def get_expired_users():
     )
     async with database.transaction():  # Здесь используем async with
         return await database.fetch_all(query)
-        
-
-async def add_promo_user(telegram_id: str):
-    query = "INSERT INTO promousers (telegram_id) VALUES (:telegram_id)"
-    values = {"telegram_id": telegram_id}
-    async with database.transaction():
-        await database.execute(query, values)
 
 async def create_referral(telegram_id: str, referrer_id: int):
     query = Referral.__table__.insert().values(referrer_id=referrer_id, referred_id=telegram_id, status="pending")
@@ -588,27 +536,9 @@ async def mark_payout_as_notified(payout_id: int):
             update_query = Payout.__table__.update().where(Payout.id == payout_id).values(notified=True)
             await database.execute(update_query)
 
-async def create_temp_user(telegram_id: str, username: str):
-    unique_str = str(uuid.uuid4())
-    query = insert(User).values(
-        telegram_id=telegram_id,
-        username=username,
-        unique_str=unique_str,
-        is_registered=False
-    ).returning(User)
-    async with database.transaction():
-        result = await database.fetch_one(query)
-        return result
-
 async def update_referrer(telegram_id: str, referrer_id: str):
     update_data = {'referrer_id': referrer_id}
     update_query = Referral.__table__.update().where(Referral.referred_id == telegram_id).values(update_data)
-    async with database.transaction():  # Используем async with для транзакции
-        await database.execute(update_query)
-
-async def update_cards(telegram_id: str, new_value: str):
-    update_data = {'value': new_value}
-    update_query = Setting.__table__.update().where(Setting.key == "CARD").values(update_data)
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
 
@@ -699,17 +629,6 @@ async def update_user_balance(telegram_id: str, balance: int):
     
     async with database.transaction():  # Используем async with для транзакции
         await database.execute(update_query)
-
-async def update_temp_user(telegram_id: str, username: Optional[str] = None):
-    query = select(User).filter_by(telegram_id=telegram_id, is_registered=False)
-    async with database.transaction():
-        temp_user = await database.fetch_one(query)
-        if temp_user:
-            update_data = {'created_at': datetime.now(timezone.utc)}
-            if username:
-                update_data['username'] = username
-            update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(update_data)
-            await database.execute(update_query)
 
 async def update_payment_done(telegram_id: str, transaction_id: str, income_amount: float):
     user_update_data = {'paid': True}
