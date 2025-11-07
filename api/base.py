@@ -966,7 +966,7 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
 async def get_multiplicators(request: Request):
 
     logging.info("inside get_multiplicators")
-    verify_secret_code(request)
+    # verify_secret_code(request) коммент, чтобы можно было заходить с Desktop
     
     data = await request.json()
     telegram_id = data.get("telegram_id")
@@ -1640,7 +1640,7 @@ async def fw_get_client(lead_id: int):
     if not lead:
         logging.info("[FW] get_client not found")
         return JSONResponse({"status": "error", "message": "Лид не найден"}, status_code=404)
-    logging.info(f"[FW] get_client ok email={lead['email']} phone={lead['phone']}")
+    logging.info(f"[FW] get_client ok name={lead['email']} email={lead['email']} phone={lead['phone']}")
     return JSONResponse({
         "status": "success",
         "lead": {
