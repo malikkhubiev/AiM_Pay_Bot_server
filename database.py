@@ -325,7 +325,7 @@ async def get_conversion_stats_by_source():
         SELECT 
             source,
             COUNT(*) AS total_users,
-            COUNT(*) FILTER (WHERE is_registered = true) AS registered_users,
+            COUNT(*) AS registered_users,
             COUNT(*) FILTER (WHERE paid = true) AS paid_users
         FROM users
         WHERE source IS NOT NULL
@@ -363,7 +363,7 @@ async def get_referral_conversion_stats():
         SELECT 
             referrer_id,
             COUNT(*) AS total_referred,
-            COUNT(*) FILTER (WHERE is_registered = true) AS registered_users,
+            COUNT(*) AS registered_users,
             COUNT(*) FILTER (WHERE paid = true) AS paid_users
         FROM referrals
         JOIN users ON users.telegram_id = referrals.referred_id
