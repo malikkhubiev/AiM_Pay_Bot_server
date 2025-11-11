@@ -73,23 +73,23 @@ class Referral(Base):
     referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
     payout = relationship("Payout", back_populates="referral")  # Связь с выплатами
 
-class Payout(Base):
-    __tablename__ = 'payouts'
+# class Payout(Base):
+#     __tablename__ = 'payouts'
 
-    id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
-    card_synonym = Column(String, nullable=False)
-    idempotence_key = Column(String, nullable=False, unique=True)
-    amount = Column(Float)
-    status = Column(String, nullable=False) # (pending|success)
-    notified = Column(Boolean, default=False)
-    transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
+#     id = Column(Integer, primary_key=True, index=True)
+#     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
+#     card_synonym = Column(String, nullable=False)
+#     idempotence_key = Column(String, nullable=False, unique=True)
+#     amount = Column(Float)
+#     status = Column(String, nullable=False) # (pending|success)
+#     notified = Column(Boolean, default=False)
+#     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
+#     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
-    referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига, но без этого не работает
+#     referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига, но без этого не работает
 
-    user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
-    referral = relationship("Referral", back_populates="payout") # Не знаю нафига
+#     user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
+#     referral = relationship("Referral", back_populates="payout") # Не знаю нафига
 
 class Binding(Base):
     __tablename__ = 'bindings'
@@ -200,25 +200,25 @@ def initialize_database():
     """Создает базу данных, если она еще не создана."""
     Base.metadata.create_all(bind=engine)
 
-async def create_pending_payout(
-        telegram_id: str,
-        card_synonym: str,
-        idempotence_key: str,
-        payout_amount: str
-    ):
-    query = """ 
-        INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status) 
-        VALUES (:telegram_id, :card_synonym, :idempotence_key, :amount, :status) 
-    """
-    values = { 
-        "telegram_id": telegram_id, 
-        "card_synonym": card_synonym,
-        "idempotence_key": idempotence_key,
-        "amount": payout_amount, 
-        "status": "pending"
-    } 
-    async with database.transaction():  # Используем async with для выполнения транзакции
-        await database.execute(query, values)
+# async def create_pending_payout(
+#         telegram_id: str,
+#         card_synonym: str,
+#         idempotence_key: str,
+#         payout_amount: str
+#     ):
+#     query = """ 
+#         INSERT INTO payouts (telegram_id, card_synonym, idempotence_key, amount, status) 
+#         VALUES (:telegram_id, :card_synonym, :idempotence_key, :amount, :status) 
+#     """
+#     values = { 
+#         "telegram_id": telegram_id, 
+#         "card_synonym": card_synonym,
+#         "idempotence_key": idempotence_key,
+#         "amount": payout_amount, 
+#         "status": "pending"
+#     } 
+#     async with database.transaction():  # Используем async with для выполнения транзакции
+#         await database.execute(query, values)
 
 async def get_user(telegram_id: str):
     query = select(User).filter_by(telegram_id=telegram_id)
@@ -478,6 +478,8 @@ async def get_all_referrers_for_crm():
     referral_amount_str = await get_setting("REFERRAL_AMOUNT")
     referral_amount = float(referral_amount_str) if referral_amount_str else 0.0
     
+    # Показываем всех кто привязал карту (card_synonym не пустой), даже если никого не привёл
+    # Payout функционал закомментирован, используем ручные выплаты через mark_paid
     query = """
         SELECT 
             u.telegram_id,
@@ -492,7 +494,7 @@ async def get_all_referrers_for_crm():
             COALESCE((SELECT SUM(amount) FROM payouts WHERE telegram_id = u.telegram_id AND status = 'success'), 0) AS total_paid_out
         FROM users u
         LEFT JOIN referrals r ON r.referrer_id = u.telegram_id
-        WHERE EXISTS (SELECT 1 FROM referrals WHERE referrer_id = u.telegram_id)
+        WHERE u.card_synonym IS NOT NULL AND u.card_synonym != ''
         GROUP BY u.telegram_id, u.username, u.balance, u.referral_rank, u.card_synonym
         ORDER BY paid_referrals DESC, total_referred DESC
     """
