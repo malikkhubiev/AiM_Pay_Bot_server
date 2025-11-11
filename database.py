@@ -913,26 +913,30 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
         inserted_id = await database.execute(query)
         return int(inserted_id)
 
-async def set_user_pay_email(telegram_id: str, email: str, action_type: str = 'entered'):
+async def set_user_pay_email(telegram_id: str, username:str, email: str, action_type: str = 'entered'):
     """Устанавливает pay_email для пользователя и схлопывает лиды по email"""
     async with database.transaction():
         # Обновляем pay_email у пользователя
-        update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(pay_email=email)
+        logging.info("telegram_id=", telegram_id,"username=", username,"email=", email,"action_type=", action_type)
+        update_query = User.__table__.update().where(User.telegram_id == telegram_id).values(username=username, pay_email=email)
         await database.execute(update_query)
         
         # Получаем данные пользователя
         user_query = select(User).where(User.telegram_id == telegram_id)
         user = await database.fetch_one(user_query)
-        
+        logging.info("user", user)
+
         if user:
+            logging.info("user exists, updating lead")
             # Создаем или обновляем лид с объединением по email
             lead_id = await get_or_create_lead_by_email(
                 email=email,
                 telegram_id=telegram_id,
-                username=user['username']
+                username=username
             )
             # Записываем действие
             if lead_id:
+                logging.info("there is lead, making bot_action_pay_email_entered")
                 action_step = 'bot_action_pay_email_entered' if action_type == 'entered' else 'bot_action_pay_email_confirmed'
                 await record_lead_answer(lead_id, action_step, email)
             return lead_id

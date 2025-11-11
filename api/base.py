@@ -1238,13 +1238,14 @@ async def create_lead_and_notify(request: Request):
 async def set_pay_email(request: Request):
     data = await request.json()
     telegram_id = data.get("telegram_id")
+    username = data.get("username")
     email = data.get("email")
     action_type = data.get("action_type", "entered")  # "entered" или "confirmed"
     if not (telegram_id and email):
         return JSONResponse({"status": "error", "message": "Нужен telegram_id и email"}, status_code=400)
     if not is_valid_email(email):
         return JSONResponse({"status": "error", "message": "Некорректный email"}, status_code=400)
-    await set_user_pay_email(telegram_id, email, action_type)
+    await set_user_pay_email(telegram_id, username, email, action_type)
     return JSONResponse({"status": "success"})
 
 @app.post("/get_pay_email")
