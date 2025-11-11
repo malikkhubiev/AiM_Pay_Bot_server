@@ -7,7 +7,6 @@ import ipaddress
 from dotenv import load_dotenv
 from functools import wraps
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import HTTPException
 import httpx
 import logging
 from config import (
@@ -156,7 +155,7 @@ async def get_user_by_telegram_id(telegram_id: str, to_throw: bool = True):
     user = await get_user(telegram_id)
     if not(user):
         if to_throw:
-            raise HTTPException(status_code=404, message="Пользователь не найден")
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
         else:
             return None
     return user
@@ -179,15 +178,15 @@ async def send_request(url: str, data: dict, method: str = "POST") -> dict:
 
     except httpx.RequestError as e:
         logging.error(f"Ошибка при отправке запроса: {e}")
-        raise HTTPException(status_code=500, message="Request failed")
+        raise HTTPException(status_code=500, detail="Request failed")
 
     except httpx.HTTPStatusError as e:
         logging.error(f"Ошибка HTTP при отправке запроса: {e}")
-        raise HTTPException(status_code=500, message=f"HTTP error: {e.response.status_code}")
+        raise HTTPException(status_code=500, detail=f"HTTP error: {e.response.status_code}")
 
     except Exception as e:
         logging.error(f"Неизвестная ошибка: {e}")
-        raise HTTPException(status_code=500, message="An unknown error occurred")
+        raise HTTPException(status_code=500, detail="An unknown error occurred")
 
 def format_datetime(dt):
     return dt.strftime("%d.%m.%Y [%H:%M:%S]")

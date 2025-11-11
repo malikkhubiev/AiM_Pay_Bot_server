@@ -508,71 +508,122 @@ async def payout_result(request: Request):
     # Возвращаем подтверждение получения уведомления
     return JSONResponse(status_code=200, content={"message": "Webhook received successfully"})
 
-@app.post("/bind_card")
+# Старый функционал привязки карты через ссылку - закомментирован
+# @app.post("/bind_card")
+# @exception_handler
+# async def bind_card(request: Request):
+#     verify_secret_code(request)
+#     data = await request.json()
+#     telegram_id = data.get("telegram_id")
+#
+#     # Проверка обязательных параметров
+#     check = check_parameters(
+#         telegram_id=telegram_id
+#     )
+#     if not check["result"]:
+#         return {"status": "error", "message": check["message"]}
+#
+#     # Находим пользователя
+#     user = await get_user_by_telegram_id(telegram_id)
+#
+#     if not(user):
+#         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
+#
+#     unique_str = f"{telegram_id}{int(time() * 1000)}"
+#
+#     await create_binding_and_delete_if_exists(telegram_id, unique_str)
+#
+#     url = f"{str(await get_setting('SERVER_URL'))}/bind_card_page/{unique_str}"
+#
+#     return JSONResponse({"status": "success", "binding_url": url})
+#
+# @app.get("/bind_card_page/{unique_str}")
+# def render_bind_card_page(unique_str: str):
+#     check = check_parameters(
+#         unique_str=unique_str
+#     )
+#     if not check["result"]:
+#         return {"status": "error", "message": check["message"]}
+#
+#     template = template_env.get_template("bind_card.html")
+#     account_id = YOOKASSA_AGENT_ID
+#     rendered_html = template.render(account_id=account_id, unique_str=unique_str)
+#
+#     return HTMLResponse(content=rendered_html)
+#     
+# @app.post("/bind_success")
+# @exception_handler
+# async def bind_success(request: Request):
+#     data = await request.json()
+#     card_synonym = data.get("card_synonym")
+#     unique_str = data.get("unique_str")
+#
+#     binding = await get_binding_by_unique_str(unique_str)
+#     if not binding:
+#         raise HTTPException(status_code=404, detail="Запрос на привязку карты не был осуществлён")
+#
+#     await get_user_by_telegram_id(binding.telegram_id)
+#     logging.info(f"card_synonym {card_synonym}")
+#     await update_user_card_synonym(binding.telegram_id, card_synonym)
+#
+#     # Уведомление пользователя
+#     notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
+#     notification_data = {
+#         "telegram_id": binding.telegram_id,
+#         "message": "Поздравляем! Ваша карта успешно привязана! 🎉"
+#     }
+#     await send_request(notify_url, notification_data)
+#     return JSONResponse({"status": "success"})
+
+# Новый упрощенный функционал: сохранение номера карты напрямую
+@app.post("/set_card_number")
 @exception_handler
-async def bind_card(request: Request):
+async def set_card_number(request: Request):
+    verify_secret_code(request)
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    card_number = data.get("card_number")
+
+    check = check_parameters(
+        telegram_id=telegram_id,
+        card_number=card_number
+    )
+    if not check["result"]:
+        return {"status": "error", "message": check["message"]}
+
+    # Валидация номера карты
+    card_number_clean = card_number.replace(' ', '').replace('-', '')
+    if not card_number_clean.isdigit() or len(card_number_clean) != 16:
+        return {"status": "error", "message": "Номер карты должен содержать 16 цифр"}
+
+    # Находим пользователя
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if not user:
+        return {"status": "error", "message": "Пользователь не найден"}
+
+    # Сохраняем номер карты в поле card_synonym
+    await update_user_card_synonym(telegram_id, card_number_clean)
+    
+    logging.info(f"Номер карты сохранён для пользователя {telegram_id}")
+    return JSONResponse({"status": "success", "message": "Номер карты успешно сохранён"})
+
+@app.post("/check_card")
+@exception_handler
+async def check_card(request: Request):
     verify_secret_code(request)
     data = await request.json()
     telegram_id = data.get("telegram_id")
 
-    # Проверка обязательных параметров
-    check = check_parameters(
-        telegram_id=telegram_id
-    )
+    check = check_parameters(telegram_id=telegram_id)
     if not check["result"]:
         return {"status": "error", "message": check["message"]}
 
-    # Находим пользователя
-    user = await get_user_by_telegram_id(telegram_id)
+    user = await get_user_by_telegram_id(telegram_id, to_throw=False)
+    if not user:
+        return {"status": "error", "message": "Пользователь не найден"}
 
-    if not(user):
-        return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и нажмите на кнопку 'Начало работы' для регистрации в боте"}
-
-    unique_str = f"{telegram_id}{int(time() * 1000)}"
-
-    await create_binding_and_delete_if_exists(telegram_id, unique_str)
-
-    url = f"{str(await get_setting('SERVER_URL'))}/bind_card_page/{unique_str}"
-
-    return JSONResponse({"status": "success", "binding_url": url})
-
-@app.get("/bind_card_page/{unique_str}")
-def render_bind_card_page(unique_str: str):
-    check = check_parameters(
-        unique_str=unique_str
-    )
-    if not check["result"]:
-        return {"status": "error", "message": check["message"]}
-
-    template = template_env.get_template("bind_card.html")
-    account_id = YOOKASSA_AGENT_ID
-    rendered_html = template.render(account_id=account_id, unique_str=unique_str)
-
-    return HTMLResponse(content=rendered_html)
-    
-@app.post("/bind_success")
-@exception_handler
-async def bind_success(request: Request):
-    data = await request.json()
-    card_synonym = data.get("card_synonym")
-    unique_str = data.get("unique_str")
-
-    binding = await get_binding_by_unique_str(unique_str)
-    if not binding:
-        raise HTTPException(status_code=404, detail="Запрос на привязку карты не был осуществлён")
-
-    await get_user_by_telegram_id(binding.telegram_id)
-    logging.info(f"card_synonym {card_synonym}")
-    await update_user_card_synonym(binding.telegram_id, card_synonym)
-
-    # Уведомление пользователя
-    notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
-    notification_data = {
-        "telegram_id": binding.telegram_id,
-        "message": "Поздравляем! Ваша карта успешно привязана! 🎉"
-    }
-    await send_request(notify_url, notification_data)
-    return JSONResponse({"status": "success"})
+    has_card = bool(user.card_synonym and len(user.card_synonym) > 0)
+    return JSONResponse({"status": "success", "has_card": has_card})
 
 @app.get("/success")
 async def success_payment(request: Request):

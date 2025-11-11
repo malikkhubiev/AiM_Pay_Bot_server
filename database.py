@@ -474,12 +474,17 @@ async def get_successful_referral_count(telegram_id: str) -> int:
 
 async def get_all_referrers_for_crm():
     """Получает всех рефереров с их статистикой для CRM"""
+    # Получаем REFERRAL_AMOUNT из настроек
+    referral_amount_str = await get_setting("REFERRAL_AMOUNT")
+    referral_amount = float(referral_amount_str) if referral_amount_str else 0.0
+    
     query = """
         SELECT 
             u.telegram_id,
             u.username,
             u.balance,
             u.referral_rank,
+            u.card_synonym,
             COUNT(DISTINCT r.id) AS total_referred,
             COUNT(DISTINCT CASE WHEN r.status = 'success' THEN r.id END) AS paid_referrals,
             COUNT(DISTINCT CASE WHEN r.status = 'pending' THEN r.id END) AS pending_referrals,
@@ -488,25 +493,32 @@ async def get_all_referrers_for_crm():
         FROM users u
         LEFT JOIN referrals r ON r.referrer_id = u.telegram_id
         WHERE EXISTS (SELECT 1 FROM referrals WHERE referrer_id = u.telegram_id)
-        GROUP BY u.telegram_id, u.username, u.balance, u.referral_rank
-        ORDER BY total_referred DESC, paid_referrals DESC
+        GROUP BY u.telegram_id, u.username, u.balance, u.referral_rank, u.card_synonym
+        ORDER BY paid_referrals DESC, total_referred DESC
     """
     async with database.transaction():
         rows = await database.fetch_all(query)
     
     results = []
     for row in rows:
+        paid_referrals = row["paid_referrals"] or 0
+        earned_amount = paid_referrals * referral_amount  # REFERRAL_AMOUNT * количество оплативших клиентов
+        total_paid_out = row["total_paid_out"] or 0
+        unpaid_amount = earned_amount - total_paid_out  # Сколько осталось выплатить
+        
         results.append({
             "telegram_id": row["telegram_id"],
             "username": row["username"] or "—",
             "balance": row["balance"] or 0,
             "referral_rank": row["referral_rank"] or "—",
+            "card_synonym": row["card_synonym"] or "—",
             "total_referred": row["total_referred"] or 0,
-            "paid_referrals": row["paid_referrals"] or 0,
+            "paid_referrals": paid_referrals,
             "pending_referrals": row["pending_referrals"] or 0,
             "registered_referrals": row["registered_referrals"] or 0,
-            "unpaid_amount": (row["balance"] or 0) - (row["total_paid_out"] or 0),
-            "total_paid_out": row["total_paid_out"] or 0
+            "earned_amount": earned_amount,  # Сколько заработали (REFERRAL_AMOUNT * paid_referrals)
+            "total_paid_out": total_paid_out,  # Сколько уже выплатили
+            "unpaid_amount": unpaid_amount  # Сколько осталось выплатить
         })
     
     return results
