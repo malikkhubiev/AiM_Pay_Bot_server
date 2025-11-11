@@ -66,10 +66,12 @@ from database import (
     link_source_to_lead,
     get_source_statistics,
     merge_duplicate_leads_by_email,
+    update_user_balance,
+    get_user_by_telegram_id,
     Lead,
     database
 )
-from sqlalchemy import select
+from sqlalchemy import select, func
 from config import (
     BOT_USERNAME,
     SMTP_PASSWORD,
@@ -257,6 +259,28 @@ async def save_source_and_chat_history(request: Request, background_tasks: Backg
     
     if not (name and email and phone):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
+
+    # Проверка на дубликаты по email и phone
+    try:
+        from database import Lead, database
+        normalized_email = email.lower().strip()
+        # Проверяем существование лида с таким email или phone
+        email_query = select(Lead).where(func.lower(Lead.email) == normalized_email)
+        phone_query = select(Lead).where(Lead.phone == phone)
+        
+        existing_by_email = await database.fetch_one(email_query)
+        existing_by_phone = await database.fetch_one(phone_query)
+        
+        if existing_by_email or existing_by_phone:
+            # Лид уже существует - возвращаем ошибку
+            logging.warning(f"Duplicate lead attempt: email={email}, phone={phone}")
+            return JSONResponse({
+                "status": "error", 
+                "message": "Лид с таким email или телефоном уже существует"
+            }, status_code=400)
+    except Exception as e:
+        logging.warning(f"Error checking for duplicate leads: {e}")
+        # Продолжаем выполнение, если проверка не удалась
 
     # 1) Находим или создаем источник по session_id
     source_id = None
@@ -840,8 +864,10 @@ async def can_get_certificate(request: Request, background_tasks: BackgroundTask
         })
     
     if not(user.fio):
+        # Тест сдан, но ФИО не указано - возвращаем специальный статус для запроса ФИО
         return JSONResponse({
-            "status": "error",
+            "status": "success",
+            "result": "need_fio",
             "message": "Вы не установили своё ФИО для получения сертификата. Введите ФИО в формате: 'ФИО: Иванов Иван Иванович'. Будьте аккуратны в написании, исправить ФИО невозможно. Дата установки ФИО считается датой формирования сертификата."
         })
     

@@ -282,9 +282,14 @@ async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_
     from_addr = "01_AiM_01@mail.ru"
     smtp_host = "smtp.mail.ru"
     smtp_port = 587
+    
     if not SMTP_PASSWORD:
-        logger.warning("SMTP_PASSWORD is not configured on the server")
+        logger.error("SMTP_PASSWORD is not configured on the server. Email cannot be sent.")
+        logger.error(f"Attempted to send email to {to_email} with subject: {subject}")
         return  # Silently fail instead of raising exception
+
+    logger.info(f"Attempting to send email via SMTP to {to_email} from {from_addr}")
+    logger.info(f"SMTP server: {smtp_host}:{smtp_port}")
 
     try:
         # Run synchronous SMTP operations in a thread pool to avoid blocking
@@ -293,14 +298,20 @@ async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_
             to_email, subject, html_body, text_body,
             from_addr, smtp_host, smtp_port, SMTP_PASSWORD
         )
-    except (OSError, smtplib.SMTPException) as e:
-        logger.error(f"SMTP async send failed for {to_email}: {e}")
-        # Don't raise exception - just log the error to prevent breaking the application
-        # Network issues on Render might prevent SMTP from working
-        pass
+        logger.info(f"Email successfully sent to {to_email}")
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP Authentication failed for {to_email}: {e}")
+        logger.error("Check SMTP_PASSWORD environment variable")
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP error for {to_email}: {e}")
+        logger.error(f"SMTP error code: {e.smtp_code if hasattr(e, 'smtp_code') else 'N/A'}")
+        logger.error(f"SMTP error message: {e.smtp_error if hasattr(e, 'smtp_error') else str(e)}")
+    except OSError as e:
+        logger.error(f"Network/OS error sending email to {to_email}: {e}")
+        logger.error("This might be a network connectivity issue or firewall blocking SMTP")
     except Exception as e:
         logger.exception(f"Unexpected error in send_email_via_smtp for {to_email}: {e}")
-        pass
+        logger.error(f"Error type: {type(e).__name__}")
 
 async def send_yandex_metrika_goal(goal_name: str):
     """Отправка цели в Яндекс Метрику через API.
