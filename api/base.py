@@ -108,6 +108,18 @@ async def check_user(request: Request):
     logging.info(f"user {user}")
     return {"status": "success", "user": user}
 
+@app.post("/is_paid")
+@exception_handler
+async def is_paid(request: Request):
+    verify_secret_code(request)
+    logging.info("in is_paid")
+    data = await request.json()
+    telegram_id = data.get("telegram_id")
+    logging.info(f"telegramId {telegram_id}")
+    user = await get_user_by_telegram_id(telegram_id, False)
+    logging.info(f"user.paid {user.paid}")
+    return {"status": "success", "paid": user.paid}
+
 @app.post("/start")
 @exception_handler
 async def start(request: Request):

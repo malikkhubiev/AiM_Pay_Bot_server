@@ -62,7 +62,7 @@ async def create_payment(request: Request):
     if not(user):
         return {"status": "error", "message": "Вы ещё не зарегистрированы. Введите команду /start, прочитайте документы и зарегистрируйтесь в боте"}
     if user.paid:
-        return {"status": "error", "message": "Вы уже оплатили курс и являетесь его полноценым участником. Введите команду /start, затем получите пригласительную ссылку, если вдруг потеряли группу среди чатов"}
+        return {"status": "error", "message": "Вы уже оплатили курс и являетесь его полноценым участником."}
 
     # Проверяем наличие email перед созданием платежа
     user_email = getattr(user, 'pay_email', None) if hasattr(user, 'pay_email') else (user.get('pay_email') if isinstance(user, dict) else None)
