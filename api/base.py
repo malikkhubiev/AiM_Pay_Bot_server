@@ -61,6 +61,10 @@ from database import (
     get_chat_message_count,
     get_all_referrers_for_crm,
     create_user,
+    create_source,
+    get_source_by_session_id,
+    link_source_to_lead,
+    get_source_statistics,
     Lead,
     database
 )
@@ -198,9 +202,37 @@ async def start(request: Request):
                 logging.info(f"Сделали реферала в бд")
     return JSONResponse(return_data)
 
-@app.post("/send_demo_link")
+@app.post("/track_visit")
 @exception_handler
-async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
+async def track_visit(request: Request):
+    """Эндпоинт для сохранения источника трафика при заходе на сайт (до того, как посетитель оставит данные)"""
+    # Публичный эндпоинт — без verify_secret_code
+    data = await request.json()
+    utm_source = data.get("utm_source")
+    utm_medium = data.get("utm_medium")
+    utm_campaign = data.get("utm_campaign")
+    utm_term = data.get("utm_term")
+    utm_content = data.get("utm_content")
+    session_id = data.get("session_id")  # ID сессии посетителя
+    
+    try:
+        source_id = await create_source(
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            utm_campaign=utm_campaign,
+            utm_term=utm_term,
+            utm_content=utm_content,
+            session_id=session_id
+        )
+        logging.info(f"Source tracked: source_id={source_id}, utm_source={utm_source}, session_id={session_id}")
+        return JSONResponse({"status": "success", "source_id": source_id})
+    except Exception as e:
+        logging.exception(f"Error tracking source: {e}")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+@app.post("/save_source_and_chat_history")
+@exception_handler
+async def save_source_and_chat_history(request: Request, background_tasks: BackgroundTasks):
     # Публичная форма — без verify_secret_code
     data = await request.json()
     name = data.get("name")
@@ -213,10 +245,30 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
     if not (name and email and phone):
         return JSONResponse({"status": "error", "message": "Заполните все поля"}, status_code=400)
 
-    # 1) Создаём/находим лида синхронно
+    # 1) Находим или создаем источник по session_id
+    source_id = None
+    if chat_session_id:
+        try:
+            source = await get_source_by_session_id(chat_session_id)
+            if source:
+                source_id = source["id"]
+                logging.info(f"Found existing source: source_id={source_id}")
+        except Exception as e:
+            logging.warning(f"Error finding source by session_id: {e}")
+    
+    # Если источник не найден, но есть utm_source, создаем новый источник
+    if not source_id and utm_source:
+        try:
+            source_id = await create_source(utm_source=utm_source, session_id=chat_session_id)
+            logging.info(f"Created new source: source_id={source_id}")
+        except Exception as e:
+            logging.warning(f"Error creating source: {e}")
+
+    # 2) Создаём/находим лида синхронно
     try:
         try:
-            lead_id = await create_lead(name, email, phone)
+            # Обновляем create_lead, чтобы принимать source_id
+            lead_id = await create_lead(name, email, phone, source_id=source_id)
             logging.info(f"lead created sync: {lead_id}")
         except ValueError:
             # Дубликат — найдём существующего по email
@@ -224,6 +276,17 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
             async with database.transaction():
                 existing_lead = await database.fetch_one(email_query)
                 lead_id = existing_lead["id"] if existing_lead else None
+            # Если лид найден и есть source_id, обновляем связь
+            if lead_id and source_id:
+                try:
+                    from database import Lead
+                    update_query = Lead.__table__.update().where(Lead.id == lead_id).values(source_id=source_id)
+                    async with database.transaction():
+                        await database.execute(update_query)
+                    # Связываем источник с лидом
+                    await link_source_to_lead(source_id, lead_id)
+                except Exception as e:
+                    logging.warning(f"Error linking source to lead: {e}")
             logging.info(f"lead duplicated, resolved to id={lead_id}")
         # Сохраним историю чата, если есть
         if chat_history and chat_session_id:
@@ -234,17 +297,17 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
                         message=msg.get("message", ""),
                         is_from_user=msg.get("is_from_user", True)
                     )
-        # Запишем utm_source как шаг прогресса
-        if utm_source and lead_id:
+        # Если source_id есть, но не связан с лидом, связываем
+        if source_id and lead_id:
             try:
-                await record_lead_answer(lead_id, 'utm_source', str(utm_source))
+                await link_source_to_lead(source_id, lead_id)
             except Exception as e:
-                logging.warning(f"Failed to record utm_source: {e}")
+                logging.warning(f"Error linking source to lead: {e}")
     except Exception as e:
         logging.exception(f"Lead create/save error: {e}")
         lead_id = None
 
-    # 2) Письмо на почту по SMTP
+    # 3) Письмо на почту по SMTP
     subject = "AiM Course — ссылка на демо"
     channel_url = "https://rutube.ru/channel/62003781/"
     html = (
@@ -261,13 +324,13 @@ async def send_demo_link(request: Request, background_tasks: BackgroundTasks):
     )
     background_tasks.add_task(send_email_async, email, subject, html, text)
 
-    # 3) Помечаем notified и логируем
+    # 4) Помечаем notified и логируем
     try:
         await set_lead_notified(email)
     except Exception as e:
         logging.warning(f"set_lead_notified failed: {e}")
 
-    logging.info(f"Email queued via SMTP for {email} / {phone}, chat_history_length={len(chat_history)}, lead_id={lead_id}")
+    logging.info(f"Email queued via SMTP for {email} / {phone}, chat_history_length={len(chat_history)}, lead_id={lead_id}, source_id={source_id}")
     return JSONResponse({"status": "success", "lead_id": lead_id})
 
 async def _create_lead_and_notify_internal(name: str, email: str, phone: str, lead_id: int = None, chat_history: list = None, chat_session_id: str = None):
@@ -797,6 +860,16 @@ async def get_multiplicators(request: Request):
             "referral_stats": referral_stats
         }
     })
+
+@app.get("/api/sources/statistics")
+async def get_sources_statistics(request: Request):
+    """Эндпоинт для получения статистики источников трафика для CRM"""
+    try:
+        stats = await get_source_statistics()
+        return JSONResponse({"status": "success", "statistics": stats})
+    except Exception as e:
+        logging.exception("Ошибка в get_sources_statistics")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
 @app.post("/get_top_referrers")
 async def get_top_referrers(request: Request):

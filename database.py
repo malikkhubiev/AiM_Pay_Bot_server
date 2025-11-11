@@ -109,6 +109,7 @@ class Lead(Base):
     username = Column(String, nullable=True)  # Telegram username
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     notified = Column(Boolean, default=False)  # Новый флаг рассылки
+    source_id = Column(Integer, ForeignKey('sources.id'), nullable=True)  # Связь с источником трафика
 
 class LeadProgress(Base):
     __tablename__ = 'lead_progress'
@@ -127,6 +128,19 @@ class ChatMessage(Base):
     message = Column(String, nullable=False)  # Сообщение пользователя или ответ AI
     is_from_user = Column(Boolean, default=True)  # True - от пользователя, False - от AI
     created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+class Source(Base):
+    __tablename__ = 'sources'
+
+    id = Column(Integer, primary_key=True)
+    utm_source = Column(String, nullable=True)  # UTM source (может быть пустым для прямых заходов)
+    utm_medium = Column(String, nullable=True)  # UTM medium
+    utm_campaign = Column(String, nullable=True)  # UTM campaign
+    utm_term = Column(String, nullable=True)  # UTM term
+    utm_content = Column(String, nullable=True)  # UTM content
+    session_id = Column(String, nullable=True)  # ID сессии посетителя
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    lead_id = Column(Integer, ForeignKey('leads.id'), nullable=True)  # Связь с лидом, если посетитель оставил данные
 
 engine = create_engine(DATABASE_URL.replace("sqlite+aiosqlite", "sqlite"))
 
@@ -687,7 +701,7 @@ async def ultra_excute(query: str):
     
     return {"status": "success", "result": f"Executed {len(statements)} statements"}
 
-async def create_lead(name: str, email: str, phone: str) -> int:
+async def create_lead(name: str, email: str, phone: str, source_id: int = None) -> int:
     # Проверка на дубликаты по email и phone
     async with database.transaction():
         # Проверяем существующий лид с таким же email или phone
@@ -707,7 +721,8 @@ async def create_lead(name: str, email: str, phone: str) -> int:
         query = Lead.__table__.insert().values(
             name=name,
             email=email,
-            phone=phone
+            phone=phone,
+            source_id=source_id
         )
         inserted_id = await database.execute(query)
         return int(inserted_id)
@@ -971,4 +986,74 @@ async def get_chat_message_count(session_id: str):
     async with database.transaction():
         result = await database.fetch_one(query)
         return result[0] if result else 0
+
+# === Source functions ===
+
+async def create_source(utm_source: str = None, utm_medium: str = None, utm_campaign: str = None, 
+                        utm_term: str = None, utm_content: str = None, session_id: str = None) -> int:
+    """Создает запись о посещении сайта с UTM-метками"""
+    query = Source.__table__.insert().values(
+        utm_source=utm_source,
+        utm_medium=utm_medium,
+        utm_campaign=utm_campaign,
+        utm_term=utm_term,
+        utm_content=utm_content,
+        session_id=session_id
+    )
+    async with database.transaction():
+        inserted_id = await database.execute(query)
+        return int(inserted_id)
+
+async def get_source_by_session_id(session_id: str):
+    """Получает источник по session_id"""
+    query = select(Source).filter_by(session_id=session_id).order_by(Source.created_at.desc()).limit(1)
+    async with database.transaction():
+        return await database.fetch_one(query)
+
+async def link_source_to_lead(source_id: int, lead_id: int):
+    """Связывает источник с лидом"""
+    update_query = Source.__table__.update().where(Source.id == source_id).values(lead_id=lead_id)
+    async with database.transaction():
+        await database.execute(update_query)
+
+async def get_source_statistics():
+    """Получает статистику по источникам: сколько зашли, сколько стали лидами, сколько оплатили"""
+    # Подзапрос для получения всех источников с их лидами
+    query = """
+        SELECT 
+            COALESCE(s.utm_source, 'direct') AS source,
+            COUNT(DISTINCT s.id) AS total_visits,
+            COUNT(DISTINCT l.id) AS total_leads,
+            COUNT(DISTINCT CASE WHEN u.paid = true THEN l.id END) AS paid_leads
+        FROM sources s
+        LEFT JOIN leads l ON l.source_id = s.id
+        LEFT JOIN users u ON u.pay_email = l.email
+        GROUP BY COALESCE(s.utm_source, 'direct')
+        ORDER BY total_visits DESC
+    """
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+    
+    results = []
+    for row in rows:
+        source = row["source"] or "direct"
+        total_visits = row["total_visits"] or 0
+        total_leads = row["total_leads"] or 0
+        paid_leads = row["paid_leads"] or 0
+        
+        lead_conversion = round((total_leads / total_visits) * 100, 2) if total_visits > 0 else 0
+        paid_conversion = round((paid_leads / total_visits) * 100, 2) if total_visits > 0 else 0
+        paid_from_leads = round((paid_leads / total_leads) * 100, 2) if total_leads > 0 else 0
+        
+        results.append({
+            "source": source,
+            "total_visits": total_visits,
+            "total_leads": total_leads,
+            "paid_leads": paid_leads,
+            "lead_conversion_pct": f"{lead_conversion}%",
+            "paid_conversion_pct": f"{paid_conversion}%",
+            "paid_from_leads_pct": f"{paid_from_leads}%"
+        })
+    
+    return results
 
