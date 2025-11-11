@@ -264,30 +264,38 @@ async def save_source_and_chat_history(request: Request, background_tasks: Backg
         except Exception as e:
             logging.warning(f"Error creating source: {e}")
 
-    # 2) Создаём/находим лида синхронно
+    # 2) Создаём/находим лида синхронно, используя get_or_create_lead_by_email для автоматического объединения
     try:
+        # Пытаемся найти telegram_id по email в таблице User
+        telegram_id = None
+        username = None
         try:
-            # Обновляем create_lead, чтобы принимать source_id
-            lead_id = await create_lead(name, email, phone, source_id=source_id)
-            logging.info(f"lead created sync: {lead_id}")
-        except ValueError:
-            # Дубликат — найдём существующего по email
-            email_query = select(Lead).where(Lead.email == email)
-            async with database.transaction():
-                existing_lead = await database.fetch_one(email_query)
-                lead_id = existing_lead["id"] if existing_lead else None
-            # Если лид найден и есть source_id, обновляем связь
-            if lead_id and source_id:
-                try:
-                    from database import Lead
-                    update_query = Lead.__table__.update().where(Lead.id == lead_id).values(source_id=source_id)
-                    async with database.transaction():
-                        await database.execute(update_query)
-                    # Связываем источник с лидом
-                    await link_source_to_lead(source_id, lead_id)
-                except Exception as e:
-                    logging.warning(f"Error linking source to lead: {e}")
-            logging.info(f"lead duplicated, resolved to id={lead_id}")
+            from database import User, database
+            user_query = select(User).where(User.pay_email == email)
+            user = await database.fetch_one(user_query)
+            if user:
+                telegram_id = user['telegram_id']
+                username = user.get('username')
+        except Exception as e:
+            logging.warning(f"Error finding user by email: {e}")
+        
+        # Используем get_or_create_lead_by_email для автоматического объединения лидов
+        lead_id = await get_or_create_lead_by_email(
+            email=email,
+            telegram_id=telegram_id,
+            username=username,
+            name=name,
+            phone=phone,
+            source_id=source_id
+        )
+        logging.info(f"lead created/merged sync: {lead_id}")
+        
+        # Если source_id есть, связываем источник с лидом
+        if source_id and lead_id:
+            try:
+                await link_source_to_lead(source_id, lead_id)
+            except Exception as e:
+                logging.warning(f"Error linking source to lead: {e}")
         # Сохраним историю чата, если есть
         if chat_history and chat_session_id:
             for msg in chat_history:
@@ -297,12 +305,6 @@ async def save_source_and_chat_history(request: Request, background_tasks: Backg
                         message=msg.get("message", ""),
                         is_from_user=msg.get("is_from_user", True)
                     )
-        # Если source_id есть, но не связан с лидом, связываем
-        if source_id and lead_id:
-            try:
-                await link_source_to_lead(source_id, lead_id)
-            except Exception as e:
-                logging.warning(f"Error linking source to lead: {e}")
     except Exception as e:
         logging.exception(f"Lead create/save error: {e}")
         lead_id = None

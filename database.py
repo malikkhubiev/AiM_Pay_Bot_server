@@ -865,10 +865,28 @@ async def get_unnotified_abandoned_leads():
     async with database.transaction():
         return await database.fetch_all(query)
 
-async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None, username: str = None, name: str = None, phone: str = None):
+async def merge_lead_progress(from_lead_id: int, to_lead_id: int):
+    """Переносит прогресс из одного лида в другой, избегая дубликатов"""
+    # Получаем весь прогресс из старого лида (без транзакции, т.к. вызывается внутри транзакции)
+    query = select(LeadProgress).filter_by(lead_id=from_lead_id)
+    from_progress = await database.fetch_all(query)
+    
+    # Переносим каждый шаг прогресса
+    for progress_item in from_progress:
+        step = progress_item['step']
+        answer = progress_item['answer']
+        # Проверяем, нет ли уже такого шага в целевом лиде
+        check_query = select(LeadProgress).filter_by(lead_id=to_lead_id, step=step)
+        existing = await database.fetch_one(check_query)
+        if not existing:
+            # Переносим только если такого шага еще нет
+            ins = LeadProgress.__table__.insert().values(lead_id=to_lead_id, step=step, answer=answer)
+            await database.execute(ins)
+
+async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None, username: str = None, name: str = None, phone: str = None, source_id: int = None):
     """
     Получить или создать лид по email или telegram_id. Если лид существует, обновить его данными.
-    Если существует лид с telegram_id, но другим email, объединить их.
+    Если существует лид с telegram_id и лид с email (разные лиды), объединить их.
     """
     async with database.transaction():
         # Ищем лид по email (если email указан)
@@ -877,6 +895,49 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
             email_query = select(Lead).where(Lead.email == email)
             existing_by_email = await database.fetch_one(email_query)
         
+        # Ищем лид по telegram_id (если telegram_id указан)
+        existing_by_tg = None
+        if telegram_id:
+            tg_query = select(Lead).where(Lead.telegram_id == telegram_id)
+            existing_by_tg = await database.fetch_one(tg_query)
+        
+        # Если найдены оба лида и это разные лиды - объединяем их
+        if existing_by_email and existing_by_tg and existing_by_email['id'] != existing_by_tg['id']:
+            # Выбираем основной лид (тот, у которого больше данных)
+            main_lead = existing_by_email
+            secondary_lead = existing_by_tg
+            
+            # Переносим прогресс из вторичного лида в основной
+            await merge_lead_progress(secondary_lead['id'], main_lead['id'])
+            
+            # Обновляем основной лид всеми доступными данными
+            update_values = {}
+            if telegram_id and not main_lead['telegram_id']:
+                update_values['telegram_id'] = telegram_id
+            if username and not main_lead['username']:
+                update_values['username'] = username
+            if name and not main_lead['name']:
+                update_values['name'] = name
+            if phone and not main_lead['phone']:
+                update_values['phone'] = phone
+            # Переносим source_id если есть во вторичном лиде, но нет в основном
+            if secondary_lead.get('source_id') and not main_lead.get('source_id'):
+                update_values['source_id'] = secondary_lead['source_id']
+            # Если source_id передан, но не установлен в основном лиде, устанавливаем
+            if source_id and not main_lead.get('source_id'):
+                update_values['source_id'] = source_id
+            
+            if update_values:
+                upd_query = Lead.__table__.update().where(Lead.id == main_lead['id']).values(**update_values)
+                await database.execute(upd_query)
+            
+            # Удаляем вторичный лид
+            delete_query = Lead.__table__.delete().where(Lead.id == secondary_lead['id'])
+            await database.execute(delete_query)
+            
+            return int(main_lead['id'])
+        
+        # Если найден только лид по email
         if existing_by_email:
             # Обновляем существующий лид
             update_values = {}
@@ -888,6 +949,8 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
                 update_values['name'] = name
             if phone and not existing_by_email['phone']:
                 update_values['phone'] = phone
+            if source_id and not existing_by_email.get('source_id'):
+                update_values['source_id'] = source_id
             
             if update_values:
                 upd_query = Lead.__table__.update().where(Lead.id == existing_by_email['id']).values(**update_values)
@@ -895,27 +958,25 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
             
             return int(existing_by_email['id'])
         
-        # Если email не найден (или не указан), ищем по telegram_id
-        if telegram_id:
-            tg_query = select(Lead).where(Lead.telegram_id == telegram_id)
-            existing_by_tg = await database.fetch_one(tg_query)
+        # Если найден только лид по telegram_id
+        if existing_by_tg:
+            # Объединяем: обновляем email существующего лида (если email указан)
+            update_values = {}
+            if email and not existing_by_tg['email']:
+                update_values['email'] = email
+            if username and not existing_by_tg['username']:
+                update_values['username'] = username
+            if name and not existing_by_tg['name']:
+                update_values['name'] = name
+            if phone and not existing_by_tg['phone']:
+                update_values['phone'] = phone
+            if source_id and not existing_by_tg.get('source_id'):
+                update_values['source_id'] = source_id
             
-            if existing_by_tg:
-                # Объединяем: обновляем email существующего лида (если email указан)
-                update_values = {}
-                if email and not existing_by_tg['email']:
-                    update_values['email'] = email
-                if username and not existing_by_tg['username']:
-                    update_values['username'] = username
-                if name and not existing_by_tg['name']:
-                    update_values['name'] = name
-                if phone and not existing_by_tg['phone']:
-                    update_values['phone'] = phone
-                
-                if update_values:
-                    upd_query = Lead.__table__.update().where(Lead.id == existing_by_tg['id']).values(**update_values)
-                    await database.execute(upd_query)
-                return int(existing_by_tg['id'])
+            if update_values:
+                upd_query = Lead.__table__.update().where(Lead.id == existing_by_tg['id']).values(**update_values)
+                await database.execute(upd_query)
+            return int(existing_by_tg['id'])
         
         # Создаем новый лид
         query = Lead.__table__.insert().values(
@@ -923,7 +984,8 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
             email=email,
             phone=phone,
             telegram_id=telegram_id,
-            username=username
+            username=username,
+            source_id=source_id
         )
         inserted_id = await database.execute(query)
         return int(inserted_id)
