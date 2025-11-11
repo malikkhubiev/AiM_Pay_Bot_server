@@ -73,23 +73,23 @@ class Referral(Base):
     referred_user = relationship("User", foreign_keys=[referred_id])  # Связь с приглашённым
     payout = relationship("Payout", back_populates="referral")  # Связь с выплатами
 
-# class Payout(Base):
-#     __tablename__ = 'payouts'
+class Payout(Base):
+    __tablename__ = 'payouts'
 
-#     id = Column(Integer, primary_key=True, index=True)
-#     telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
-#     card_synonym = Column(String, nullable=False)
-#     idempotence_key = Column(String, nullable=False, unique=True)
-#     amount = Column(Float)
-#     status = Column(String, nullable=False) # (pending|success)
-#     notified = Column(Boolean, default=False)
-#     transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
-#     created_at = Column(DateTime, nullable=False, server_default=func.now())
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(String, ForeignKey('users.telegram_id'))  # Ссылка на пользователя
+    card_synonym = Column(String, nullable=False)
+    idempotence_key = Column(String, nullable=False, unique=True)
+    amount = Column(Float)
+    status = Column(String, nullable=False) # (pending|success)
+    notified = Column(Boolean, default=False)
+    transaction_id = Column(String, nullable=True)  # Идентификатор транзакции
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
 
-#     referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига, но без этого не работает
+    referral_id = Column(Integer, ForeignKey('referrals.id'))  # Не знаю нафига, но без этого не работает
 
-#     user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
-#     referral = relationship("Referral", back_populates="payout") # Не знаю нафига
+    user = relationship("User", back_populates="payouts", foreign_keys=[telegram_id])
+    referral = relationship("Referral", back_populates="payout") # Не знаю нафига
 
 class Binding(Base):
     __tablename__ = 'bindings'
