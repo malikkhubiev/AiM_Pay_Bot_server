@@ -934,15 +934,15 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
             if phone and not main_lead['phone']:
                 update_values['phone'] = phone
             # Нормализуем email в основном лиде, если он отличается регистром
-            if normalized_email and main_lead.get('email'):
+            if normalized_email and main_lead['email']:
                 existing_email_lower = main_lead['email'].lower() if main_lead['email'] else None
                 if existing_email_lower != normalized_email:
                     update_values['email'] = normalized_email
             # Переносим source_id если есть во вторичном лиде, но нет в основном
-            if secondary_lead.get('source_id') and not main_lead.get('source_id'):
+            if secondary_lead['source_id'] and not main_lead['source_id']:
                 update_values['source_id'] = secondary_lead['source_id']
             # Если source_id передан, но не установлен в основном лиде, устанавливаем
-            if source_id and not main_lead.get('source_id'):
+            if source_id and not main_lead['source_id']:
                 update_values['source_id'] = source_id
             
             if update_values:
@@ -967,10 +967,10 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
                 update_values['name'] = name
             if phone and not existing_by_email['phone']:
                 update_values['phone'] = phone
-            if source_id and not existing_by_email.get('source_id'):
+            if source_id and not existing_by_email['source_id']:
                 update_values['source_id'] = source_id
             # Нормализуем email, если он отличается регистром
-            if normalized_email and existing_by_email.get('email'):
+            if normalized_email and existing_by_email['email']:
                 existing_email_lower = existing_by_email['email'].lower() if existing_by_email['email'] else None
                 if existing_email_lower != normalized_email:
                     update_values['email'] = normalized_email
@@ -998,7 +998,7 @@ async def get_or_create_lead_by_email(email: str = None, telegram_id: str = None
                 update_values['name'] = name
             if phone and not existing_by_tg['phone']:
                 update_values['phone'] = phone
-            if source_id and not existing_by_tg.get('source_id'):
+            if source_id and not existing_by_tg['source_id']:
                 update_values['source_id'] = source_id
             
             if update_values:
@@ -1093,15 +1093,15 @@ async def merge_duplicate_leads_by_email():
                     
                     # Обновляем основной лид данными из вторичного
                     update_values = {}
-                    if secondary.get('telegram_id') and not main_lead.get('telegram_id'):
+                    if secondary['telegram_id'] and not main_lead['telegram_id']:
                         update_values['telegram_id'] = secondary['telegram_id']
-                    if secondary.get('username') and not main_lead.get('username'):
+                    if secondary['username'] and not main_lead['username']:
                         update_values['username'] = secondary['username']
-                    if secondary.get('name') and not main_lead.get('name'):
+                    if secondary['name'] and not main_lead['name']:
                         update_values['name'] = secondary['name']
-                    if secondary.get('phone') and not main_lead.get('phone'):
+                    if secondary['phone'] and not main_lead['phone']:
                         update_values['phone'] = secondary['phone']
-                    if secondary.get('source_id') and not main_lead.get('source_id'):
+                    if secondary['source_id'] and not main_lead['source_id']:
                         update_values['source_id'] = secondary['source_id']
                     
                     if update_values:
