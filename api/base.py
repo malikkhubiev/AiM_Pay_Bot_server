@@ -67,7 +67,6 @@ from database import (
     get_source_statistics,
     merge_duplicate_leads_by_email,
     update_user_balance,
-    get_user_by_telegram_id,
     Lead,
     database
 )
