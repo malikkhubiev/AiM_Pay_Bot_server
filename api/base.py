@@ -65,6 +65,7 @@ from database import (
     get_source_by_session_id,
     link_source_to_lead,
     get_source_statistics,
+    merge_duplicate_leads_by_email,
     Lead,
     database
 )
@@ -1052,6 +1053,27 @@ async def execute_sql(request: Request):
         "status": result["status"],
         "result": result["result"]
     })
+
+@app.post("/merge_duplicate_leads")
+@exception_handler
+async def merge_duplicate_leads(request: Request):
+    """Объединяет существующие дубликаты лидов с одинаковым email (разный регистр)"""
+    logging.info("inside merge_duplicate_leads")
+    verify_secret_code(request)
+    
+    try:
+        merged_count = await merge_duplicate_leads_by_email()
+        logging.info(f"Merged {merged_count} duplicate leads")
+        return JSONResponse({
+            "status": "success",
+            "message": f"Объединено {merged_count} дубликатов лидов"
+        })
+    except Exception as e:
+        logging.exception("Error merging duplicate leads")
+        return JSONResponse({
+            "status": "error",
+            "message": f"Ошибка при объединении дубликатов: {str(e)}"
+        }, status_code=500)
 
 @app.post("/update_and_get_settings")
 async def update_and_get_settings(request: Request):
