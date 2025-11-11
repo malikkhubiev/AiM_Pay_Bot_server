@@ -281,7 +281,7 @@ async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_
     """
     from_addr = "01_AiM_01@mail.ru"
     smtp_host = "smtp.mail.ru"
-    smtp_port = 587
+    smtp_port = 465
     
     if not SMTP_PASSWORD:
         logger.error("SMTP_PASSWORD is not configured on the server. Email cannot be sent.")
