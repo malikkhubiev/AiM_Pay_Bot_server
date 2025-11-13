@@ -73,7 +73,6 @@ from database import (
 from sqlalchemy import select, func
 from config import (
     BOT_USERNAME,
-    SMTP_PASSWORD,
     DEEPSEEK_TOKEN
 )
 import pandas as pd
@@ -82,16 +81,9 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi import Query
 import httpx
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import re
 
 TG_BOT_LINK = "https://t.me/AiM_Pay_Bo?start=me"
-FROM_EMAIL = "01_AiM_01@mail.ru"
-SMTP_SERVER = "smtp.mail.ru"
-SMTP_PORT = 587
-SMTP_USER = "AiM"
 
 templates = Jinja2Templates(directory="templates")
 
@@ -345,7 +337,7 @@ async def save_source_and_chat_history(request: Request, background_tasks: Backg
         logging.exception(f"Lead create/save error: {e}")
         lead_id = None
 
-    # 3) Письмо на почту по SMTP
+    # 3) Письмо на почту через Resend
     subject = "AiM Course — ссылка на демо"
     channel_url = "https://rutube.ru/channel/62003781/"
     html = (
@@ -368,7 +360,7 @@ async def save_source_and_chat_history(request: Request, background_tasks: Backg
     except Exception as e:
         logging.warning(f"set_lead_notified failed: {e}")
 
-    logging.info(f"Email queued via SMTP for {email} / {phone}, chat_history_length={len(chat_history)}, lead_id={lead_id}, source_id={source_id}")
+    logging.info(f"Email queued via Resend for {email} / {phone}, chat_history_length={len(chat_history)}, lead_id={lead_id}, source_id={source_id}")
     return JSONResponse({"status": "success", "lead_id": lead_id})
 
 async def _create_lead_and_notify_internal(name: str, email: str, phone: str, lead_id: int = None, chat_history: list = None, chat_session_id: str = None):

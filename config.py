@@ -17,7 +17,11 @@ YOOKASSA_PAYOUT_KEY = os.getenv("YOOKASSA_PAYOUT_KEY")
 YOOKASSA_PAYMENTS_URL = os.getenv("YOOKASSA_PAYMENTS_URL")
 YOOKASSA_AGENT_ID = os.getenv("YOOKASSA_AGENT_ID")
 
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+RESEND_FROM = os.getenv("RESEND_FROM")
+RESEND_API_1 = os.getenv("RESEND_API_1")
+RESEND_API_2 = os.getenv("RESEND_API_2")
+RESEND_API_3 = os.getenv("RESEND_API_3")
+
 DEEPSEEK_TOKEN = os.getenv("DEEPSEEK_TOKEN")
 METRICS_GOAL = os.getenv("METRICS_GOAL", "lead_form_sent") # lead_form_sent | go_to_bot | purchase_confirmed
 YANDEX_METRIKA_ID = os.getenv("YANDEX_METRIKA_ID", "")

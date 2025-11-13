@@ -15,9 +15,12 @@ from config import (
     YOOKASSA_AGENT_ID,
     YOOKASSA_SHOP_ID,
     SECRET_CODE,
-    SMTP_PASSWORD,
     METRICS_GOAL,
-    YANDEX_METRIKA_ID
+    YANDEX_METRIKA_ID,
+    RESEND_FROM,
+    RESEND_API_1,
+    RESEND_API_2,
+    RESEND_API_3
 )
 from yookassa import Configuration
 import logging
@@ -25,10 +28,7 @@ from database import (
     get_user
 )
 import asyncio
-import smtplib
 import re
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 load_dotenv()
 
@@ -236,82 +236,106 @@ async def convert_pdf_to_image(pdf_path):
     return image_path
 
 async def send_email_async(to_email: str, subject: str, html_body: str, text_body: str = None):
-    """Отправка email через SMTP (по умолчанию).
-    Используем SMTP Mail.ru: FROM и сервер читаются из переменных окружения/констант.
+    """Отправка email через Resend API с перебором ключей.
+    Использует RESEND_API_1, RESEND_API_2, RESEND_API_3 по очереди до успешной отправки.
     """
-    logger.info(f"send_email_async scheduled for {to_email} via SMTP")
+    logger.info(f"send_email_async scheduled for {to_email} via Resend")
     try:
-        await send_email_via_smtp(to_email, subject, html_body, text_body)
+        await send_email_via_resend(to_email, subject, html_body, text_body)
         logger.info(f"send_email_async completed for {to_email}")
     except Exception as e:
         logger.exception(f"send_email_async failed for {to_email}: {e}")
 
-def _send_email_sync(to_email: str, subject: str, html_body: str, text_body: str | None, from_addr: str, smtp_host: str, smtp_port: int, smtp_password: str):
-    """Синхронная функция для отправки email через SMTP."""
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = from_addr
-    msg['To'] = to_email
-    if text_body:
-        msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
-    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
-
-    server = None
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
-        server.starttls()
-        server.login(from_addr, smtp_password)
-        server.sendmail(from_addr, [to_email], msg.as_string())
-        logger.info(f"SMTP message sent to {to_email}")
-    except (OSError, smtplib.SMTPException) as e:
-        logger.error(f"SMTP send error for {to_email}: {e}")
-        raise
-    finally:
-        if server:
-            try:
-                server.quit()
-            except:
-                pass
-
-async def send_email_via_smtp(to_email: str, subject: str, html_body: str, text_body: str | None = None):
-    """Прямая отправка письма через SMTP (mail.ru).
-    Требуются переменные окружения:
-      - SMTP_PASSWORD (пароль почты)
-    Отправитель фиксирован: 01_AiM_01@mail.ru
+async def send_email_via_resend(to_email: str, subject: str, html_body: str, text_body: str = None):
+    """Отправка письма через Resend API с перебором ключей.
+    Пробует RESEND_API_1, RESEND_API_2, RESEND_API_3 по очереди до успешной отправки.
     """
-    from_addr = "01_AiM_01@mail.ru"
-    smtp_host = "smtp.mail.ru"
-    smtp_port = 465
+    from_email = RESEND_FROM or "01_AiM_01@mail.ru"
+    api_keys = [RESEND_API_1, RESEND_API_2, RESEND_API_3]
     
-    if not SMTP_PASSWORD:
-        logger.error("SMTP_PASSWORD is not configured on the server. Email cannot be sent.")
+    # Фильтруем None значения
+    api_keys = [key for key in api_keys if key]
+    
+    if not api_keys:
+        logger.error("No Resend API keys configured. Email cannot be sent.")
         logger.error(f"Attempted to send email to {to_email} with subject: {subject}")
-        return  # Silently fail instead of raising exception
-
-    logger.info(f"Attempting to send email via SMTP to {to_email} from {from_addr}")
-    logger.info(f"SMTP server: {smtp_host}:{smtp_port}")
-
-    try:
-        # Run synchronous SMTP operations in a thread pool to avoid blocking
-        await asyncio.to_thread(
-            _send_email_sync,
-            to_email, subject, html_body, text_body,
-            from_addr, smtp_host, smtp_port, SMTP_PASSWORD
-        )
-        logger.info(f"Email successfully sent to {to_email}")
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication failed for {to_email}: {e}")
-        logger.error("Check SMTP_PASSWORD environment variable")
-    except smtplib.SMTPException as e:
-        logger.error(f"SMTP error for {to_email}: {e}")
-        logger.error(f"SMTP error code: {e.smtp_code if hasattr(e, 'smtp_code') else 'N/A'}")
-        logger.error(f"SMTP error message: {e.smtp_error if hasattr(e, 'smtp_error') else str(e)}")
-    except OSError as e:
-        logger.error(f"Network/OS error sending email to {to_email}: {e}")
-        logger.error("This might be a network connectivity issue or firewall blocking SMTP")
-    except Exception as e:
-        logger.exception(f"Unexpected error in send_email_via_smtp for {to_email}: {e}")
-        logger.error(f"Error type: {type(e).__name__}")
+        raise ValueError("No Resend API keys available")
+    
+    logger.info(f"Attempting to send email via Resend to {to_email} from {from_email}")
+    logger.info(f"Available API keys: {len(api_keys)}")
+    
+    last_error = None
+    
+    for idx, api_key in enumerate(api_keys, 1):
+        try:
+            logger.info(f"Trying Resend API key {idx}/{len(api_keys)}")
+            
+            url = "https://api.resend.com/emails"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "from": from_email,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body
+            }
+            
+            # Добавляем текстовую версию, если она есть
+            if text_body:
+                payload["text"] = text_body
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                
+                result = response.json()
+                logger.info(f"Email successfully sent to {to_email} using API key {idx}")
+                logger.info(f"Resend response: {result}")
+                return result
+                
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Resend API key {idx} failed: HTTP {e.response.status_code}"
+            if e.response.status_code == 401:
+                error_msg += " (Unauthorized - invalid API key)"
+            elif e.response.status_code == 422:
+                error_msg += f" (Validation error: {e.response.text})"
+            else:
+                error_msg += f" (Response: {e.response.text})"
+            
+            logger.warning(error_msg)
+            last_error = e
+            
+            # Если это не ошибка авторизации, возможно проблема с данными - не пробуем другие ключи
+            if e.response.status_code not in (401, 403):
+                logger.error(f"Non-auth error with API key {idx}, stopping retry")
+                raise
+            
+            # Продолжаем с следующим ключом
+            continue
+            
+        except httpx.RequestError as e:
+            error_msg = f"Network error with Resend API key {idx}: {e}"
+            logger.warning(error_msg)
+            last_error = e
+            # Продолжаем с следующим ключом при сетевых ошибках
+            continue
+            
+        except Exception as e:
+            error_msg = f"Unexpected error with Resend API key {idx}: {e}"
+            logger.warning(error_msg)
+            last_error = e
+            # Продолжаем с следующим ключом
+            continue
+    
+    # Если все ключи не сработали
+    logger.error(f"All Resend API keys failed for {to_email}")
+    if last_error:
+        raise last_error
+    else:
+        raise Exception("All Resend API keys failed without specific error")
 
 async def send_yandex_metrika_goal(goal_name: str):
     """Отправка цели в Яндекс Метрику через API.
