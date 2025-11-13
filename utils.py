@@ -72,30 +72,68 @@ ALLOWED_YOOKASSA_IP_RANGES = [
 
 # Проверка IP-адреса для Yookassa
 def check_yookassa_ip(request: Request):
+    """Проверяет IP-адрес запроса на соответствие разрешенным IP YooKassa.
+    Учитывает заголовки X-Forwarded-For и X-Real-IP для работы за прокси.
+    """
     try:
-        client_ip = request.client.host  # Получаем IP клиента
-        client_ip_address = ipaddress.ip_address(client_ip)  # Преобразуем в объект IP
+        # Получаем IP из заголовков (если запрос идет через прокси)
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        real_ip = request.headers.get("X-Real-IP")
+        client_ip = request.client.host if request.client else None
+        
+        # Определяем реальный IP клиента
+        # X-Forwarded-For может содержать список IP через запятую
+        if forwarded_for:
+            # Берем первый IP из списка (реальный клиент)
+            client_ip = forwarded_for.split(",")[0].strip()
+            logging.info(f"IP from X-Forwarded-For: {client_ip}")
+        elif real_ip:
+            client_ip = real_ip.strip()
+            logging.info(f"IP from X-Real-IP: {client_ip}")
+        elif client_ip:
+            logging.info(f"IP from request.client.host: {client_ip}")
+        else:
+            logging.error("Could not determine client IP address")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Bad Request: Could not determine client IP address"
+            )
+        
+        # Преобразуем IP в объект для проверки
+        try:
+            client_ip_address = ipaddress.ip_address(client_ip)
+        except ValueError as e:
+            logging.error(f"Invalid IP address format: {client_ip}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bad Request: Invalid IP address format {client_ip}"
+            )
 
         # Проверяем, входит ли IP-адрес в разрешённые диапазоны
         for allowed_ip_range in ALLOWED_YOOKASSA_IP_RANGES:
             if isinstance(allowed_ip_range, (ipaddress.IPv4Network, ipaddress.IPv6Network)):
                 if client_ip_address in allowed_ip_range:
+                    logging.info(f"IP {client_ip} is in allowed range {allowed_ip_range}")
                     return client_ip  # Возвращаем IP, если он валиден
             elif isinstance(allowed_ip_range, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
                 if client_ip_address == allowed_ip_range:
+                    logging.info(f"IP {client_ip} matches allowed IP {allowed_ip_range}")
                     return client_ip  # Возвращаем IP, если он валиден
 
         # Если IP не разрешён, выбрасываем исключение
+        logging.warning(f"IP {client_ip} is not in allowed YooKassa IP ranges")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Forbidden: Invalid IP address {client_ip}"
         )
 
-    except ValueError:
-        # Обработка случая, если IP некорректен
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error checking YooKassa IP: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Bad Request: Invalid IP address format {request.client.host}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error while checking IP: {str(e)}"
         )
 
 def verify_secret_code(request: Request):

@@ -213,18 +213,29 @@ async def check_and_notify_rank_up(user):
 @exception_handler
 async def payment_notification(request: Request):
     """Обработка уведомления о платеже от YooKassa."""
+    logging.info("=== payment_notification called ===")
+    logging.info(f"Client IP: {request.client.host if request.client else 'unknown'}")
+    
     # Проверяем IP для уведомлений от Yookassa
-    check_yookassa_ip(request)
-    headers = request.headers
-    body = await request.body()
-    logging.info("Request headers: %s", headers)
-    logging.info("Raw request body: %s", body.decode("utf-8"))
-
     try:
-        data = await request.json()
-        logging.info("Parsed JSON: %s", data)
+        check_yookassa_ip(request)
+        logging.info("IP check passed")
     except Exception as e:
-        logging.error("Failed to parse JSON: %s", e)
+        logging.error(f"IP check failed: {e}")
+        raise
+    
+    # Читаем body один раз
+    try:
+        body = await request.body()
+        logging.info(f"Request body length: {len(body)} bytes")
+        logging.info(f"Request headers: {dict(request.headers)}")
+        
+        # Парсим JSON из body
+        import json
+        data = json.loads(body.decode("utf-8"))
+        logging.info(f"Parsed JSON: {data}")
+    except Exception as e:
+        logging.error(f"Failed to parse request body: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail="Invalid JSON format")
 
     if data.get("type") != "notification" or "object" not in data:
@@ -234,13 +245,24 @@ async def payment_notification(request: Request):
     payment_data = data["object"]
     payment_id = payment_data.get("id")
     status = payment_data.get("status")
-    income_amount = float(payment_data.get("income_amount")["value"])
+    
+    # Безопасное получение income_amount
+    income_amount = 0
+    try:
+        income_amount_data = payment_data.get("income_amount")
+        if income_amount_data and isinstance(income_amount_data, dict):
+            income_amount = float(income_amount_data.get("value", 0))
+        elif income_amount_data:
+            income_amount = float(income_amount_data)
+    except (ValueError, TypeError) as e:
+        logging.error(f"Error parsing income_amount: {e}")
+        income_amount = 0
+    
     metadata = payment_data.get("metadata", {})
     user_telegram_id = metadata.get("telegram_id")
 
-    logging.info(f"income_amount {income_amount}")
-    logging.info(payment_data)
-    logging.info("Payment ID: %s, Status: %s, Telegram ID: %s", payment_id, status, user_telegram_id)
+    logging.info(f"Payment ID: {payment_id}, Status: {status}, Telegram ID: {user_telegram_id}, Income: {income_amount}")
+    logging.info(f"Full payment_data: {payment_data}")
 
     if status == "succeeded" and user_telegram_id:
         logging.info(f"status {status}, и мы внутри")
@@ -260,8 +282,8 @@ async def payment_notification(request: Request):
                 income_amount
             )
             all_settings = await get_all_settings()
-            current_money = float(all_settings["MY_MONEY"])
-            await set_setting("MY_MONEY", current_money + income_amount)
+            current_money = float(all_settings.get("MY_MONEY", 0))
+            await set_setting("MY_MONEY", str(current_money + income_amount))
 
             user = await get_user(user_telegram_id)
             logging.info(f"user {user}")
@@ -295,12 +317,18 @@ async def payment_notification(request: Request):
             }
             send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
             try:
+                logging.info(f"Запрос пригласительной ссылки для {user_telegram_id}")
                 invite_response = await send_request(send_invite_link_url, notification_data)
+                logging.info(f"Ответ от send_invite_link: {invite_response}")
                 
                 # Получаем email пользователя и отправляем ссылку на email
                 user_email = await get_user_pay_email(user_telegram_id)
+                logging.info(f"Email пользователя: {user_email}")
+                
                 if user_email and invite_response and isinstance(invite_response, dict) and invite_response.get("invite_link"):
                     invite_link = invite_response.get("invite_link")
+                    logging.info(f"Пригласительная ссылка получена: {invite_link}")
+                    
                     subject = "Поздравляем! Ваша оплата прошла успешно 🎉"
                     html = f"""
                     <p>Здравствуйте!</p>
@@ -342,15 +370,20 @@ async def payment_notification(request: Request):
                             "message": f"💎 Пригласительная ссылка на материалы курса:\n{invite_link}\n\n🧠 <b>Важно:</b> Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!"
                         }
                         try:
+                            logging.info(f"Отправка уведомлений в Telegram для {user_telegram_id}")
                             await send_request(notify_url, notification_data1)
+                            logging.info(f"Первое уведомление отправлено")
                             await send_request(notify_url, notification_data2)
+                            logging.info(f"Второе уведомление отправлено")
                             logging.info(f"Уведомление с ссылкой отправлено пользователю {user_telegram_id} в Telegram")
                         except Exception as notify_e:
-                            logging.error(f"Ошибка при отправке уведомления о чеке: {notify_e}")
+                            logging.error(f"Ошибка при отправке уведомления в Telegram: {notify_e}", exc_info=True)
                     except Exception as e:
-                        logging.error(f"Ошибка при отправке email на {user_email}: {e}")
+                        logging.error(f"Ошибка при отправке email на {user_email}: {e}", exc_info=True)
+                else:
+                    logging.warning(f"Не удалось получить пригласительную ссылку или email. Email: {user_email}, Response: {invite_response}")
             except Exception as e:
-                logging.error(f"Ошибка при получении ссылки от бота: {e}")
+                logging.error(f"Ошибка при получении ссылки от бота: {e}", exc_info=True)
             
             # Отправляем цель purchase_confirmed в Яндекс Метрику
             try:
@@ -360,29 +393,100 @@ async def payment_notification(request: Request):
             except Exception as e:
                 logging.error(f"Error sending Yandex Metrika goal: {e}")
             
-            await mark_payout_as_notified(payment_id)
+            logging.info(f"Платеж {payment_id} успешно обработан для пользователя {user_telegram_id}")
             return JSONResponse({"status": "success"})
-    
-        return JSONResponse({"status": "success"})
+        else:
+            logging.warning(f"Платеж в режиме ожидания не найден для пользователя {user_telegram_id}, но статус succeeded. Возможно, платеж уже был обработан ранее.")
+            # Даже если payment не найден, можем попробовать отправить уведомления
+            # Это может случиться, если платеж был обработан ранее, но webhook пришел повторно
+            try:
+                # Пытаемся получить пригласительную ссылку и отправить уведомления
+                notification_data = {
+                    "telegram_id": user_telegram_id,
+                    "payment_id": payment_id
+                }
+                send_invite_link_url = f"{str(await get_setting('MAHIN_URL'))}/send_invite_link"
+                invite_response = await send_request(send_invite_link_url, notification_data)
+                
+                user_email = await get_user_pay_email(user_telegram_id)
+                if user_email and invite_response and isinstance(invite_response, dict) and invite_response.get("invite_link"):
+                    invite_link = invite_response.get("invite_link")
+                    
+                    subject = "Поздравляем! Ваша оплата прошла успешно 🎉"
+                    html = f"""
+                    <p>Здравствуйте!</p>
+                    <p>Ваша оплата курса прошла успешно! 🎉</p>
+                    <p>Вот ссылка для присоединения к нашей группе в Telegram:</p>
+                    <p><a href="{invite_link}">{invite_link}</a></p>
+                    <p><b>Важно:</b> Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!</p>
+                    <p>Если возникнут вопросы, обращайтесь к нам.</p>
+                    <p>С уважением,<br>Команда AiM Course</p>
+                    """
+                    text = f"""
+                        Здравствуйте!
+
+                        Ваша оплата курса прошла успешно! 🎉
+
+                        Вот ссылка для присоединения к нашей группе в Telegram:
+                        {invite_link}
+
+                        Важно: Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!
+
+                        Если возникнут вопросы, обращайтесь к нам.
+
+                        С уважением,
+                        Команда AiM Course
+                    """
+                    from utils import send_email_async
+                    await send_email_async(user_email, subject, html, text)
+                    
+                    notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
+                    notification_data1 = {
+                        "telegram_id": user_telegram_id,
+                        "message": f"✅ Ваша оплата успешно обработана!\n📧 Чек об оплате отправлен на вашу электронную почту: {user_email}"
+                    }
+                    notification_data2 = {
+                        "telegram_id": user_telegram_id,
+                        "message": f"💎 Пригласительная ссылка на материалы курса:\n{invite_link}\n\n🧠 <b>Важно:</b> Ссылка одноразовая, действует 30 минут. Используйте её аккуратно!"
+                    }
+                    await send_request(notify_url, notification_data1)
+                    await send_request(notify_url, notification_data2)
+                    logging.info(f"Уведомления отправлены для пользователя {user_telegram_id} (платеж уже был обработан ранее)")
+            except Exception as e:
+                logging.error(f"Ошибка при отправке уведомлений для уже обработанного платежа: {e}", exc_info=True)
+            
+            return JSONResponse({"status": "success", "message": "Payment already processed"})
     
     if status == "canceled" and user_telegram_id:
-        logging.info(f"status {status}, и мы внутри")
-        cancellation_details = payment_data.get("cancellation_details")
-        reason = cancellation_details["reason"]
-        user = await get_user_by_telegram_id(user_telegram_id)
-        logging.info(f"юзера тоже получили {user}")
+        logging.info(f"Платеж отменен: status={status}, user_telegram_id={user_telegram_id}")
+        cancellation_details = payment_data.get("cancellation_details", {})
+        reason = cancellation_details.get("reason", "unknown")
+        user = await get_user_by_telegram_id(user_telegram_id, to_throw=False)
+        logging.info(f"Пользователь получен: {user}")
         
         if reason in ["expired_on_confirmation", "internal_timeout"]:
             idempotence_key = str(uuid.uuid4())
             await update_payment_idempotence_key(user_telegram_id, idempotence_key)
+            logging.info(f"Обновлен idempotence_key для пользователя {user_telegram_id}")
         
         notify_url = f"{str(await get_setting('MAHIN_URL'))}/notify_user"
+        payment_responces = {
+            "expired_on_confirmation": "⏰ Время ожидания оплаты истекло. Пожалуйста, создайте новый платёж.",
+            "internal_timeout": "⏰ Время ожидания оплаты истекло. Пожалуйста, создайте новый платёж.",
+            "unknown": "❌ Платеж был отменен. Пожалуйста, попробуйте еще раз."
+        }
+        message = payment_responces.get(reason, payment_responces["unknown"])
         notification_data = {
             "telegram_id": user_telegram_id,
-            "message": payment_responces[reason]
+            "message": message
         }
-        await send_request(notify_url, notification_data)
-        await mark_payout_as_notified(payment_id)
+        try:
+            await send_request(notify_url, notification_data)
+            logging.info(f"Уведомление об отмене отправлено пользователю {user_telegram_id}")
+        except Exception as e:
+            logging.error(f"Ошибка при отправке уведомления об отмене: {e}", exc_info=True)
+        
+        logging.info(f"Отмененный платеж {payment_id} обработан для пользователя {user_telegram_id}")
         return JSONResponse({"status": "success"})
         
     raise HTTPException(status_code=400, detail="Payment not processed")
