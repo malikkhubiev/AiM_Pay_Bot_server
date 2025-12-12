@@ -1605,6 +1605,150 @@ async def save_referral_phone(request: Request):
         logging.exception("save_referral_phone error")
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
+@app.post("/create_temp_lead")
+@exception_handler
+async def create_temp_lead(request: Request):
+    """Создает временный лид без email/phone для начала квеста"""
+    logging.info("[FW] create_temp_lead called")
+    try:
+        from database import Lead, database
+        # Создаем лид с минимальными данными
+        query = Lead.__table__.insert().values(
+            name="Временный лид",
+            email=None,
+            phone=None,
+            telegram_id=None,
+            username=None,
+            source_id=None
+        )
+        inserted_id = await database.execute(query)
+        lead_id = int(inserted_id)
+        logging.info(f"[FW] create_temp_lead created lead_id={lead_id}")
+        return JSONResponse({"status": "success", "lead_id": lead_id})
+    except Exception as e:
+        logging.exception(f"[FW] create_temp_lead error: {e}")
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+@app.post("/submit_final_email")
+@exception_handler
+async def submit_final_email(request: Request, background_tasks: BackgroundTasks):
+    """Обрабатывает отправку email после финального теста, создает лид и отправляет письмо со ссылкой на проект"""
+    data = await request.json()
+    email = data.get("email")
+    quiz_answers = data.get("quiz_answers", {})
+    final_answers = data.get("final_answers", {})
+    
+    if not email:
+        return JSONResponse({"status": "error", "message": "Нужен email"}, status_code=400)
+    
+    if not is_valid_email(email):
+        return JSONResponse({"status": "error", "message": "Некорректный email"}, status_code=400)
+    
+    try:
+        from database import Lead, database, LeadProgress
+        normalized_email = email.lower().strip()
+        
+        # Проверяем уникальность email
+        email_query = select(Lead).where(func.lower(Lead.email) == normalized_email)
+        existing_lead = await database.fetch_one(email_query)
+        
+        if existing_lead:
+            return JSONResponse({
+                "status": "error", 
+                "message": "Лид с таким email уже существует. Проверьте почту — мы уже отправили вам ссылку."
+            }, status_code=400)
+        
+        # Создаем новый лид
+        lead_query = Lead.__table__.insert().values(
+            name="Пользователь",
+            email=normalized_email,
+            phone=None,
+            telegram_id=None,
+            username=None,
+            source_id=None
+        )
+        lead_id = await database.execute(lead_query)
+        lead_id = int(lead_id)
+        
+        # Сохраняем ответы из quiz
+        for step, answer in quiz_answers.items():
+            try:
+                step_index = None
+                if step.isdigit():
+                    step_index = int(step) - 1
+                # Формируем composed_step как в fw_post_progress
+                composed_step = f"quiz|{step}|{step_index if step_index is not None else ''}"
+                ok = await record_lead_answer(lead_id, composed_step, answer or "")
+                if not ok:
+                    await update_lead_answer(lead_id, composed_step, answer or "")
+            except Exception as e:
+                logging.warning(f"Error saving quiz answer {step}: {e}")
+        
+        # Сохраняем ответы из final
+        for step, answer in final_answers.items():
+            try:
+                step_index = None
+                import re
+                if step.startswith('final_q'):
+                    match = re.match(r'final_q(\d+)', step)
+                    if match:
+                        step_index = int(match.group(1)) - 1
+                # Формируем composed_step как в fw_post_progress
+                composed_step = f"final|{step}|{step_index if step_index is not None else ''}"
+                ok = await record_lead_answer(lead_id, composed_step, answer or "")
+                if not ok:
+                    await update_lead_answer(lead_id, composed_step, answer or "")
+            except Exception as e:
+                logging.warning(f"Error saving final answer {step}: {e}")
+        
+        # Генерируем уникальную ссылку на страницу проекта
+        import secrets
+        token = secrets.token_urlsafe(32)
+        project_url = f"https://ai-bot-landing.vercel.app/project.html?token={token}&lead_id={lead_id}"
+        
+        # Сохраняем token в базе
+        token_query = LeadProgress.__table__.insert().values(
+            lead_id=lead_id,
+            step=f"project_token:{token}",
+            answer=project_url,
+            stage="project"
+        )
+        await database.execute(token_query)
+        
+        # Отправляем email с ссылкой на проект
+        name = "Друг"
+        subject = "AiM Course — твой первый проект бесплатно 🎁"
+        html = (
+            f"<p>Здравствуй, {name}!</p>"
+            f"<p>Поздравляем с прохождением теста! 🎉</p>"
+            f"<p>Теперь ты можешь построить свой первый проект совершенно бесплатно:</p>"
+            f"<p><a href=\"{project_url}\" style=\"background: #21c063; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; margin: 20px 0;\">🚀 Открыть проект</a></p>"
+            f"<p>Если будут вопросы, пиши в любое время. Будем рады тебе помочь: 01_AiM_01@mail.ru</p>"
+            f"<p>Удачи в обучении! 💪</p>"
+        )
+        text = (
+            f"Здравствуй, {name}!\n\n"
+            f"Поздравляем с прохождением теста! 🎉\n\n"
+            f"Теперь ты можешь построить свой первый проект совершенно бесплатно:\n"
+            f"{project_url}\n\n"
+            f"Если будут вопросы, пиши в любое время. Будем рады тебе помочь: 01_AiM_01@mail.ru\n\n"
+            f"Удачи в обучении! 💪"
+        )
+        background_tasks.add_task(send_email_async, normalized_email, subject, html, text)
+        
+        # Помечаем notified
+        try:
+            await set_lead_notified(normalized_email)
+        except Exception as e:
+            logging.warning(f"set_lead_notified failed: {e}")
+        
+        logging.info(f"Email queued for project link: {normalized_email}, lead_id={lead_id}")
+        return JSONResponse({"status": "success", "message": "Email отправлен", "lead_id": lead_id})
+        
+    except Exception as e:
+        logging.exception(f"Error in submit_final_email: {e}")
+        return JSONResponse({"status": "error", "message": "Ошибка обработки запроса"}, status_code=500)
+
 @app.put("/form_warm/clients/{lead_id}/answers")
 async def fw_update_answer(lead_id: int, request: Request):
     logging.info(f"[FW] update_answer lead_id={lead_id}")
