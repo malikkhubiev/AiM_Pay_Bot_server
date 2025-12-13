@@ -1710,8 +1710,7 @@ async def submit_final_email(request: Request, background_tasks: BackgroundTasks
         token_query = LeadProgress.__table__.insert().values(
             lead_id=lead_id,
             step=f"project_token:{token}",
-            answer=project_url,
-            stage="project"
+            answer=project_url
         )
         await database.execute(token_query)
         
