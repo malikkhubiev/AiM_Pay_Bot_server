@@ -65,6 +65,8 @@ from database import (
     get_source_by_session_id,
     link_source_to_lead,
     get_source_statistics,
+    get_all_sources,
+    get_sources_total_count,
     merge_duplicate_leads_by_email,
     update_user_balance,
     Lead,
@@ -901,6 +903,33 @@ async def get_sources_statistics(request: Request):
         return JSONResponse({"status": "success", "statistics": stats})
     except Exception as e:
         logging.exception("Ошибка в get_sources_statistics")
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+@app.get("/api/sources/list")
+async def get_sources_list(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=500),
+    sort_by: str = Query('created_at'),
+    sort_dir: str = Query('desc')
+):
+    """Эндпоинт для получения всех визитов (Source) с пагинацией"""
+    try:
+        rows = await get_all_sources(offset=offset, limit=limit, sort_by=sort_by, sort_dir=sort_dir)
+        total = await get_sources_total_count()
+        items = [{
+            "id": r["id"],
+            "utm_source": r["utm_source"] or "direct",
+            "utm_medium": r["utm_medium"],
+            "utm_campaign": r["utm_campaign"],
+            "utm_term": r["utm_term"],
+            "utm_content": r["utm_content"],
+            "session_id": r["session_id"],
+            "lead_id": r["lead_id"],
+            "created_at": str(r["created_at"])
+        } for r in rows]
+        return JSONResponse({"status": "success", "total": total, "items": items})
+    except Exception as e:
+        logging.exception("Ошибка в get_sources_list")
         return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
 
 @app.post("/get_top_referrers")

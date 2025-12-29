@@ -1223,3 +1223,25 @@ async def get_source_statistics():
     
     return results
 
+async def get_all_sources(offset: int = 0, limit: int = 500, sort_by: str = 'created_at', sort_dir: str = 'desc'):
+    """Получает все визиты (Source) с пагинацией"""
+    from sqlalchemy import desc, asc
+    order_by = desc(Source.created_at) if sort_dir == 'desc' else asc(Source.created_at)
+    if sort_by == 'id':
+        order_by = desc(Source.id) if sort_dir == 'desc' else asc(Source.id)
+    elif sort_by == 'utm_source':
+        order_by = desc(Source.utm_source) if sort_dir == 'desc' else asc(Source.utm_source)
+    
+    query = select(Source).order_by(order_by).offset(offset).limit(limit)
+    async with database.transaction():
+        rows = await database.fetch_all(query)
+    
+    return rows
+
+async def get_sources_total_count():
+    """Получает общее количество визитов"""
+    query = select(func.count(Source.id))
+    async with database.transaction():
+        result = await database.fetch_one(query)
+    return result[0] if result else 0
+
